@@ -14,6 +14,12 @@ Ohne Treffer entsteht kein Auftrag. Herunterladen kann der Kunde erst nach eurer
 
 Wer nur Variante 1 will: Admin-Bereich → Einstellungen → „Nur komplett identische Originale“.
 
+## Original zurück (Rückrüsten)
+Lädt ein Kunde ein **getuntes** File hoch, das nach denselben 100-%-Regeln zu einem Tuning-File im Archiv passt,
+wird ihm **„Original (Rückrüsten)“** angeboten. Nach deiner Freigabe bekommt er das Original: bei identischem File
+dein Archiv-Original, sonst sein File mit den Original-Werten an allen Tuning-Stellen (z. B. FIN bleibt seine).
+Dafür musst du nichts extra hochladen – Original und Tuning-File im Archiv reichen.
+
 ## Archiv – neue Files hochladen
 Im Admin-Bereich unter **Archiv**:
 - **Neues Fahrzeug hinzufügen:** Name eintragen, Original und Tuning-File(s) auswählen (Stage 1, Stage 2,

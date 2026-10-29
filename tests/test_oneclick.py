@@ -138,6 +138,31 @@ class KernTests(Basis):
         self.assertEqual(oneclick.finde_loesungen(bytes(zufall(GROESSE, 9)))[1], {})
         self.assertEqual(oneclick.finde_loesungen(bytes(self.golf[:1000]))[1], {})
 
+    def test_rueckruesten_identisch(self):
+        _, l = oneclick.finde_loesungen(bytes(self.stage1))
+        self.assertIn("original", l)
+        self.assertEqual(l["original"]["daten"], bytes(self.golf))
+        self.assertEqual(l["original"]["art"], "identisch")
+
+    def test_rueckruesten_andere_fin(self):
+        v = bytearray(self.stage1)
+        v[0x200:0x211] = b"WVWZZZAUZHW123456"
+        _, l = oneclick.finde_loesungen(bytes(v))
+        erwartet = bytearray(v)
+        for off, laenge in self.stellen:
+            erwartet[off:off + laenge] = self.golf[off:off + laenge]
+        self.assertEqual(l["original"]["daten"], bytes(erwartet))   # FIN bleibt vom Kunden
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(v), nur_identisch=True)[1])
+
+    def test_rueckruesten_fremdes_tuning(self):
+        v = bytearray(self.stage1)
+        off, _ = self.stellen[2]
+        v[off] ^= 1   # anderes Tuning an einer Stage-1-Stelle
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(v))[1])
+
+    def test_original_kein_rueckruesten(self):
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.golf))[1])
+
     def test_dateinamen_erkennung(self):
         k = oneclick.klassifiziere
         self.assertEqual(k(["Golf_ORI.bin", "Golf_Stage1.bin"]), ("Golf_ORI.bin", {"stage1": "Golf_Stage1.bin"}))
@@ -192,6 +217,25 @@ class WebTests(Basis):
         d = self.kunde.get(f"/auftrag/{aid}/download")
         self.assertEqual(d.status_code, 200)
         self.assertEqual(d.data, bytes(self.startstopp))
+
+    def test_rueckruesten_im_web(self):
+        aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
+        seite = self.kunde.get(f"/auftrag/{aid}").text
+        self.assertIn('value="original"', seite)
+        self.assertIn("Original (Rückrüsten)", seite)
+        self.assertNotIn('value="stage1"', seite)
+        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "original"})
+        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").status_code, 403)
+        A.entscheide(aid, True)
+        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(self.bmw))
+        # Im Archiv-Formular gibt es kein Upload-Feld fuer "Original (Rueckruesten)"
+        self.assertNotIn('name="original"', self.admin().get("/admin/archiv").text)
+
+    def test_alter_index_wird_neu_gebaut(self):
+        alt = json.loads(oneclick.INDEX_DATEI.read_text())
+        del alt["version"]
+        oneclick.INDEX_DATEI.write_text(json.dumps(alt))
+        self.assertIn("original", oneclick.finde_loesungen(bytes(self.stage1))[1])
 
     def test_bmw_nur_stage1(self):
         aid = self.hochladen(self.bmw)
@@ -343,6 +387,7 @@ class WebTests(Basis):
         for name in ["DPF Off", "AGR aus", "AdBlue off", "Kat aus", "Lambda off"]:
             self.assertIn("nicht unterstützt", self.loesung(a, name=name), name)
         self.assertIn("gibt es schon", self.loesung(a, name="Stage 1"))
+        self.assertIn("gibt es schon", self.loesung(a, name="Original"))
         self.loesung(a, name="Kickdown")
         self.assertIn("gibt es schon", self.loesung(a, name="kickdown"))
         self.assertIn("gelöscht", self.loesung(a, "loeschen", key="kickdown"))

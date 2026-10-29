@@ -59,7 +59,7 @@ class OptionNamen(dict):
 
 
 def option_namen() -> OptionNamen:
-    return OptionNamen(oneclick.optionen())
+    return OptionNamen({**oneclick.optionen(), oneclick.ORIGINAL: oneclick.ORIGINAL_NAME})
 
 
 # ENTWURF: hochgeladen, Kunde waehlt noch die Option; danach entscheidet der Admin
@@ -71,7 +71,7 @@ STATUS_TEXT = {
 }
 # art: wie der 100-%-Treffer zustande kam
 ART_TEXT = {
-    "identisch": "Original identisch",
+    "identisch": "File identisch mit Archiv",
     "gleiche Stellen": "Alle Tuning-Stellen identisch",
     "eigenes File": "Eigenes File",
 }
@@ -489,7 +489,7 @@ def pruefen():
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
-    reihenfolge = list(oneclick.optionen())
+    reihenfolge = [*oneclick.optionen(), oneclick.ORIGINAL]
     (ordner / "ori.bin").write_bytes(daten)
     for opt, l in loesungen.items():
         (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
@@ -731,7 +731,7 @@ def importiere_zip(stream) -> list:
 @admin_noetig
 def admin_archiv():
     return render_template("archiv.html", eintraege=oneclick.lade_index()["eintraege"],
-                           eigene=oneclick.eigene_optionen())
+                           eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen())
 
 
 @app.route("/admin/loesungen", methods=["POST"])
@@ -765,7 +765,7 @@ def archiv_neu():
         return redirect(url_for("admin_archiv"))
     ori = datei.read()
     namen = option_namen()
-    mods = {opt: request.files[opt].read() for opt in namen
+    mods = {opt: request.files[opt].read() for opt in oneclick.optionen()
             if request.files.get(opt) and request.files[opt].filename}
     if not mods:
         flash("Bitte mindestens ein Tuning-File auswählen (z. B. Stage 1).")
@@ -1229,7 +1229,7 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 <datalist id="namen">{% for e in eintraege %}<option value="{{ e.name }}">{% endfor %}</datalist>
 <div class="dateien">
 <label class="datei pflicht"><span>Original *</span><input type="file" name="ori"></label>
-{% for key, titel in optionen.items() %}<label class="datei"><span>{{ titel }}</span><input type="file" name="{{ key }}"></label>{% endfor %}
+{% for key, titel in archiv_optionen.items() %}<label class="datei"><span>{{ titel }}</span><input type="file" name="{{ key }}"></label>{% endfor %}
 </div>
 <button class="btn" id="nlos">Speichern</button>
 <div class="hinweis">Original und mindestens ein Tuning-File auswählen, die übrigen Felder leer lassen. Alle Files müssen gleich groß sein (gleiche Leseart).</div>
@@ -1252,7 +1252,7 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <div class="karte"><h2>Lösungen</h2>
 <p class="leise" style="margin-top:-6px">Diese Lösungen kannst du bei Fahrzeugen hochladen. Kunden sehen nur die, die es für ihr File gibt.</p>
 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
-{% for key, name in optionen.items() %}
+{% for key, name in archiv_optionen.items() %}
 <span class="status s-ENTWURF" style="display:inline-flex;align-items:center;gap:8px">{{ name }}
 {% if key in eigene %}<form method="post" action="{{ url_for('loesungen_verwalten') }}" class="inline" onsubmit="return confirm('Lösung „{{ name }}“ löschen?')">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="loeschen"><input type="hidden" name="key" value="{{ key }}">
@@ -1262,7 +1262,8 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="neu">
 <input type="text" name="name" placeholder="Neue Lösung, z. B. Drallklappen" maxlength="40" style="flex:1;min-width:220px">
 <button class="btn grau">Lösung anlegen</button></form>
-<div class="hinweis">Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
+<div class="hinweis">„Original (Rückrüsten)“ gibt es automatisch: Lädt ein Kunde ein getuntes File hoch, das zu einem Tuning-File im Archiv passt, kann er das Original bekommen.
+Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
 Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.</div></div>
 
 <div class="karte"><h2>{{ eintraege|length }} Einträge</h2>

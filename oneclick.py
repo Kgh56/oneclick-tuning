@@ -50,6 +50,11 @@ STANDARD_OPTIONEN = {
     "popsbangs": "Pops & Bangs",
     "launch": "Launch Control",
 }
+# Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
+ORIGINAL = "original"
+ORIGINAL_NAME = "Original (Rückrüsten)"
+INDEX_VERSION = 2
+
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
 GESPERRT = re.compile(
     r"dpf|adblue|ad[\s_-]*blue|partikel|harnstoff|katalysator|lambda|abgasr(ü|ue)ckf|nox"
@@ -133,6 +138,7 @@ def gleiche_stellen(neu: bytes, ori: bytes, mod: bytes, bloecke: list):
 def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
     """Alle Optionen, fuer die es einen 100-%-Treffer im Archiv gibt.
 
+    Zusaetzlich ORIGINAL, wenn NEU ein getuntes File aus dem Archiv ist (Rueckruesten).
     Rueckgabe: (info, {option: {"daten": bytes, "quelle": name, "art": "identisch" | "gleiche Stellen"}})
     """
     info = erkenne(neu)
@@ -162,6 +168,21 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
             if daten is not None:
                 loesungen[opt] = {"daten": daten, "quelle": e["name"],
                                   "art": "identisch" if identisch else "gleiche Stellen"}
+
+    # Rueckruesten: passt NEU zu einem Tuning-File im Archiv? Dann gibt es das Original.
+    # Gleiche Regeln, nur mit vertauschten Rollen (Tuning-File <-> Original).
+    treffer = [(e, opt, d) for e in kandidaten for opt, d in e["optionen"].items()]
+    treffer.sort(key=lambda t: t[2].get("sha256") != info["sha256"])   # identische zuerst
+    for e, opt, d in treffer:
+        identisch = d.get("sha256") == info["sha256"]
+        if not identisch and (nur_identisch or not nummern_passen(e)):
+            continue
+        ori = archiv_datei(e).read_bytes()
+        daten = ori if identisch else gleiche_stellen(neu, archiv_datei(e, opt).read_bytes(), ori, d["bloecke"])
+        if daten is not None:
+            loesungen[ORIGINAL] = {"daten": daten, "quelle": e["name"],
+                                   "art": "identisch" if identisch else "gleiche Stellen"}
+            break
     return info, loesungen
 
 
@@ -206,7 +227,7 @@ def option_anlegen(name: str) -> str:
     if GESPERRT.search(name.lower()) or GESPERRT.search(key):
         raise ValueError("Lösungen, die die Abgasreinigung abschalten (DPF, AGR, AdBlue/SCR, Kat, Lambda …), "
                          "werden nicht unterstützt.")
-    if key == "ori" or MUSTER_ORI.search(key) or key in optionen():
+    if key in ("ori", ORIGINAL) or MUSTER_ORI.search(key) or key in optionen():
         raise ValueError(f"„{name}“ gibt es schon oder der Name ist nicht erlaubt.")
     eigene = eigene_optionen()
     eigene[key] = name
@@ -284,7 +305,7 @@ def baue_index() -> dict:
             if not bloecke:
                 print(f"  ! {ordner.name}/{name}: identisch mit dem Original, uebersprungen")
                 continue
-            optionen[opt] = {"datei": name, "bloecke": bloecke}
+            optionen[opt] = {"datei": name, "bloecke": bloecke, "sha256": hashlib.sha256(mod).hexdigest()}
         if not optionen:
             print(f"  ! {ordner.name}: keine Options-Datei erkannt")
             continue
@@ -292,7 +313,7 @@ def baue_index() -> dict:
         eintraege.append({"name": ordner.name, "ori_datei": ori_name, **info, "optionen": optionen})
         print(f"  + {ordner.name}: {', '.join(optionen)} | ECU {', '.join(info['ecu']) or '?'}")
 
-    index = {"eintraege": eintraege, "zeit": time.time()}
+    index = {"version": INDEX_VERSION, "eintraege": eintraege, "zeit": time.time()}
     tmp = INDEX_DATEI.with_suffix(".tmp")
     tmp.write_text(json.dumps(index, ensure_ascii=False))
     tmp.replace(INDEX_DATEI)
@@ -303,7 +324,10 @@ def baue_index() -> dict:
 def lade_index() -> dict:
     if not INDEX_DATEI.exists():
         return baue_index()
-    return json.loads(INDEX_DATEI.read_text())
+    index = json.loads(INDEX_DATEI.read_text())
+    if index.get("version") != INDEX_VERSION:   # nach einem Update einmal neu einlesen
+        return baue_index()
+    return index
 
 
 def lerne(ori: bytes, mod: bytes, name: str, option: str = "stage1") -> Path:
