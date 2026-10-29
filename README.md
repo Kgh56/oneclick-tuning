@@ -68,7 +68,9 @@ python oneclick.py lernen  ori.bin stage1.bin --name passat_b8_04L906026
 
 Falls Strato im Kundenbereich eine eigene Firewall hat: Ports **80** und **443** freigeben.
 
-**Später aktualisieren:** per `ssh` verbinden und `oneclick-update` eingeben.
+**Später aktualisieren:** Admin-Bereich → Einstellungen → „Nach Updates suchen“ → „Update installieren“.
+Die Seite startet ein paar Sekunden neu; Archiv, Aufträge und Einstellungen bleiben erhalten.
+(Alternativ per `ssh` verbinden und `oneclick-update` eingeben.)
 **Backup:** täglich automatisch nach `/var/backups/oneclick/` (14 Tage). Zusätzlich im Admin-Bereich unter
 Archiv → „Archiv als ZIP herunterladen“ ab und zu eine Kopie auf den PC holen.
 
@@ -94,7 +96,7 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 |---|---|
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
 | **Archiv** | Fahrzeug einzeln hinzufügen oder Option nachreichen, ZIP-Import, Einträge löschen, Archiv als ZIP sichern |
-| **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern |
+| **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern, **Update installieren** |
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)
 1. In Telegram **@BotFather** öffnen → `/newbot` → Namen vergeben → **Token** in den Einstellungen eintragen → Speichern.

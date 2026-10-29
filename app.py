@@ -25,6 +25,7 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -825,6 +826,55 @@ def archiv_backup():
 
 
 # ---------------------------------------------------------------------------
+# Admin: Update von GitHub
+# ---------------------------------------------------------------------------
+
+def git(*args, ordner: Path = None, timeout: int = 60) -> str:
+    erg = subprocess.run(["git", "-C", str(ordner or BASE), *args], capture_output=True, text=True, timeout=timeout)
+    if erg.returncode != 0:
+        raise RuntimeError(erg.stderr.strip() or erg.stdout.strip() or "git-Fehler")
+    return erg.stdout.strip()
+
+
+def version(ordner: Path = None) -> dict:
+    """Installierte Version (ohne Netzwerk)."""
+    if not ((ordner or BASE) / ".git").exists():
+        return {}
+    stand = git("log", "-1", "--format=%h|%cd|%s", "--date=format:%d.%m.%Y %H:%M", ordner=ordner)
+    kurz, datum, titel = stand.split("|", 2)
+    return {"kurz": kurz, "datum": datum, "titel": titel}
+
+
+def update_pruefen(ordner: Path = None) -> list:
+    """Holt den Stand von GitHub und liefert die neuen Aenderungen (leer = aktuell)."""
+    zweig = git("rev-parse", "--abbrev-ref", "HEAD", ordner=ordner)
+    git("fetch", "-q", "origin", zweig, ordner=ordner)
+    neu = git("log", f"HEAD..origin/{zweig}", "--format=%cd|%s", "--date=format:%d.%m.%Y", ordner=ordner)
+    return [zeile.split("|", 1) for zeile in neu.splitlines() if zeile]
+
+
+def update_installieren(ordner: Path = None):
+    """Neue Version uebernehmen. Daten (Archiv, Auftraege, Einstellungen) sind nicht im Repository."""
+    zweig = git("rev-parse", "--abbrev-ref", "HEAD", ordner=ordner)
+    git("fetch", "-q", "origin", zweig, ordner=ordner)
+    git("reset", "-q", "--hard", f"origin/{zweig}", ordner=ordner)
+    erg = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r",
+                          str((ordner or BASE) / "requirements.txt")], capture_output=True, text=True, timeout=300)
+    if erg.returncode != 0:
+        raise RuntimeError(f"Pakete konnten nicht installiert werden: {erg.stderr.strip()[-300:]}")
+
+
+def als_dienst() -> bool:
+    # systemd setzt INVOCATION_ID und startet das Programm nach dem Beenden neu (Restart=always)
+    return bool(os.environ.get("INVOCATION_ID"))
+
+
+def neustarten():
+    time.sleep(1.5)   # Antwort an den Browser noch rausschicken
+    os._exit(0)
+
+
+# ---------------------------------------------------------------------------
 # Admin: Einstellungen
 # ---------------------------------------------------------------------------
 
@@ -860,6 +910,24 @@ def einstellungen():
                   else "Senden fehlgeschlagen. Token und Chat-ID prüfen.")
         elif aktion == "aufraeumen":
             flash(f"{aufraeumen()} alte Aufträge gelöscht.")
+        elif aktion == "update_pruefen":
+            try:
+                session["update_liste"] = update_pruefen()
+                if not session["update_liste"]:
+                    flash("Du hast schon die neueste Version.")
+            except Exception as e:
+                flash(f"Update-Prüfung fehlgeschlagen: {e}")
+        elif aktion == "update":
+            try:
+                update_installieren()
+            except Exception as e:
+                flash(f"Update fehlgeschlagen: {e}")
+                return redirect(url_for("einstellungen"))
+            session.pop("update_liste", None)
+            if als_dienst():
+                threading.Thread(target=neustarten, daemon=True).start()
+                return render_template("neustart.html")
+            flash("Update installiert. Bitte das Programm neu starten, damit es aktiv wird.")
         elif aktion == "passwort":
             benutzer = lade_benutzer()
             ich = benutzer.get(session["benutzer"])
@@ -875,7 +943,12 @@ def einstellungen():
                 BENUTZER_DATEI.write_text(json.dumps(benutzer, indent=2))
                 flash("Passwort geändert.")
         return redirect(url_for("einstellungen"))
-    return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats))
+    try:
+        v = version()
+    except Exception:
+        v = {}
+    return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats),
+                           version=v, update_liste=session.get("update_liste"))
 
 
 # ---------------------------------------------------------------------------
@@ -954,6 +1027,17 @@ footer a{color:var(--leise);margin-right:16px}
 </main>
 <footer><a href="{{ url_for('impressum') }}">Impressum</a><a href="{{ url_for('datenschutz') }}">Datenschutz</a></footer>
 </body></html>""",
+
+"neustart.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>Update wird installiert …</h1>
+<div class="warten"><div class="kreis"></div><div><b>Die Seite startet neu.</b><br>
+<span class="leise">Das dauert nur ein paar Sekunden, danach geht es automatisch weiter.</span></div></div></div>
+<script>
+setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
+  .then(r=>{if(r.ok)location.href='{{ url_for('einstellungen') }}';else setTimeout(warte,1500)})
+  .catch(()=>setTimeout(warte,1500))},4000);
+</script>
+{% endblock %}""",
 
 "text.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>{{ titel }}</h1>
@@ -1199,6 +1283,20 @@ die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: 
 {% endfor %}{% else %}<p class="leise">Noch keine Nachricht an den Bot gesehen{{ '' if cfg.telegram_token else ' (erst Token eintragen)' }}.</p>{% endif %}
 <form method="post" style="margin-top:16px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="test">
 <button class="btn gruen">Telegram testen</button></form></div>
+
+<div class="karte"><h2>Update</h2>
+{% if version %}<p>Installiert: <b>{{ version.datum }}</b> <span class="leise">– {{ version.titel }} ({{ version.kurz }})</span></p>
+{% if update_liste %}<div class="meldung"><b>{{ update_liste|length }} neue Änderung(en) verfügbar:</b>
+<ul style="margin:6px 0 0;padding-left:20px">{% for datum, titel in update_liste %}<li>{{ titel }} <span class="leise">({{ datum }})</span></li>{% endfor %}</ul></div>
+<form method="post" class="inline" onsubmit="this.querySelector('button').textContent='Wird installiert …';this.querySelector('button').disabled=true">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="update">
+<button class="btn gruen">Update installieren</button></form>
+{% endif %}
+<form method="post" class="inline"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="update_pruefen">
+<button class="btn grau">Nach Updates suchen</button></form>
+<div class="hinweis">Archiv, Aufträge und Einstellungen bleiben beim Update erhalten. Die Seite ist dabei ein paar Sekunden nicht erreichbar.</div>
+{% else %}<p class="leise">Updates per Knopf gibt es nur auf dem Server (Installation über das Installations-Skript).</p>{% endif %}
+</div>
 
 <div class="karte"><h2>Passwort ändern</h2>
 <form method="post" style="max-width:420px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="passwort">

@@ -325,5 +325,51 @@ class WebTests(Basis):
         self.assertTrue((A.AUFTRAEGE / wartet).exists())   # wartende nie loeschen
 
 
+class UpdateTests(unittest.TestCase):
+    """Update-Knopf mit echten Git-Repositories in einem temporaeren Ordner."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        self.origin, self.server, self.entwickler = d / "origin.git", d / "server", d / "entwickler"
+        self.git("init", "-q", "--bare", "-b", "main", str(self.origin))
+        self.git("clone", "-q", str(self.origin), str(self.entwickler))
+        (self.entwickler / "requirements.txt").write_text("")
+        (self.entwickler / ".gitignore").write_text("archiv/\n")
+        (self.entwickler / "app.py").write_text("# Version 1\n")
+        self.commit(self.entwickler, "Version 1")
+        self.git("clone", "-q", str(self.origin), str(self.server))
+        (self.server / "archiv").mkdir()
+        (self.server / "archiv" / "kunde.bin").write_bytes(b"wichtig")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def git(self, *args, cwd=None):
+        import subprocess
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
+                       capture_output=True)
+
+    def commit(self, ordner, text):
+        self.git("add", "-A", cwd=ordner)
+        self.git("commit", "-q", "-m", text, cwd=ordner)
+        self.git("push", "-q", "origin", "main", cwd=ordner)
+
+    def test_update_finden_und_installieren(self):
+        self.assertEqual(A.update_pruefen(self.server), [])
+        (self.entwickler / "app.py").write_text("# Version 2\n")
+        self.commit(self.entwickler, "Neue Funktion")
+        neu = A.update_pruefen(self.server)
+        self.assertEqual([titel for _, titel in neu], ["Neue Funktion"])
+        A.update_installieren(self.server)
+        self.assertEqual((self.server / "app.py").read_text(), "# Version 2\n")
+        self.assertEqual(A.version(self.server)["titel"], "Neue Funktion")
+        self.assertEqual(A.update_pruefen(self.server), [])
+        self.assertEqual((self.server / "archiv" / "kunde.bin").read_bytes(), b"wichtig")   # Daten bleiben
+
+    def test_ohne_git_keine_version(self):
+        self.assertEqual(A.version(Path(self.tmp.name)), {})
+
+
 if __name__ == "__main__":
     unittest.main()
