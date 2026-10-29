@@ -14,6 +14,12 @@ Ohne Treffer entsteht kein Auftrag. Herunterladen kann der Kunde erst nach eurer
 
 Wer nur Variante 1 will: Admin-Bereich → Einstellungen → „Nur komplett identische Originale“.
 
+## Mehrere Lösungen auf einmal
+Der Kunde kann mehrere angebotene Lösungen ankreuzen (z. B. Stage 1 + Start/Stopp + Pops & Bangs) und bekommt
+**ein** File mit allen Änderungen. Jede Lösung ist für sich zu 100 % geprüft. Ändern zwei Lösungen dieselbe Stelle
+unterschiedlich, lehnt die Seite die Kombination ab („nicht möglich“) – einzeln geht dann weiterhin.
+„Original (Rückrüsten)“ ist nie kombinierbar. Kombinationen werden nicht ins Archiv gelernt.
+
 ## Original zurück (Rückrüsten)
 Lädt ein Kunde ein **getuntes** File hoch, das nach denselben 100-%-Regeln zu einem Tuning-File im Archiv passt,
 wird ihm **„Original (Rückrüsten)“** angeboten. Nach deiner Freigabe bekommt er das Original: bei identischem File

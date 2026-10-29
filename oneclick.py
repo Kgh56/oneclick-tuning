@@ -202,6 +202,27 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
     return info, loesungen
 
 
+def kombiniere(basis: bytes, dateien: list):
+    """Mehrere fertige Files (gleiche Basis) zu einem zusammenfuehren.
+
+    Uebernimmt jede Aenderung gegenueber der Basis. Aendern zwei Files dasselbe Byte
+    unterschiedlich, ist die Kombination nicht sicher -> None.
+    """
+    ergebnis = bytearray(basis)
+    gesetzt = bytearray(len(basis))
+    for daten in dateien:
+        if len(daten) != len(basis):
+            return None
+        for off, laenge in finde_bloecke(basis, daten):
+            for i in range(off, off + laenge):
+                if daten[i] != basis[i]:
+                    if gesetzt[i] and ergebnis[i] != daten[i]:
+                        return None
+                    ergebnis[i] = daten[i]
+                    gesetzt[i] = 1
+    return bytes(ergebnis)
+
+
 # ---------------------------------------------------------------------------
 # Archiv / Index
 # ---------------------------------------------------------------------------

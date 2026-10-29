@@ -53,8 +53,11 @@ SECRET_DATEI = BASE / ".secret_key"
 
 
 class OptionNamen(dict):
-    """Anzeigenamen der Loesungen; unbekannte (z. B. geloeschte) zeigen ihren Schluessel."""
+    """Anzeigenamen der Loesungen. Kombinationen ('stage1+startstopp') werden zu
+    'Stage 1 + Start/Stopp aus'; unbekannte (z. B. geloeschte) zeigen ihren Schluessel."""
     def __missing__(self, key):
+        if key and "+" in key:
+            return " + ".join(self[k] for k in key.split("+"))
         return key
 
 
@@ -513,22 +516,38 @@ def pruefen():
 
 @app.route("/auftrag/<aid>/bestellen", methods=["POST"])
 def bestellen(aid):
-    """Schritt 2: Kunde waehlt eine der angebotenen Optionen -> wartet auf Freigabe."""
-    option = request.form.get("option", "")
+    """Schritt 2: Kunde waehlt eine oder mehrere der angebotenen Loesungen -> wartet auf Freigabe."""
+    gewaehlt = set(request.form.getlist("option"))
     with sperre:
         auftrag = lade_auftrag(aid)
         if auftrag["status"] != "ENTWURF":
             return redirect(url_for("auftrag_ansicht", aid=aid))
-        if option not in auftrag["angebot"]:
-            flash("Bitte eine der angezeigten Optionen wählen.")
+        angebot = auftrag["angebot"]
+        auswahl = [o for o in angebot if o in gewaehlt]   # Reihenfolge wie angeboten
+        if not auswahl or len(auswahl) != len(gewaehlt):
+            flash("Bitte eine oder mehrere der angezeigten Lösungen wählen.")
+            return redirect(url_for("auftrag_ansicht", aid=aid))
+        if oneclick.ORIGINAL in auswahl and len(auswahl) > 1:
+            flash(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
             return redirect(url_for("auftrag_ansicht", aid=aid))
         ordner = AUFTRAEGE / aid
-        (ordner / f"loesung_{option}.bin").replace(ordner / "ergebnis.bin")
+        if len(auswahl) == 1:
+            (ordner / f"loesung_{auswahl[0]}.bin").replace(ordner / "ergebnis.bin")
+        else:
+            daten = oneclick.kombiniere((ordner / "ori.bin").read_bytes(),
+                                        [(ordner / f"loesung_{o}.bin").read_bytes() for o in auswahl])
+            if daten is None:
+                flash(f"Die Kombination {option_namen()['+'.join(auswahl)]} ist leider nicht möglich, "
+                      "weil sich die Lösungen gegenseitig überschneiden. Bitte anders wählen.")
+                return redirect(url_for("auftrag_ansicht", aid=aid))
+            (ordner / "ergebnis.bin").write_bytes(daten)
         for rest in ordner.glob("loesung_*.bin"):
             rest.unlink()
-        auftrag.update(option=option, status="WARTET",
+        arten = {angebot[o]["art"] for o in auswahl}
+        auftrag.update(option="+".join(auswahl), status="WARTET",
                        kunde=request.form.get("kontakt", "").strip()[:100] or "–",
-                       quelle=auftrag["angebot"][option]["quelle"], art=auftrag["angebot"][option]["art"],
+                       quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
+                       art="identisch" if arten == {"identisch"} else "gleiche Stellen",
                        zeit=datetime.now().isoformat(timespec="seconds"))
         speichere_auftrag(auftrag)
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
@@ -622,6 +641,8 @@ def fertig_hochladen(aid):
     name = request.form.get("archiv_name", "").strip()
     if name:
         try:
+            if "+" in auftrag["option"]:
+                raise ValueError("Kombinationen werden nicht ins Archiv übernommen, nur einzelne Lösungen.")
             with index_sperre:
                 oneclick.lerne(ori, daten, name, auftrag["option"])
             meldung += f" Als '{name}' ins Archiv übernommen."
@@ -1164,18 +1185,26 @@ document.getElementById('f').addEventListener('submit',()=>{const b=document.get
 {% endif %}</table><br>
 
 {% if a.status == 'ENTWURF' %}
-<p><b>Für dein File haben wir folgende Lösungen:</b></p>
+<p><b>Für dein File haben wir folgende Lösungen:</b>{% if a.angebot|length > 1 %} <span class="leise">– eine oder mehrere wählen</span>{% endif %}</p>
 <form method="post" action="{{ url_for('bestellen', aid=a.id) }}" id="b">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
 <div class="optionen">
 {% for opt in a.angebot %}
-<label><input type="radio" name="option" value="{{ opt }}" {{ 'checked' if loop.first }}><span>{{ optionen[opt] }}</span></label>
+<label><input type="checkbox" name="option" value="{{ opt }}" {{ 'checked' if loop.first }}><span>{{ optionen[opt] }}</span></label>
 {% endfor %}</div>
 <input type="text" name="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
 <button class="btn" id="senden">Auftrag senden</button>
 <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei, danach kannst du das File herunterladen.
 Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div></form>
-<script>document.getElementById('b').addEventListener('submit',()=>{const x=document.getElementById('senden');x.textContent='Wird gesendet …';x.disabled=true});</script>
+<script>
+const kaestchen=[...document.querySelectorAll('#b input[name=option]')], senden=document.getElementById('senden');
+// "Original (Rueckruesten)" laesst sich nicht kombinieren
+kaestchen.forEach(k=>k.addEventListener('change',()=>{
+  if(k.checked) kaestchen.forEach(x=>{if(x!==k&&(k.value==='{{ original }}'||x.value==='{{ original }}'))x.checked=false});
+  senden.disabled=!kaestchen.some(x=>x.checked)}));
+document.getElementById('b').addEventListener('submit',e=>{if(!kaestchen.some(x=>x.checked)){e.preventDefault();return}
+  senden.textContent='Wird gesendet …';senden.disabled=true});
+</script>
 {% elif a.status == 'FREIGEGEBEN' %}
 <a class="btn gruen" href="{{ url_for('download', aid=a.id) }}">File herunterladen</a>
 <div class="hinweis">Checksumme beim Schreiben vom Flash-Tool korrigieren lassen.</div>
@@ -1401,7 +1430,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 
 @app.context_processor
 def globale():
-    return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT,
+    return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
             "firma": lade_config().get("firmenname") or "OneClick Tuning"}
 
 

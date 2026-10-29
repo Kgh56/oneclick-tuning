@@ -163,6 +163,16 @@ class KernTests(Basis):
     def test_original_kein_rueckruesten(self):
         self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.golf))[1])
 
+    def test_kombiniere(self):
+        basis = bytes(10)
+        a, b = bytearray(basis), bytearray(basis)
+        a[1], b[5] = 7, 9
+        self.assertEqual(oneclick.kombiniere(basis, [bytes(a), bytes(b)]), bytes([0, 7, 0, 0, 0, 9, 0, 0, 0, 0]))
+        b[1] = 7   # gleiche Aenderung an gleicher Stelle ist ok
+        self.assertIsNotNone(oneclick.kombiniere(basis, [bytes(a), bytes(b)]))
+        b[1] = 8   # unterschiedlich -> nicht kombinierbar
+        self.assertIsNone(oneclick.kombiniere(basis, [bytes(a), bytes(b)]))
+
     def test_dateinamen_erkennung(self):
         k = oneclick.klassifiziere
         self.assertEqual(k(["Golf_ORI.bin", "Golf_Stage1.bin"]), ("Golf_ORI.bin", {"stage1": "Golf_Stage1.bin"}))
@@ -237,6 +247,43 @@ class WebTests(Basis):
         oneclick.INDEX_DATEI.write_text(json.dumps(alt))
         self.assertIn("original", oneclick.finde_loesungen(bytes(self.stage1))[1])
 
+    def bestellen(self, aid, *optionen):
+        return self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": list(optionen)},
+                               follow_redirects=True).text
+
+    def test_kombination_stage1_startstopp(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        aid = self.hochladen(self.golf)
+        self.assertIn('type="checkbox"', self.kunde.get(f"/auftrag/{aid}").text)
+        self.bestellen(aid, "stage1", "startstopp")
+        a = self.auftrag(aid)
+        self.assertEqual((a["status"], a["option"]), ("WARTET", "stage1+startstopp"))
+        import time
+        time.sleep(0.3)
+        self.assertTrue(any("Stage 1 + Start/Stopp aus" in d["text"] for m, d in self.telegram if m == "sendMessage"))
+        A.entscheide(aid, True)
+        erwartet = bytearray(self.stage1)
+        erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
+        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(erwartet))
+        self.assertIn("Stage 1 + Start/Stopp aus", self.admin().get("/admin").text)
+
+    def test_kombination_mit_ueberschneidung_abgelehnt(self):
+        # Vmax aendert ein Byte, das auch Stage 1 aendert, aber anders
+        vmax = bytearray(self.golf)
+        off, _ = self.stellen[0]
+        vmax[off] = (self.stage1[off] + 1) % 256
+        self.fahrzeug(self.admin(), "Golf7", self.golf, vmax=vmax)
+        aid = self.hochladen(self.golf)
+        self.assertIn("nicht möglich", self.bestellen(aid, "stage1", "vmax"))
+        self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
+        self.bestellen(aid, "stage1")   # einzeln geht weiterhin
+        self.assertEqual(self.auftrag(aid)["option"], "stage1")
+
+    def test_original_nicht_kombinierbar(self):
+        aid = self.hochladen(self.stage1, "golf_stage1.bin")
+        self.assertIn("nicht mit anderen Lösungen kombiniert", self.bestellen(aid, "original", "startstopp"))
+        self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
+
     def test_bmw_nur_stage1(self):
         aid = self.hochladen(self.bmw)
         seite = self.kunde.get(f"/auftrag/{aid}").text
@@ -246,6 +293,8 @@ class WebTests(Basis):
     def test_nicht_angebotene_option_abgelehnt(self):
         aid = self.hochladen(self.bmw)
         self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "startstopp"})
+        self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
+        self.bestellen(aid)   # nichts gewaehlt
         self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
 
     def test_kein_treffer_kein_auftrag(self):
