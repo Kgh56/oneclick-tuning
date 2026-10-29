@@ -53,7 +53,7 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 3
+INDEX_VERSION = 4
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
 GESPERRT = re.compile(
@@ -68,7 +68,7 @@ KONTEXT = 16          # Bytes vor/nach jeder Aenderung, die zusaetzlich identisc
 ECU_MUSTER = re.compile(
     rb"(?<![A-Z0-9])("
     rb"EDC1[5-7][_ ]?[A-Z]{1,3}\d{1,2}"                          # Bosch Diesel: EDC15C2, EDC16U31, EDC17C46, EDC17CP14
-    rb"|(?:MEVD|MEV|MED|ME)[_ ]?(?:7|9|17)(?:[._]\d{1,2}){0,3}"   # Bosch Benzin: ME7.5, MED9.1, MED17.5.2, MEVD17.2.9
+    rb"|(?:MEVD|MEV|MED|ME)[_ ]?(?:7|9|17)(?:[._]\d{1,2}){1,3}"   # Bosch Benzin: ME7.5, MED9.1, MED17.5.2, MEVD17.2.9
     rb"|M[GD]1[_ ]?[A-Z]{2}\d{3}"                                # Bosch MG1CS011, MD1CS004
     rb"|SID[_ ]?\d{3}|SIMOS[_ ]?\d{1,2}(?:[._]\d{1,2}){0,2}|PCR[_ ]?2[._]1|EMS[_ ]?\d{4}"   # Siemens/Continental
     rb"|DC[MU][_ ]?\d{1,2}[._]\d{1,2}"                           # Delphi DCM3.5, DCM6.2

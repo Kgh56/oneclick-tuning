@@ -984,60 +984,102 @@ TEMPLATES = {
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ firma }}</title>
+<meta name="theme-color" content="#000000">
 <style>
-:root{--bg:#0f1115;--karte:#181b22;--rand:#2a2f3a;--text:#e8eaf0;--leise:#9aa1b2;
---akzent:#e3342f;--ok:#2fb36d;--warn:#e0a526;--blau:#3b82f6}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
-font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-a{color:var(--text)}header{display:flex;align-items:center;justify-content:space-between;
-padding:14px 24px;border-bottom:1px solid var(--rand);flex-wrap:wrap;gap:8px}
-.logo{font-weight:800;letter-spacing:.5px;font-size:18px}.logo span{color:var(--akzent)}
-nav{display:flex;flex-wrap:wrap;gap:6px 18px}nav a{color:var(--leise);text-decoration:none}nav a:hover{color:var(--text)}
-main{max-width:1100px;margin:0 auto;padding:28px 16px}
-.karte{background:var(--karte);border:1px solid var(--rand);border-radius:12px;padding:22px;margin-bottom:22px}
-h1{font-size:22px;margin:0 0 16px}h2{font-size:17px;margin:0 0 14px}
-.btn{display:inline-block;background:var(--akzent);color:#fff;border:0;border-radius:8px;
-padding:11px 20px;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none}
-.btn.grau{background:#2e3440}.btn.gruen{background:var(--ok)}.btn.klein{padding:6px 12px;font-size:13px}
-input[type=text],input[type=password],input[type=number],textarea{width:100%;font-family:inherit;padding:10px 12px;border-radius:8px;
-border:1px solid var(--rand);background:#0f1115;color:var(--text);font-size:15px;margin-bottom:12px}
-.drop{display:block;border:2px dashed var(--rand);border-radius:12px;padding:30px;text-align:center;
-color:var(--leise);cursor:pointer;margin-bottom:18px;transition:.15s}
-.drop.aktiv,.drop:hover{border-color:var(--akzent);color:var(--text)}
-.drop input{display:none}.drop b{color:var(--text)}
-.optionen{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px}
-.optionen label{border:1px solid var(--rand);border-radius:10px;padding:14px;cursor:pointer;
-text-align:center;font-weight:600}
-.optionen input{display:none}.optionen input:checked+span{color:var(--akzent)}
-.optionen label:has(input:checked){border-color:var(--akzent);background:#e3342f14}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 8px;white-space:nowrap;
-border-bottom:1px solid var(--rand);font-size:14px}th{color:var(--leise);font-weight:500}
+:root{--bg:#000;--glas:rgba(255,255,255,.045);--glas2:rgba(255,255,255,.075);--rand:rgba(255,255,255,.09);
+--rand2:rgba(255,255,255,.16);--text:#f5f5f7;--leise:#a1a1a6;--akzent:#ff375f;--akzent2:#ff9f0a;
+--ok:#30d158;--warn:#ffd60a;--blau:#0a84ff;--verlauf:linear-gradient(135deg,var(--akzent),var(--akzent2))}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark}
+input[type=file]{font-family:inherit;font-size:12.5px;color:var(--leise)}
+input[type=file]::file-selector-button{font:inherit;font-weight:600;color:var(--text);background:rgba(255,255,255,.1);
+border:1px solid var(--rand2);border-radius:980px;padding:6px 14px;margin-right:10px;cursor:pointer;transition:background .2s}
+input[type=file]::file-selector-button:hover{background:rgba(255,255,255,.18)}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",system-ui,"Segoe UI",Roboto,sans-serif;
+-webkit-font-smoothing:antialiased;letter-spacing:-.01em;
+background-image:radial-gradient(900px 500px at 15% -10%,rgba(255,55,95,.16),transparent 60%),
+radial-gradient(800px 500px at 100% 0%,rgba(10,132,255,.13),transparent 60%),
+radial-gradient(700px 600px at 50% 120%,rgba(255,159,10,.07),transparent 60%);background-attachment:fixed}
+::selection{background:rgba(255,55,95,.35)}
+a{color:var(--text)}
+header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+padding:12px max(16px,calc((100% - 1100px)/2));background:rgba(0,0,0,.6);
+-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--rand)}
+.logo{font-weight:700;font-size:19px;letter-spacing:-.02em}
+.logo span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
+nav{display:flex;flex-wrap:wrap;gap:4px 20px}nav a{color:var(--leise);text-decoration:none;font-size:13.5px;transition:color .2s}nav a:hover{color:var(--text)}
+main{max-width:1100px;margin:0 auto;padding:36px 16px}
+.karte{background:var(--glas);border:1px solid var(--rand);border-radius:22px;padding:28px;margin-bottom:22px;
+-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 20px 60px rgba(0,0,0,.35)}
+h1{font-size:30px;line-height:1.15;font-weight:700;letter-spacing:-.03em;margin:0 0 18px}
+h2{font-size:19px;font-weight:600;letter-spacing:-.02em;margin:0 0 14px}
+.hero{text-align:center;padding:34px 0 30px}
+.hero h1{font-size:clamp(38px,7vw,64px);letter-spacing:-.045em;margin:0 0 14px}
+.hero h1 span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{font-size:clamp(16px,2.2vw,21px);color:var(--leise);max-width:620px;margin:0 auto}
+.btn{display:inline-block;background:var(--verlauf);color:#fff;border:0;border-radius:980px;padding:12px 26px;
+font-family:inherit;font-weight:600;font-size:15px;line-height:1.2;letter-spacing:-.01em;cursor:pointer;text-decoration:none;
+box-shadow:0 8px 30px rgba(255,55,95,.35);transition:transform .15s,box-shadow .2s,opacity .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 12px 36px rgba(255,55,95,.45)}.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.6;cursor:default;transform:none}
+.btn.grau{background:var(--glas2);border:1px solid var(--rand2);box-shadow:none}.btn.grau:hover{background:rgba(255,255,255,.12)}
+.btn.gruen{background:linear-gradient(135deg,#30d158,#0fb5a3);box-shadow:0 8px 30px rgba(48,209,88,.3)}
+.btn.klein{padding:7px 14px;font-size:13px;box-shadow:none}
+input[type=text],input[type=password],input[type=number],textarea{width:100%;font-family:inherit;padding:12px 14px;border-radius:12px;
+border:1px solid var(--rand);background:rgba(255,255,255,.06);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .2s,box-shadow .2s}
+input:focus,textarea:focus{outline:none;border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.25)}
+input::placeholder,textarea::placeholder{color:#6e6e73}
+input[type=checkbox]{accent-color:var(--akzent);width:18px;height:18px}
+.drop{position:relative;display:block;border-radius:20px;padding:48px 24px;text-align:center;color:var(--leise);cursor:pointer;margin-bottom:20px;
+background:rgba(255,255,255,.03);border:1.5px dashed var(--rand2);transition:all .25s}
+.drop::before{content:"↑";font-weight:700;display:block;margin:0 auto 12px;width:56px;height:56px;line-height:56px;border-radius:50%;font-size:22px;color:#fff;
+background:var(--verlauf);box-shadow:0 10px 30px rgba(255,55,95,.4)}
+.drop.aktiv,.drop:hover{border-color:var(--akzent);background:rgba(255,55,95,.06);color:var(--text);box-shadow:0 0 0 6px rgba(255,55,95,.08)}
+.drop input{display:none}.drop b{color:var(--text);font-size:17px;font-weight:600}
+.optionen{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.optionen label{border:1px solid var(--rand);border-radius:16px;padding:18px 14px;cursor:pointer;text-align:center;font-weight:600;
+background:rgba(255,255,255,.03);transition:all .2s}
+.optionen label:hover{border-color:var(--rand2);transform:translateY(-1px)}
+.optionen input{display:none}
+.optionen label:has(input:checked){border-color:transparent;background:linear-gradient(var(--bg),var(--bg)) padding-box,var(--verlauf) border-box;
+border:1.5px solid transparent;box-shadow:0 10px 30px rgba(255,55,95,.25)}
+.optionen input:checked+span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 10px;white-space:nowrap;border-bottom:1px solid var(--rand);font-size:14px}
+th{color:var(--leise);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em}tr:last-child td{border-bottom:0}
 .tabelle{overflow-x:auto}
-.status{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600}
-.s-FREIGEGEBEN,.a-AUTOMATISCH{background:#2fb36d22;color:var(--ok)}
-.s-ENTWURF{background:#3b82f622;color:var(--blau)}
-.s-WARTET{background:#e0a52622;color:var(--warn)}
-.s-ABGELEHNT,.a-MANUELL{background:#e3342f22;color:#ff6b66}
-.meldung{background:#3b82f61a;border:1px solid #3b82f655;padding:10px 14px;border-radius:8px;margin-bottom:18px}
-.leise{color:var(--leise)}pre{background:#0b0d11;border:1px solid var(--rand);border-radius:8px;
-padding:12px;overflow-x:auto;font-size:12.5px;max-height:360px}
-.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-.zahl{font-size:28px;font-weight:800}.hinweis{font-size:13px;color:var(--leise);margin-top:10px}
-.warten{display:flex;align-items:center;gap:14px;padding:16px;border-radius:10px;background:#e0a52614;border:1px solid #e0a52644}
-.kreis{width:22px;height:22px;border:3px solid #e0a52655;border-top-color:var(--warn);border-radius:50%;animation:dreh 1s linear infinite;flex:none}
+.status{display:inline-block;padding:3px 11px;border-radius:99px;font-size:12.5px;font-weight:600}
+.s-FREIGEGEBEN,.a-AUTOMATISCH{background:rgba(48,209,88,.15);color:var(--ok)}
+.s-ENTWURF{background:rgba(10,132,255,.16);color:#64b5ff}
+.s-WARTET{background:rgba(255,214,10,.13);color:var(--warn)}
+.s-ABGELEHNT,.a-MANUELL{background:rgba(255,55,95,.15);color:#ff6482}
+.meldung{background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);padding:12px 16px;border-radius:14px;margin-bottom:20px;
+-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.leise{color:var(--leise)}
+pre{background:rgba(0,0,0,.4);border:1px solid var(--rand);border-radius:12px;padding:12px;overflow-x:auto;font-size:12.5px;max-height:360px}
+.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.zahl{font-size:42px;font-weight:700;letter-spacing:-.04em;background:linear-gradient(180deg,#fff,#a1a1a6);
+-webkit-background-clip:text;background-clip:text;color:transparent}
+.hinweis{font-size:13px;color:var(--leise);margin-top:12px}
+.warten{display:flex;align-items:center;gap:16px;padding:18px;border-radius:16px;background:rgba(255,214,10,.07);border:1px solid rgba(255,214,10,.25)}
+.kreis{width:24px;height:24px;border:3px solid rgba(255,214,10,.25);border-top-color:var(--warn);border-radius:50%;animation:dreh .9s linear infinite;flex:none}
 @keyframes dreh{to{transform:rotate(360deg)}}
+@keyframes rein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+main>*{animation:rein .5s ease both}main>*:nth-child(2){animation-delay:.06s}main>*:nth-child(3){animation-delay:.12s}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .inline{display:inline}
-label.feld{display:block;font-size:13px;color:var(--leise);margin-bottom:4px}
-code{background:#0b0d11;border:1px solid var(--rand);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
+label.feld{display:block;font-size:13px;color:var(--leise);margin-bottom:6px}
+code{background:rgba(255,255,255,.08);border-radius:7px;padding:2px 7px;font:12.5px ui-monospace,"SF Mono",Menlo,Consolas,monospace;word-break:break-all}
 ol li{margin-bottom:8px}
 textarea{min-height:140px;resize:vertical}
-.dateien{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
-label.datei{display:flex;flex-direction:column;gap:6px;border:1px dashed var(--rand);border-radius:10px;padding:12px;cursor:pointer;font-size:14px;font-weight:600;min-width:0}
-label.datei.pflicht{border-color:#e3342f88}
-label.datei.gewaehlt{border-style:solid;border-color:var(--ok);background:#2fb36d10}
+.dateien{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:18px}
+label.datei{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--rand2);border-radius:16px;padding:14px;cursor:pointer;font-size:14px;font-weight:600;
+min-width:0;background:rgba(255,255,255,.03);transition:all .2s}
+label.datei.pflicht{border-color:rgba(255,55,95,.55)}
+label.datei.gewaehlt{border-style:solid;border-color:var(--ok);background:rgba(48,209,88,.08)}
 label.datei input{font-size:12px;color:var(--leise);max-width:100%}
-footer{max-width:1100px;margin:0 auto;padding:10px 16px 30px;font-size:13px;color:var(--leise)}
-footer a{color:var(--leise);margin-right:16px}
+footer{max-width:1100px;margin:0 auto;padding:10px 16px 40px;font-size:12.5px;color:#6e6e73}
+footer a{color:#6e6e73;margin-right:18px;text-decoration:none}footer a:hover{color:var(--text)}
+@media (max-width:600px){.karte{padding:20px;border-radius:18px}main{padding:22px 14px}h1{font-size:25px}.hero{padding:16px 0 20px}}
 </style></head><body>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 <nav><a href="{{ url_for('start') }}">Upload</a>
@@ -1079,14 +1121,15 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% endblock %}""",
 
 "start.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="hero"><h1>Dein File.<br><span>Ein Klick.</span></h1>
+<p>Original hochladen, Lösung wählen, fertiges File herunterladen.</p></div>
 <div class="karte">
-<h1>Original hochladen</h1>
 <form method="post" action="{{ url_for('pruefen') }}" enctype="multipart/form-data" id="f">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
 <label class="drop" id="drop"><input type="file" name="datei" id="datei">
 <div id="dropText"><b>Originaldatei hierher ziehen</b><br>oder klicken zum Auswählen (.bin, .ori, max. 16 MB)</div></label>
-<button class="btn" id="los">File prüfen</button>
-<div class="hinweis">Wir prüfen sofort, welche Lösungen es für dein File gibt. Danach wählst du aus,
+<div style="text-align:center"><button class="btn" id="los">File prüfen</button></div>
+<div class="hinweis" style="text-align:center">Wir prüfen sofort, welche Lösungen es für dein File gibt. Danach wählst du aus,
 und nach unserer Freigabe kannst du das File herunterladen.</div>
 </form></div>
 
