@@ -116,7 +116,7 @@ mkdir -p /var/backups/oneclick
 cat > /etc/cron.daily/oneclick-backup <<EOF
 #!/bin/sh
 # Archiv + Einstellungen sichern, 14 Tage aufheben
-tar czf /var/backups/oneclick/oneclick-\$(date +%F).tar.gz -C $APP archiv config.json benutzer.json 2>/dev/null
+tar czf /var/backups/oneclick/oneclick-\$(date +%F).tar.gz -C $APP archiv config.json benutzer.json optionen.json 2>/dev/null
 find /var/backups/oneclick -name 'oneclick-*.tar.gz' -mtime +14 -delete
 EOF
 chmod 755 /etc/cron.daily/oneclick-backup

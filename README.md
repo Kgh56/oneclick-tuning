@@ -22,6 +22,9 @@ Im Admin-Bereich unter **Archiv**:
 - **Option nachreichen:** einen vorhandenen Namen wählen, dasselbe Original und nur die neue Option auswählen
   → die bisherigen Optionen bleiben erhalten.
 - **Viele auf einmal:** ZIP mit einem Ordner pro Fahrzeug hochladen.
+- **Eigene Lösungen** (z. B. Drallklappen, Abgasklappe, Kickdown, Hardcut): auf der Archiv-Seite unter „Lösungen“
+  anlegen. Sie erscheinen dann beim Fahrzeug-Formular und werden beim ZIP-Import am Dateinamen erkannt
+  (`Golf7_Drallklappen.bin`). Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.
 
 Aufbau im Archiv-Ordner auf dem Server:
 
@@ -95,7 +98,7 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 | Seite | Was |
 |---|---|
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
-| **Archiv** | Fahrzeug einzeln hinzufügen oder Option nachreichen, ZIP-Import, Einträge löschen, Archiv als ZIP sichern |
+| **Archiv** | Fahrzeug einzeln hinzufügen oder Option nachreichen, eigene Lösungen anlegen, ZIP-Import, Einträge löschen, Archiv als ZIP sichern |
 | **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern, **Update installieren** |
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)

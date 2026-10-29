@@ -50,14 +50,18 @@ BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
 
-OPTION_NAMEN = {
-    "stage1": "Stage 1",
-    "stage2": "Stage 2",
-    "startstopp": "Start/Stopp aus",
-    "vmax": "Vmax offen",
-    "popsbangs": "Pops & Bangs",
-    "launch": "Launch Control",
-}
+
+
+class OptionNamen(dict):
+    """Anzeigenamen der Loesungen; unbekannte (z. B. geloeschte) zeigen ihren Schluessel."""
+    def __missing__(self, key):
+        return key
+
+
+def option_namen() -> OptionNamen:
+    return OptionNamen(oneclick.optionen())
+
+
 # ENTWURF: hochgeladen, Kunde waehlt noch die Option; danach entscheidet der Admin
 STATUS_TEXT = {
     "ENTWURF": "Option wählen",
@@ -174,7 +178,7 @@ def telegram_api(methode: str, daten: dict, timeout: int = 15):
 def telegram_text(a: dict) -> str:
     a = {k: html.escape(v) if isinstance(v, str) else v for k, v in a.items()}
     zeilen = [
-        f"🔧 <b>Neuer Auftrag: {OPTION_NAMEN[a['option']]}</b>",
+        f"🔧 <b>Neuer Auftrag: {html.escape(option_namen()[a['option']])}</b>",
         f"Datei: {a['datei']}",
         f"ECU: {a['ecu']}",
         f"Software: {a['software']}",
@@ -294,7 +298,7 @@ def wa_wert(text: str) -> str:
 
 def whatsapp_melden(auftrag: dict):
     cfg = lade_config()
-    werte = [OPTION_NAMEN[auftrag["option"]], auftrag["datei"], auftrag["ecu"], auftrag["kunde"],
+    werte = [option_namen()[auftrag["option"]], auftrag["datei"], auftrag["ecu"], auftrag["kunde"],
              f"100 % – {ART_TEXT.get(auftrag['art'], auftrag['art'])}"]
     for nummer in whatsapp_empfaenger():
         whatsapp_api({
@@ -357,7 +361,7 @@ def whatsapp_webhook():
                 text = entscheide(aid, aktion == "ok", wer=f"WhatsApp: +{absender}")
                 auftrag = finde_auftrag(aid)
                 if auftrag:
-                    text = f"{auftrag['datei']} ({OPTION_NAMEN[auftrag['option']]}): {text}"
+                    text = f"{auftrag['datei']} ({option_namen()[auftrag['option']]}): {text}"
                 whatsapp_api({"to": absender, "type": "text", "text": {"body": text}})
     return "ok"
 
@@ -485,6 +489,7 @@ def pruefen():
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
+    reihenfolge = list(oneclick.optionen())
     (ordner / "ori.bin").write_bytes(daten)
     for opt, l in loesungen.items():
         (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
@@ -495,7 +500,7 @@ def pruefen():
         "option": None,
         "status": "ENTWURF",
         "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
-                    for opt, l in sorted(loesungen.items(), key=lambda t: list(OPTION_NAMEN).index(t[0]))},
+                    for opt, l in sorted(loesungen.items(), key=lambda t: reihenfolge.index(t[0]))},
         "ecu": ecu,
         "software": software,
         "zeit": datetime.now().isoformat(timespec="seconds"),
@@ -725,7 +730,25 @@ def importiere_zip(stream) -> list:
 @app.route("/admin/archiv")
 @admin_noetig
 def admin_archiv():
-    return render_template("archiv.html", eintraege=oneclick.lade_index()["eintraege"])
+    return render_template("archiv.html", eintraege=oneclick.lade_index()["eintraege"],
+                           eigene=oneclick.eigene_optionen())
+
+
+@app.route("/admin/loesungen", methods=["POST"])
+@admin_noetig
+def loesungen_verwalten():
+    try:
+        with index_sperre:
+            if request.form.get("aktion") == "loeschen":
+                name = oneclick.eigene_optionen().get(request.form.get("key", ""), "")
+                oneclick.option_loeschen(request.form.get("key", ""))
+                flash(f"Lösung „{name}“ gelöscht.")
+            else:
+                key = oneclick.option_anlegen(request.form.get("name", ""))
+                flash(f"Lösung „{oneclick.optionen()[key]}“ angelegt. Du kannst sie jetzt bei Fahrzeugen hochladen.")
+    except ValueError as e:
+        flash(str(e))
+    return redirect(url_for("admin_archiv"))
 
 
 @app.route("/admin/archiv/neu", methods=["POST"])
@@ -741,13 +764,14 @@ def archiv_neu():
         flash("Bitte das Original auswählen.")
         return redirect(url_for("admin_archiv"))
     ori = datei.read()
-    mods = {opt: request.files[opt].read() for opt in oneclick.OPTIONEN
+    namen = option_namen()
+    mods = {opt: request.files[opt].read() for opt in namen
             if request.files.get(opt) and request.files[opt].filename}
     if not mods:
         flash("Bitte mindestens ein Tuning-File auswählen (z. B. Stage 1).")
         return redirect(url_for("admin_archiv"))
-    fehler = [f"{OPTION_NAMEN[opt]}: andere Dateigröße als das Original." if len(d) != len(ori)
-              else f"{OPTION_NAMEN[opt]}: ist identisch mit dem Original." for opt, d in mods.items()
+    fehler = [f"{namen[opt]}: andere Dateigröße als das Original." if len(d) != len(ori)
+              else f"{namen[opt]}: ist identisch mit dem Original." for opt, d in mods.items()
               if len(d) != len(ori) or d == ori]
     if fehler:
         for f in fehler:
@@ -776,7 +800,7 @@ def archiv_neu():
         for opt, d in mods.items():
             (ziel / f"{opt}.bin").write_bytes(d)
         oneclick.baue_index()
-    liste = ", ".join(OPTION_NAMEN[o] for o in mods)
+    liste = ", ".join(namen[o] for o in mods)
     flash(f"„{name}“ angelegt mit {liste}." if neu else f"„{name}“ ergänzt: {liste}.")
     return redirect(url_for("admin_archiv"))
 
@@ -1225,6 +1249,22 @@ Erkannt werden Namen mit „ori/original“ bzw. „stage1/st1/stage2/vmax/start
 Liegen genau zwei Dateien im Ordner, gilt die nicht-Original-Datei als Stage 1.
 Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code> (gleicher Namensanfang).</div>
 </div>
+<div class="karte"><h2>Lösungen</h2>
+<p class="leise" style="margin-top:-6px">Diese Lösungen kannst du bei Fahrzeugen hochladen. Kunden sehen nur die, die es für ihr File gibt.</p>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+{% for key, name in optionen.items() %}
+<span class="status s-ENTWURF" style="display:inline-flex;align-items:center;gap:8px">{{ name }}
+{% if key in eigene %}<form method="post" action="{{ url_for('loesungen_verwalten') }}" class="inline" onsubmit="return confirm('Lösung „{{ name }}“ löschen?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="loeschen"><input type="hidden" name="key" value="{{ key }}">
+<button title="Löschen" style="background:none;border:0;color:inherit;cursor:pointer;font-size:15px;padding:0">✕</button></form>{% endif %}</span>
+{% endfor %}</div>
+<form method="post" action="{{ url_for('loesungen_verwalten') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="neu">
+<input type="text" name="name" placeholder="Neue Lösung, z. B. Drallklappen" maxlength="40" style="flex:1;min-width:220px">
+<button class="btn grau">Lösung anlegen</button></form>
+<div class="hinweis">Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
+Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.</div></div>
+
 <div class="karte"><h2>{{ eintraege|length }} Einträge</h2>
 {% if eintraege %}<div class="tabelle"><table><tr><th>Name</th><th>ECU</th><th>Software</th><th>Optionen</th><th>Größe</th><th></th></tr>
 {% for e in eintraege %}<tr><td>{{ e.name }}</td><td>{{ e.ecu|join(', ') or '?' }}</td>
@@ -1317,7 +1357,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 
 @app.context_processor
 def globale():
-    return {"optionen": OPTION_NAMEN, "status_text": STATUS_TEXT, "art_text": ART_TEXT,
+    return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT,
             "firma": lade_config().get("firmenname") or "OneClick Tuning"}
 
 

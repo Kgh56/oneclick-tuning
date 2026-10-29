@@ -36,6 +36,7 @@ class Basis(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         d = Path(self.tmp.name)
         oneclick.ARCHIV, oneclick.INDEX_DATEI = d / "archiv", d / "index.json"
+        oneclick.OPTIONEN_DATEI = d / "optionen.json"
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
@@ -306,6 +307,62 @@ class WebTests(Basis):
         self.assertIn("identisch mit dem Original", self.fahrzeug(a, "Neu", anders, stage1=anders))
         self.assertIn("mindestens ein Tuning-File", self.fahrzeug(a, "Neu", anders))
         self.assertFalse((oneclick.ARCHIV / "Neu").exists())
+
+    def loesung(self, a, aktion="neu", **daten):
+        r = a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": aktion, **daten}, follow_redirects=True)
+        return r.text
+
+    def test_eigene_loesung_komplett(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        a = self.admin()
+        self.assertIn("angelegt", self.loesung(a, name="Drallklappen"))
+        self.assertIn("Drallklappen", a.get("/admin/archiv").text)
+        # Fahrzeug mit Stage 1 + Drallklappen anlegen
+        neu = zufall(GROESSE, 21)
+        st1, drall = bytearray(neu), bytearray(neu)
+        st1[0x6000:0x6004] = bytes(4)
+        drall[0x6100:0x6102] = b"\x01\x01"
+        self.assertIn("Drallklappen", self.fahrzeug(a, "Audi_A6", neu, stage1=st1, drallklappen=drall))
+        # Kunde sieht beide, waehlt Drallklappen
+        aid = self.hochladen(neu)
+        seite = self.kunde.get(f"/auftrag/{aid}").text
+        self.assertIn('value="drallklappen"', seite)
+        self.assertIn(">Drallklappen<", seite)
+        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "drallklappen"})
+        import time
+        time.sleep(0.3)
+        texte = [d["text"] for m, d in self.telegram if m == "sendMessage"]
+        self.assertTrue(any("Neuer Auftrag: Drallklappen" in t for t in texte))
+        A.entscheide(aid, True)
+        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(drall))
+        # Benutzte Loesung kann nicht geloescht werden
+        self.assertIn("noch im Archiv benutzt", self.loesung(a, "loeschen", key="drallklappen"))
+
+    def test_eigene_loesung_gesperrt_und_doppelt(self):
+        a = self.admin()
+        for name in ["DPF Off", "AGR aus", "AdBlue off", "Kat aus", "Lambda off"]:
+            self.assertIn("nicht unterstützt", self.loesung(a, name=name), name)
+        self.assertIn("gibt es schon", self.loesung(a, name="Stage 1"))
+        self.loesung(a, name="Kickdown")
+        self.assertIn("gibt es schon", self.loesung(a, name="kickdown"))
+        self.assertIn("gelöscht", self.loesung(a, "loeschen", key="kickdown"))
+        self.assertIn("Feste Lösungen", self.loesung(a, "loeschen", key="stage1"))
+        self.assertEqual(set(oneclick.eigene_optionen()), set())
+
+    def test_eigene_loesung_im_zip(self):
+        a = self.admin()
+        self.loesung(a, name="Drallklappen")
+        neu = zufall(GROESSE, 22)
+        drall = bytearray(neu)
+        drall[0x7000] ^= 1
+        puffer = io.BytesIO()
+        with zipfile.ZipFile(puffer, "w") as z:
+            z.writestr("Golf8/Golf8_ORI.bin", bytes(neu))
+            z.writestr("Golf8/Golf8_Drallklappen.bin", bytes(drall))
+        puffer.seek(0)
+        a.post("/admin/archiv/import", data={"csrf": a.csrf, "zip": (puffer, "f.zip")}, content_type="multipart/form-data")
+        _, l = oneclick.finde_loesungen(bytes(neu))
+        self.assertEqual(set(l), {"drallklappen"})
 
     def test_aufraeumen(self):
         alt = (datetime.now() - timedelta(days=100)).isoformat(timespec="seconds")

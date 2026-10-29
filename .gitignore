@@ -8,3 +8,4 @@ benutzer.json
 .archiv_backup.zip
 __pycache__/
 *.pyc
+optionen.json

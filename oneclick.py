@@ -39,9 +39,22 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 ARCHIV = BASE / "archiv"
 INDEX_DATEI = BASE / "index.json"
+OPTIONEN_DATEI = BASE / "optionen.json"   # selbst angelegte Loesungen (z. B. Drallklappen)
 
-# Angebotene Optionen (Dateiname im Archivordner = <option>.bin)
-OPTIONEN = ["stage1", "stage2", "startstopp", "vmax", "popsbangs", "launch"]
+# Feste Loesungen (Dateiname im Archivordner = <schluessel>.bin)
+STANDARD_OPTIONEN = {
+    "stage1": "Stage 1",
+    "stage2": "Stage 2",
+    "startstopp": "Start/Stopp aus",
+    "vmax": "Vmax offen",
+    "popsbangs": "Pops & Bangs",
+    "launch": "Launch Control",
+}
+# Abschaltungen der Abgasreinigung werden nicht unterstuetzt
+GESPERRT = re.compile(
+    r"dpf|adblue|ad[\s_-]*blue|partikel|harnstoff|katalysator|lambda|abgasr(ü|ue)ckf|nox"
+    r"|(^|[^a-z0-9])(egr|agr|scr|fap|kat|o2|opf|gpf)([^a-z0-9]|$)"
+)
 
 MERGE_LUECKE = 8      # Aenderungen mit kleinerem Abstand werden zu einem Block zusammengefasst
 KONTEXT = 16          # Bytes vor/nach jeder Aenderung, die zusaetzlich identisch sein muessen
@@ -168,6 +181,51 @@ MUSTER_OPTION = {
 }
 
 
+def schluessel(name: str) -> str:
+    """'Drallklappen aus' -> 'drallklappenaus' (fuer Dateinamen und Vergleiche)."""
+    name = name.lower()
+    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        name = name.replace(a, b)
+    return re.sub(r"[^a-z0-9]", "", name)
+
+
+def eigene_optionen() -> dict:
+    return json.loads(OPTIONEN_DATEI.read_text()) if OPTIONEN_DATEI.exists() else {}
+
+
+def optionen() -> dict:
+    """Alle Loesungen: {schluessel: Anzeigename}, feste zuerst."""
+    return {**STANDARD_OPTIONEN, **eigene_optionen()}
+
+
+def option_anlegen(name: str) -> str:
+    name = " ".join(name.split())[:40]
+    key = schluessel(name)[:30]
+    if not key:
+        raise ValueError("Bitte einen Namen eingeben.")
+    if GESPERRT.search(name.lower()) or GESPERRT.search(key):
+        raise ValueError("Lösungen, die die Abgasreinigung abschalten (DPF, AGR, AdBlue/SCR, Kat, Lambda …), "
+                         "werden nicht unterstützt.")
+    if key == "ori" or MUSTER_ORI.search(key) or key in optionen():
+        raise ValueError(f"„{name}“ gibt es schon oder der Name ist nicht erlaubt.")
+    eigene = eigene_optionen()
+    eigene[key] = name
+    OPTIONEN_DATEI.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+    return key
+
+
+def option_loeschen(key: str):
+    eigene = eigene_optionen()
+    if key not in eigene:
+        raise ValueError("Feste Lösungen können nicht gelöscht werden.")
+    benutzt = [e["name"] for e in lade_index()["eintraege"] if key in e["optionen"]]
+    if benutzt:
+        raise ValueError(f"„{eigene[key]}“ wird noch im Archiv benutzt ({', '.join(benutzt[:5])}). "
+                         "Erst dort die Fahrzeuge löschen.")
+    del eigene[key]
+    OPTIONEN_DATEI.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+
+
 def ist_ecu_datei(name: str) -> bool:
     # Versteckte Dateien, Temp- und Konfliktdateien ignorieren
     if name.startswith(".") or name.startswith("~") or ".sync-conflict" in name:
@@ -181,19 +239,23 @@ def klassifiziere(namen: list) -> tuple:
     ori = next((n for n in namen if Path(n).stem.lower() == "ori"), None) \
         or next((n for n in namen if MUSTER_ORI.search(Path(n).stem.lower())), None) \
         or next((n for n in namen if Path(n).suffix.lower() in (".ori", ".org")), None)
-    optionen = {}
+    # Eigene Loesungen zuerst pruefen (spezifischer, z. B. "Stage 1 Plus")
+    eigene = sorted(eigene_optionen(), key=len, reverse=True)
+    gefunden = {}
     for n in namen:
         if n == ori:
             continue
         stamm = Path(n).stem.lower()
-        for opt, muster in MUSTER_OPTION.items():
-            if (stamm == opt or muster.search(stamm)) and opt not in optionen:
-                optionen[opt] = n
-                break
-    rest = [n for n in namen if n != ori and n not in optionen.values()]
-    if ori and not optionen and len(rest) == 1:
-        optionen["stage1"] = rest[0]
-    return ori, optionen
+        key = next((k for k in eigene if k in schluessel(stamm) and k not in gefunden), None)
+        if key is None:
+            key = next((opt for opt, muster in MUSTER_OPTION.items()
+                        if (stamm == opt or muster.search(stamm)) and opt not in gefunden), None)
+        if key:
+            gefunden[key] = n
+    rest = [n for n in namen if n != ori and n not in gefunden.values()]
+    if ori and not gefunden and len(rest) == 1:
+        gefunden["stage1"] = rest[0]
+    return ori, gefunden
 
 
 def archiv_datei(eintrag: dict, option: str = None) -> Path:
@@ -246,8 +308,8 @@ def lade_index() -> dict:
 
 def lerne(ori: bytes, mod: bytes, name: str, option: str = "stage1") -> Path:
     """Neues ORI/Mod-Paar ins Archiv aufnehmen und Index neu bauen."""
-    if option not in OPTIONEN:
-        raise ValueError(f"Unbekannte Option '{option}'. Erlaubt: {', '.join(OPTIONEN)}")
+    if option not in optionen():
+        raise ValueError(f"Unbekannte Option '{option}'. Erlaubt: {', '.join(optionen())}")
     if len(ori) != len(mod):
         raise ValueError("ORI und Mod-Datei haben unterschiedliche Groessen")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
