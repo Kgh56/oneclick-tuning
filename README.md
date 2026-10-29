@@ -1,49 +1,40 @@
-# OneClick Tuning – Kern
+# OneClick Tuning
 
-Überträgt Stage 1 (und weitere Optionen) aus eurem Archiv automatisch auf neue Originaldateien.
-Benötigt nur Python 3, keine Zusatzpakete. **Checksummen werden nicht korrigiert** (Flash-Tool / WinOLS).
+Kunden laden ihr Original hoch. Die Seite liefert **nur bei einem 100-%-Treffer** in eurem Archiv
+und zeigt **nur die Optionen, die es für diesen Treffer gibt** (liegt im Ordner nur Stage 1, gibt es nur Stage 1).
+Ohne Treffer entsteht kein Auftrag. Herunterladen kann der Kunde erst nach eurer Freigabe (Telegram oder Admin-Bereich).
+**Checksummen werden nicht korrigiert** (Flash-Tool / WinOLS).
 
-## 1. Archiv anlegen
-Pro Fahrzeug/Softwarestand ein Ordner unter `archiv/`:
+## Was ist ein 100-%-Treffer?
+1. **Original identisch:** Das File ist Byte für Byte gleich wie ein Original im Archiv.
+2. **Alle Tuning-Stellen identisch:** Gleiche Dateigröße, gleiche Software-/Teilenummer (falls lesbar), und an
+   **jeder** Stelle, die euer Tuning ändert (plus 16 Bytes davor und danach), steht exakt dasselbe wie im
+   Archiv-Original – an derselben Adresse. Es wird nichts gesucht oder verschoben. Unterschiede gibt es dann nur
+   an Stellen, die das Tuning gar nicht anfasst (z. B. Fahrgestellnummer); die bleiben vom Kunden-File erhalten.
+
+Wer nur Variante 1 will: Admin-Bereich → Einstellungen → „Nur komplett identische Originale“.
+
+## Archiv
+Pro Fahrzeug/Softwarestand ein Ordner unter `archiv/` (am einfachsten per ZIP im Admin-Bereich hochladen):
 
 ```
 archiv/
   golf7_20tdi_03L906018JL/
-    ori.bin
-    stage1.bin
-    startstopp.bin   (optional)
+    Golf7_ORI.bin
+    Golf7_Stage1.bin
+    Golf7_StartStop.bin   (optional, weitere Optionen)
 ```
 
-Erlaubte Optionsnamen: `stage1`, `stage2`, `startstopp`, `vmax`, `popsbangs`, `launch`.
-ORI und Mod-Datei müssen gleich groß sein (gleiche Leseart).
+Erkannt werden Namen mit „ori/original“ bzw. „stage1/st1“, „stage2“, „startstop“, „vmax“, „pops“, „launch“.
+Liegen genau zwei Dateien im Ordner und eine ist das Original, gilt die andere als Stage 1.
+Original und Tuning-File müssen gleich groß sein (gleiche Leseart).
 
+## Kommandozeile (optional)
 ```
-python oneclick.py index
-```
-
-## 2. Neues Original tunen
-```
-python oneclick.py tune kunde.bin                 # Stage 1
-python oneclick.py tune kunde.bin -o startstopp
-```
-
-| Status        | Bedeutung                                                     | Ausgabe                       |
-|---------------|---------------------------------------------------------------|-------------------------------|
-| AUTOMATISCH   | Identisches Original oder alle Änderungen eindeutig gefunden  | `kunde_stage1.bin`            |
-| PRUEFEN       | Nur ein Teil der Änderungen gefunden                          | `kunde_stage1_PRUEFEN.bin`    |
-| MANUELL       | Nichts Passendes im Archiv                                    | nur Bericht                   |
-
-Zu jedem Lauf wird ein Bericht `kunde_stage1_bericht.txt` geschrieben (Quelle, Sicherheit, jeder Block mit Adresse).
-
-## 3. Archiv erweitern
-Nach manueller Bearbeitung das Paar aufnehmen, damit es beim nächsten Mal automatisch geht:
-```
-python oneclick.py lernen kunde.bin kunde_stage1_fertig.bin --name passat_b8_04L906026
-```
-
-## Datei erkennen
-```
-python oneclick.py info kunde.bin
+python oneclick.py index                 # Archiv einlesen
+python oneclick.py info    kunde.bin     # ECU / Softwarenummern anzeigen
+python oneclick.py pruefen kunde.bin     # 100-%-Treffer suchen, Files für alle gefundenen Optionen erzeugen
+python oneclick.py lernen  ori.bin stage1.bin --name passat_b8_04L906026
 ```
 
 ---
@@ -78,8 +69,8 @@ Archiv → „Archiv als ZIP herunterladen“ ab und zu eine Kopie auf den PC ho
 
 # Webseite
 
-**Kunden brauchen kein Login:** Original hochladen → Option klicken → optional Name/Telefon → „Auftrag senden“.
-Das File wird sofort automatisch erstellt, aber **erst nach deiner Freigabe** kann der Kunde es herunterladen.
+**Kunden brauchen kein Login:** Original hochladen → „File prüfen“ → nur die gefundenen Optionen werden angezeigt →
+Option wählen, optional Name/Telefon → „Auftrag senden“. **Erst nach deiner Freigabe** kann der Kunde herunterladen.
 Bis dahin zeigt seine Seite „Wartet auf Freigabe“ und aktualisiert sich alle 5 Sekunden selbst.
 Wird abgelehnt, sieht der Kunde das (mit Grund, falls angegeben).
 
@@ -88,8 +79,8 @@ Wird abgelehnt, sieht der Kunde das (mit Grund, falls angegeben).
 - **Admin-Bereich** (`/login`, nicht im Menü verlinkt): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
-Kein automatisches File (Software unbekannt)? Dann gibt es nur „Ablehnen“ – oder du lädst im Admin-Bereich
-dein fertiges File hoch.
+Kein 100-%-Treffer? Dann sieht der Kunde „Für dieses File haben wir leider noch keine Lösung“, es entsteht kein Auftrag.
+Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, das dann stattdessen ausgeliefert wird.
 
 ## Admin-Bereich
 | Seite | Was |
@@ -109,7 +100,7 @@ Nur Knopfdrücke aus diesem Chat werden angenommen.
 ## WinOLS-Sync
 Auf dem PC entstehen zwei Ordner, die sich automatisch mit dem Server abgleichen:
 - **Tuning-Auftraege** (nur empfangen): jedes Kunden-Original als `Datum_ECU_Software_Option_Datei_Nr_ORI.bin`,
-  dazu `_AUTO.bin` (automatisch erstellt) bzw. `_FERTIG.bin` (von dir hochgeladen). Direkt in WinOLS importieren.
+  dazu `_AUTO.bin` (aus dem Archiv) bzw. `_FERTIG.bin` (von dir hochgeladen). Direkt in WinOLS importieren.
 - **Tuning-Archiv** (beide Richtungen): dein Archiv. Neuen Ordner mit Original + Tuning-File hineinlegen
   → der Server lernt ihn nach ca. 1 Minute automatisch.
 

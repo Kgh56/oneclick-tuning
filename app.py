@@ -9,10 +9,11 @@ Start:
     python app.py whatsapp-test    Test-Vorlage an WhatsApp senden
     python app.py                  Server starten (http://localhost:5000, Admin unter /login)
 
-Kunden brauchen kein Login: Original hochladen, Option waehlen. Das File wird sofort
-automatisch erstellt, der Kunde kann es aber erst herunterladen, wenn der Admin den
-Auftrag bestaetigt hat (per Telegram- oder WhatsApp-Knopf oder im Admin-Bereich). Bis dahin wartet
-die Seite des Kunden und aktualisiert sich selbst.
+Kunden brauchen kein Login: Original hochladen -> die Seite sucht einen 100-%-Treffer im
+Archiv und zeigt nur die Optionen an, die es dafuer gibt. Ohne Treffer entsteht kein Auftrag.
+Der Kunde kann das File erst herunterladen, wenn der Admin den Auftrag bestaetigt hat
+(per Telegram- oder WhatsApp-Knopf oder im Admin-Bereich). Bis dahin wartet die Seite des
+Kunden und aktualisiert sich selbst.
 """
 
 import getpass
@@ -57,16 +58,18 @@ OPTION_NAMEN = {
     "popsbangs": "Pops & Bangs",
     "launch": "Launch Control",
 }
-# status: Entscheidung des Admins; automatik: Ergebnis der automatischen Erstellung
+# ENTWURF: hochgeladen, Kunde waehlt noch die Option; danach entscheidet der Admin
 STATUS_TEXT = {
+    "ENTWURF": "Option wählen",
     "WARTET": "Wartet auf Freigabe",
     "FREIGEGEBEN": "Freigegeben",
     "ABGELEHNT": "Abgelehnt",
 }
-AUTOMATIK_TEXT = {
-    "AUTOMATISCH": "Automatisch",
-    "PRUEFEN": "Teilweise",
-    "MANUELL": "Kein File",
+# art: wie der 100-%-Treffer zustande kam
+ART_TEXT = {
+    "identisch": "Original identisch",
+    "gleiche Stellen": "Alle Tuning-Stellen identisch",
+    "eigenes File": "Eigenes File",
 }
 
 app = Flask(__name__)
@@ -174,15 +177,13 @@ def telegram_text(a: dict) -> str:
         f"ECU: {a['ecu']}",
         f"Software: {a['software']}",
         f"Kontakt: {a['kunde']}",
-        f"Automatik: {AUTOMATIK_TEXT[a['automatik']]} ({a['sicherheit']} %)",
+        f"Treffer: 100 % – {ART_TEXT.get(a['art'], a['art'])}",
         f"Quelle: {a['quelle'] or '–'}",
     ]
     if a["status"] == "FREIGEGEBEN":
         zeilen.append("\n✅ <b>FREIGEGEBEN</b>")
     elif a["status"] == "ABGELEHNT":
         zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {a['grund']}" if a.get("grund") else ""))
-    elif a["automatik"] == "MANUELL":
-        zeilen.append("\n⚠️ Kein automatisches File. Fertige Datei im Admin-Bereich hochladen.")
     return "\n".join(zeilen)
 
 
@@ -292,7 +293,7 @@ def wa_wert(text: str) -> str:
 def whatsapp_melden(auftrag: dict):
     cfg = lade_config()
     werte = [OPTION_NAMEN[auftrag["option"]], auftrag["datei"], auftrag["ecu"], auftrag["kunde"],
-             f"{AUTOMATIK_TEXT[auftrag['automatik']]} ({auftrag['sicherheit']} %)"]
+             f"100 % – {ART_TEXT.get(auftrag['art'], auftrag['art'])}"]
     for nummer in whatsapp_empfaenger():
         whatsapp_api({
             "to": nummer,
@@ -413,55 +414,77 @@ def logout():
 @app.route("/")
 def start():
     meine = session.get("auftraege", [])
-    eigene = [a for a in alle_auftraege() if a["id"] in meine]
+    eigene = [a for a in alle_auftraege() if a["id"] in meine and a["status"] != "ENTWURF"]
     return render_template("start.html", auftraege=eigene)
 
 
-@app.route("/auftrag", methods=["POST"])
-def auftrag_neu():
+@app.route("/pruefen", methods=["POST"])
+def pruefen():
+    """Schritt 1: Original hochladen, 100-%-Treffer suchen, verfuegbare Optionen anbieten."""
     datei = request.files.get("datei")
-    option = request.form.get("option", "stage1")
     if not datei or not datei.filename:
         flash("Bitte eine Originaldatei auswählen.")
         return redirect(url_for("start"))
-    if option not in OPTION_NAMEN:
-        abort(400)
     daten = datei.read()
     if len(daten) < 1024:
         flash("Die Datei ist zu klein für ein ECU-File.")
         return redirect(url_for("start"))
 
-    erg = oneclick.tune(daten, option)
+    info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
+    ecu = ", ".join(info["ecu"]) or "?"
+    software = ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"
+    if not loesungen:
+        flash(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
+              "Melde dich gerne bei uns.")
+        return redirect(url_for("start"))
+
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
     (ordner / "ori.bin").write_bytes(daten)
-    if erg["ergebnis"] is not None:
-        (ordner / "ergebnis.bin").write_bytes(erg["ergebnis"])
-
+    for opt, l in loesungen.items():
+        (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
     auftrag = {
         "id": aid,
-        "kunde": request.form.get("kontakt", "").strip()[:100] or "–",
+        "kunde": "–",
         "datei": Path(datei.filename).name,
-        "option": option,
-        "status": "WARTET",
-        "automatik": erg["status"],
-        "sicherheit": round(erg["sicherheit"], 1),
-        "quelle": erg["quelle"],
-        "ecu": ", ".join(erg["info"]["ecu"]) or "?",
-        "software": ", ".join(erg["info"]["bosch_sw"] + erg["info"]["vag_teilenr"]) or "?",
+        "option": None,
+        "status": "ENTWURF",
+        "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
+                    for opt, l in sorted(loesungen.items(), key=lambda t: list(OPTION_NAMEN).index(t[0]))},
+        "ecu": ecu,
+        "software": software,
         "zeit": datetime.now().isoformat(timespec="seconds"),
-        "bericht": erg["bericht"],
     }
     speichere_auftrag(auftrag)
-    exportieren(auftrag, "ORI", daten)
-    if erg["ergebnis"] is not None:
-        exportieren(auftrag, "AUTO", erg["ergebnis"])
-    threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
-
-    # Browser merkt sich die letzten 50 eigenen Auftraege
     session.permanent = True
     session["auftraege"] = ([aid] + session.get("auftraege", []))[:50]
+    return redirect(url_for("auftrag_ansicht", aid=aid))
+
+
+@app.route("/auftrag/<aid>/bestellen", methods=["POST"])
+def bestellen(aid):
+    """Schritt 2: Kunde waehlt eine der angebotenen Optionen -> wartet auf Freigabe."""
+    option = request.form.get("option", "")
+    with sperre:
+        auftrag = lade_auftrag(aid)
+        if auftrag["status"] != "ENTWURF":
+            return redirect(url_for("auftrag_ansicht", aid=aid))
+        if option not in auftrag["angebot"]:
+            flash("Bitte eine der angezeigten Optionen wählen.")
+            return redirect(url_for("auftrag_ansicht", aid=aid))
+        ordner = AUFTRAEGE / aid
+        (ordner / f"loesung_{option}.bin").replace(ordner / "ergebnis.bin")
+        for rest in ordner.glob("loesung_*.bin"):
+            rest.unlink()
+        auftrag.update(option=option, status="WARTET",
+                       kunde=request.form.get("kontakt", "").strip()[:100] or "–",
+                       quelle=auftrag["angebot"][option]["quelle"], art=auftrag["angebot"][option]["art"],
+                       zeit=datetime.now().isoformat(timespec="seconds"))
+        speichere_auftrag(auftrag)
+    exportieren(auftrag, "ORI", (ordner / "ori.bin").read_bytes())
+    exportieren(auftrag, "AUTO", (ordner / "ergebnis.bin").read_bytes())
+    threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
     return redirect(url_for("auftrag_ansicht", aid=aid))
 
 
@@ -478,7 +501,7 @@ def auftrag_status(aid):
 @app.route("/auftrag/<aid>/download")
 def download(aid):
     auftrag = lade_auftrag(aid)
-    if auftrag["status"] != "FREIGEGEBEN" and not session.get("admin"):
+    if auftrag["status"] != "FREIGEGEBEN" and not (session.get("admin") and auftrag["status"] != "ENTWURF"):
         abort(403)
     if not hat_file(aid):
         abort(404)
@@ -501,13 +524,11 @@ def original(aid):
 @app.route("/admin")
 @admin_noetig
 def admin():
-    alle = alle_auftraege()
+    alle = [a for a in alle_auftraege() if a["status"] != "ENTWURF"]
     wartend = [a for a in alle if a["status"] == "WARTET"]
-    for a in wartend:
-        a["hat_file"] = hat_file(a["id"])
     return render_template("admin.html", wartend=wartend, alle=alle[:100],
                            archiv=len(oneclick.lade_index()["eintraege"]),
-                           auto=sum(a["automatik"] == "AUTOMATISCH" for a in alle),
+                           freigegeben=sum(a["status"] == "FREIGEGEBEN" for a in alle),
                            telegram=bool(lade_config().get("telegram_chat_id")),
                            whatsapp=bool(whatsapp_empfaenger() and lade_config().get("whatsapp_token")))
 
@@ -547,7 +568,7 @@ def fertig_hochladen(aid):
             flash(f"Auftrag ist schon {STATUS_TEXT[auftrag['status']].lower()}.")
             return redirect(url_for("auftrag_ansicht", aid=aid))
         (AUFTRAEGE / aid / "ergebnis.bin").write_bytes(daten)
-        auftrag["eigenes_file"] = True
+        auftrag["art"] = "eigenes File"
         speichere_auftrag(auftrag)
     exportieren(auftrag, "FERTIG", daten)
     meldung = entscheide(aid, True, wer=session["benutzer"])
@@ -595,13 +616,14 @@ def exportieren(auftrag: dict, art: str, daten: bytes):
 
 def aufraeumen() -> int:
     """Alte, erledigte Auftraege und Export-Kopien loeschen. Das Archiv bleibt unangetastet."""
-    tage = int(lade_config().get("aufbewahrung_tage", 90) or 0)
-    if tage <= 0:
-        return 0
+    tage = int(lade_config().get("aufbewahrung_tage", 90) or 0) or 36500   # 0 = nie
     grenze = datetime.now() - timedelta(days=tage)
+    entwurf_grenze = datetime.now() - timedelta(days=1)
     geloescht = 0
     for a in alle_auftraege():
-        if a["status"] != "WARTET" and datetime.fromisoformat(a["zeit"]) < grenze:
+        zeit = datetime.fromisoformat(a["zeit"])
+        if (a["status"] == "ENTWURF" and zeit < entwurf_grenze) or \
+                (a["status"] not in ("WARTET", "ENTWURF") and zeit < grenze):
             shutil.rmtree(AUFTRAEGE / a["id"], ignore_errors=True)
             geloescht += 1
     if EXPORT.exists():
@@ -767,6 +789,7 @@ def einstellungen():
                 "telegram_token": request.form.get("telegram_token", "").strip(),
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
+                "nur_identisch": request.form.get("nur_identisch") == "1",
             })
             flash("Gespeichert.")
         elif aktion == "chat":
@@ -908,7 +931,8 @@ border-bottom:1px solid var(--rand);font-size:14px}th{color:var(--leise);font-we
 .tabelle{overflow-x:auto}
 .status{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600}
 .s-FREIGEGEBEN,.a-AUTOMATISCH{background:#2fb36d22;color:var(--ok)}
-.s-WARTET,.a-PRUEFEN{background:#e0a52622;color:var(--warn)}
+.s-ENTWURF{background:#3b82f622;color:var(--blau)}
+.s-WARTET{background:#e0a52622;color:var(--warn)}
 .s-ABGELEHNT,.a-MANUELL{background:#e3342f22;color:#ff6b66}
 .meldung{background:#3b82f61a;border:1px solid #3b82f655;padding:10px 14px;border-radius:8px;margin-bottom:18px}
 .leise{color:var(--leise)}pre{background:#0b0d11;border:1px solid var(--rand);border-radius:8px;
@@ -946,18 +970,13 @@ ol li{margin-bottom:8px}
 "start.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte">
 <h1>Original hochladen</h1>
-<form method="post" action="{{ url_for('auftrag_neu') }}" enctype="multipart/form-data" id="f">
+<form method="post" action="{{ url_for('pruefen') }}" enctype="multipart/form-data" id="f">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
 <label class="drop" id="drop"><input type="file" name="datei" id="datei">
 <div id="dropText"><b>Originaldatei hierher ziehen</b><br>oder klicken zum Auswählen (.bin, .ori, max. 16 MB)</div></label>
-<div class="optionen">
-{% for key, name in optionen.items() %}
-<label><input type="radio" name="option" value="{{ key }}" {{ 'checked' if loop.first }}><span>{{ name }}</span></label>
-{% endfor %}</div>
-<input type="text" name="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
-<button class="btn" id="los">Auftrag senden</button>
-<div class="hinweis">Jeder Auftrag wird von uns kurz freigegeben, danach kannst du das File herunterladen.
-Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
+<button class="btn" id="los">File prüfen</button>
+<div class="hinweis">Wir prüfen sofort, welche Lösungen es für dein File gibt. Danach wählst du aus,
+und nach unserer Freigabe kannst du das File herunterladen.</div>
 </form></div>
 
 <div class="karte"><h2>Meine Aufträge <span class="leise" style="font-weight:400;font-size:13px">(in diesem Browser)</span></h2>
@@ -974,23 +993,36 @@ i.addEventListener('change',zeig);
 ['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('aktiv')}));
 ['dragleave','drop'].forEach(e=>d.addEventListener(e,()=>d.classList.remove('aktiv')));
 d.addEventListener('drop',ev=>{ev.preventDefault();i.files=ev.dataTransfer.files;zeig()});
-document.getElementById('f').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird gesendet …';b.disabled=true});
+document.getElementById('f').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird geprüft …';b.disabled=true});
 </script>
 {% endblock %}""",
 
 "auftrag.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte">
-<h1>{{ optionen[a.option] }} · {{ a.datei }}</h1>
+<h1>{% if a.option %}{{ optionen[a.option] }} · {% endif %}{{ a.datei }}</h1>
 <p><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span>
 <span class="leise">&nbsp; {{ a.zeit[:16].replace('T',' ') }}</span></p>
 <table><tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
 {% if session.admin %}<tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
-<tr><th>Automatik</th><td><span class="status a-{{ a.automatik }}">{{ automatik_text[a.automatik] }}</span> {{ a.sicherheit }} %{% if a.eigenes_file %} · eigenes File hochgeladen{% endif %}</td></tr>
+{% if a.art %}<tr><th>Treffer</th><td><span class="status a-AUTOMATISCH">100 %</span> {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 <tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>
 {% if a.entschieden %}<tr><th>Entschieden</th><td>{{ a.entschieden[:16].replace('T',' ') }} von {{ a.entschieden_von }}</td></tr>{% endif %}
 {% endif %}</table><br>
 
-{% if a.status == 'FREIGEGEBEN' %}
+{% if a.status == 'ENTWURF' %}
+<p><b>Für dein File haben wir folgende Lösungen:</b></p>
+<form method="post" action="{{ url_for('bestellen', aid=a.id) }}" id="b">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<div class="optionen">
+{% for opt in a.angebot %}
+<label><input type="radio" name="option" value="{{ opt }}" {{ 'checked' if loop.first }}><span>{{ optionen[opt] }}</span></label>
+{% endfor %}</div>
+<input type="text" name="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
+<button class="btn" id="senden">Auftrag senden</button>
+<div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei, danach kannst du das File herunterladen.
+Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div></form>
+<script>document.getElementById('b').addEventListener('submit',()=>{const x=document.getElementById('senden');x.textContent='Wird gesendet …';x.disabled=true});</script>
+{% elif a.status == 'FREIGEGEBEN' %}
 <a class="btn gruen" href="{{ url_for('download', aid=a.id) }}">File herunterladen</a>
 <div class="hinweis">Checksumme beim Schreiben vom Flash-Tool korrigieren lassen.</div>
 {% elif a.status == 'ABGELEHNT' %}
@@ -1008,16 +1040,15 @@ setInterval(()=>fetch('{{ url_for('auftrag_status', aid=a.id) }}').then(r=>r.jso
 {% endif %}
 </div>
 
-{% if session.admin %}
+{% if session.admin and a.status != 'ENTWURF' %}
 <div class="karte"><h2>Admin</h2>
 <p><a href="{{ url_for('original', aid=a.id) }}">Original herunterladen</a>
 {% if hat_file %} · <a href="{{ url_for('download', aid=a.id) }}">Erstelltes File herunterladen (zum Prüfen)</a>{% endif %}</p>
 {% if a.status == 'WARTET' %}
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
-{% if hat_file %}<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
+<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
 <button class="btn gruen">✓ Bestätigen</button></form>
-{% else %}<p class="leise">Kein automatisches File, bitte unten die fertige Datei hochladen oder ablehnen.</p>{% endif %}
 </div>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-bottom:22px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
@@ -1025,19 +1056,19 @@ setInterval(()=>fetch('{{ url_for('auftrag_status', aid=a.id) }}').then(r=>r.jso
 <button class="btn">✕ Ablehnen</button></form>
 <form method="post" action="{{ url_for('fertig_hochladen', aid=a.id) }}" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
-<p><b>Oder eigenes File hochladen und freigeben</b> (ohne Checksumme ist ok)</p>
+<p><b>Oder stattdessen eigenes File hochladen und freigeben</b> (ohne Checksumme ist ok)</p>
 <p><input type="file" name="datei"></p>
 <input type="text" name="archiv_name" placeholder="Archivname, z. B. golf7_20tdi_03L906018JL (leer = nicht ins Archiv)">
 <button class="btn grau">Hochladen &amp; freigeben</button></form>
 {% endif %}
-<h2 style="margin-top:22px">Bericht</h2><pre>{{ a.bericht | join('\\n') }}</pre></div>
+</div>
 {% endif %}
 {% endblock %}""",
 
 "admin.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="raster" style="margin-bottom:22px">
 <div class="karte"><div class="leise">Warten auf Freigabe</div><div class="zahl">{{ wartend|length }}</div></div>
-<div class="karte"><div class="leise">Automatisch erstellt</div><div class="zahl">{{ auto }}</div></div>
+<div class="karte"><div class="leise">Freigegeben</div><div class="zahl">{{ freigegeben }}</div></div>
 <div class="karte"><div class="leise">Files im Archiv</div><div class="zahl">{{ archiv }}</div>
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
@@ -1045,22 +1076,22 @@ setInterval(()=>fetch('{{ url_for('auftrag_status', aid=a.id) }}').then(r=>r.jso
 <div class="karte"><h2>Warten auf Freigabe</h2>
 <p class="hinweis" style="margin-top:-6px">Telegram: {{ 'aktiv' if telegram else 'nicht eingerichtet' }} · WhatsApp: {{ 'aktiv' if whatsapp else 'nicht eingerichtet' }} ·
 Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Browser-Benachrichtigungen erlauben</a></p>
-{% if wartend %}<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>ECU</th><th>Automatik</th><th></th></tr>
+{% if wartend %}<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>ECU</th><th>Treffer</th><th></th></tr>
 {% for a in wartend %}<tr><td>{{ a.zeit[8:10] }}.{{ a.zeit[5:7] }}. {{ a.zeit[11:16] }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
-<td>{{ a.ecu }}</td><td><span class="status a-{{ a.automatik }}">{{ a.sicherheit }} %</span></td>
-<td>{% if a.hat_file %}<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
+<td>{{ a.ecu }}</td><td class="leise">{{ art_text.get(a.art, a.art) }}</td>
+<td><form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
-<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn gruen klein">✓ Bestätigen</button></form>{% endif %}
+<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn gruen klein">✓ Bestätigen</button></form>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
 <input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form></td></tr>
 {% endfor %}</table></div>{% else %}<p class="leise">Nichts offen.</p>{% endif %}</div>
 <div class="karte"><h2>Alle Aufträge</h2>
-<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Automatik</th><th>Status</th></tr>
+<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th></tr>
 {% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
-<td><span class="status a-{{ a.automatik }}">{{ a.sicherheit }} %</span></td>
+<td class="leise">{{ a.quelle or '–' }}</td>
 <td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td></tr>
 {% endfor %}</table></div></div>
 <script>
@@ -1124,6 +1155,10 @@ document.getElementById('zf').addEventListener('submit',()=>{const b=document.ge
 <input type="text" name="telegram_chat_id" value="{{ cfg.telegram_chat_id or '' }}" placeholder="wird unten automatisch gefunden">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
+<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;cursor:pointer">
+<input type="checkbox" name="nur_identisch" value="1" {{ 'checked' if cfg.nur_identisch }} style="margin-top:4px">
+<span><b>Nur komplett identische Originale</b><br><span class="leise" style="font-size:13px">Aus: Treffer auch, wenn das File an allen Stellen,
+die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: nur wenn das ganze File Byte für Byte gleich ist.</span></span></label>
 <button class="btn">Speichern</button></form></div>
 
 <div class="karte"><h2>Telegram einrichten</h2>
@@ -1173,7 +1208,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 
 @app.context_processor
 def globale():
-    return {"optionen": OPTION_NAMEN, "status_text": STATUS_TEXT, "automatik_text": AUTOMATIK_TEXT}
+    return {"optionen": OPTION_NAMEN, "status_text": STATUS_TEXT, "art_text": ART_TEXT}
 
 
 # ---------------------------------------------------------------------------
@@ -1217,7 +1252,7 @@ if __name__ == "__main__":
         if not whatsapp_empfaenger():
             sys.exit("whatsapp_empfaenger fehlt in config.json")
         whatsapp_melden({"id": "test", "option": "stage1", "datei": "test.bin", "ecu": "EDC17C46",
-                         "kunde": "Testkunde", "automatik": "AUTOMATISCH", "sicherheit": 100.0})
+                         "kunde": "Testkunde", "art": "identisch"})
         print("Gesendet (Fehler würden oben stehen).")
     else:
         AUFTRAEGE.mkdir(exist_ok=True)
