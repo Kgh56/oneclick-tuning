@@ -1,0 +1,11 @@
+# Daten bleiben auf dem Server, nie ins Repository
+archiv/
+auftraege/
+export/
+index.json
+config.json
+benutzer.json
+.secret_key
+.archiv_backup.zip
+__pycache__/
+*.pyc

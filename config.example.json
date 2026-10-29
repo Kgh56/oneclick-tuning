@@ -1,0 +1,15 @@
+{
+  "basis_url": "https://files.deine-firma.de",
+
+  "telegram_token": "",
+  "telegram_chat_id": "",
+
+  "whatsapp_token": "",
+  "whatsapp_phone_id": "",
+  "whatsapp_empfaenger": ["4917612345678"],
+  "whatsapp_vorlage": "neuer_auftrag",
+  "whatsapp_sprache": "de",
+  "whatsapp_verify_token": "irgendein-langes-geheimes-wort",
+  "whatsapp_app_secret": "",
+  "whatsapp_api_version": "v23.0"
+}
