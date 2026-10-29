@@ -53,7 +53,7 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 2
+INDEX_VERSION = 3
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
 GESPERRT = re.compile(
@@ -64,13 +64,29 @@ GESPERRT = re.compile(
 MERGE_LUECKE = 8      # Aenderungen mit kleinerem Abstand werden zu einem Block zusammengefasst
 KONTEXT = 16          # Bytes vor/nach jeder Aenderung, die zusaetzlich identisch sein muessen
 
+# Steuergeraete-Bezeichnungen, wie sie im File stehen (oft mit "_", z. B. "EDC17_C46", "MED17_5_2")
 ECU_MUSTER = re.compile(
-    rb"(EDC1[67][A-Z]{1,2}\d{1,2}|MEDC?1[67]\.\d+(?:\.\d+)?|MEVD1[67]\.\d+(?:\.\d+)?"
-    rb"|MG1[A-Z]{2}\d{3}|MD1[A-Z]{2}\d{3}|SID\d{3}|SIMOS\s?\d+(?:\.\d+)?|PCR2\.1|DCM\d\.\d+)"
+    rb"(?<![A-Z0-9])("
+    rb"EDC1[5-7][_ ]?[A-Z]{1,3}\d{1,2}"                          # Bosch Diesel: EDC15C2, EDC16U31, EDC17C46, EDC17CP14
+    rb"|(?:MEVD|MEV|MED|ME)[_ ]?(?:7|9|17)(?:[._]\d{1,2}){0,3}"   # Bosch Benzin: ME7.5, MED9.1, MED17.5.2, MEVD17.2.9
+    rb"|M[GD]1[_ ]?[A-Z]{2}\d{3}"                                # Bosch MG1CS011, MD1CS004
+    rb"|SID[_ ]?\d{3}|SIMOS[_ ]?\d{1,2}(?:[._]\d{1,2}){0,2}|PCR[_ ]?2[._]1|EMS[_ ]?\d{4}"   # Siemens/Continental
+    rb"|DC[MU][_ ]?\d{1,2}[._]\d{1,2}"                           # Delphi DCM3.5, DCM6.2
+    rb"|IAW[_ ]?\d{1,2}[A-Z]{1,3}|MJD[_ ]?\d[A-Z0-9]{1,4}"       # Magneti Marelli
+    rb")(?![A-Z0-9])"
 )
-BOSCH_SW = re.compile(rb"1037\d{6}")
-BOSCH_HW = re.compile(rb"0281\d{6}|0261\d{6}")
-VAG_TEILENR = re.compile(rb"0\d[A-Z]9\d{5}[A-Z]{0,2}")
+BOSCH_SW = re.compile(rb"(?<!\d)1037\d{6}(?!\d)")
+BOSCH_HW = re.compile(rb"(?<!\d)02[68]1\d{6}(?!\d)")
+# VAG-Teilenummern von Steuergeraeten: xxx 906/907/927 xxx (z. B. 03L906018JL, 8V0906259, 0AM927769)
+VAG_TEILENR = re.compile(rb"(?<![A-Z0-9])[0-9][A-Z0-9]{2}9(?:06|07|27)\d{3}[A-Z]{0,3}(?![A-Z0-9])")
+
+
+def ecu_name(roh: str) -> str:
+    """Einheitliche Schreibweise: 'EDC17_C46' -> 'EDC17C46', 'MED17_5_2' -> 'MED17.5.2'."""
+    roh = roh.replace(" ", "")
+    if roh.startswith(("EDC", "MG1", "MD1", "SID", "EMS", "IAW", "MJD")):
+        return roh.replace("_", "")
+    return roh.replace("_", ".")
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +100,7 @@ def erkenne(daten: bytes) -> dict:
     return {
         "groesse": len(daten),
         "sha256": hashlib.sha256(daten).hexdigest(),
-        "ecu": finde(ECU_MUSTER),
+        "ecu": sorted({ecu_name(m.decode("ascii", "ignore")) for m in ECU_MUSTER.findall(daten)}),
         "bosch_sw": finde(BOSCH_SW),
         "bosch_hw": finde(BOSCH_HW),
         "vag_teilenr": finde(VAG_TEILENR),
