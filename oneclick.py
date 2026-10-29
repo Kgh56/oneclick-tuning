@@ -169,7 +169,7 @@ MUSTER_OPTION = {
 
 
 def ist_ecu_datei(name: str) -> bool:
-    # Versteckte Dateien, Syncthing-Temp- und Konfliktdateien ignorieren
+    # Versteckte Dateien, Temp- und Konfliktdateien ignorieren
     if name.startswith(".") or name.startswith("~") or ".sync-conflict" in name:
         return False
     return Path(name).suffix.lower() in ENDUNGEN

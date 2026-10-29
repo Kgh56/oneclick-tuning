@@ -57,9 +57,8 @@ python oneclick.py lernen  ori.bin stage1.bin --name passat_b8_04L906026
 4. Im Browser `https://deine-domain/login` öffnen → anmelden → alles Weitere im Admin-Bereich:
    - **Einstellungen:** Telegram-Bot eintragen und testen
    - **Archiv:** eure Files als ZIP hochladen
-   - **WinOLS-Sync:** PC verbinden
 
-Falls Strato im Kundenbereich eine eigene Firewall hat: Ports **80, 443** (Webseite) und **22000** (WinOLS-Sync) freigeben.
+Falls Strato im Kundenbereich eine eigene Firewall hat: Ports **80** und **443** freigeben.
 
 **Später aktualisieren:** per `ssh` verbinden und `oneclick-update` eingeben.
 **Backup:** täglich automatisch nach `/var/backups/oneclick/` (14 Tage). Zusätzlich im Admin-Bereich unter
@@ -87,7 +86,6 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 |---|---|
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
 | **Archiv** | ZIP mit Original/Tuning-Paaren importieren, Einträge löschen, Archiv als ZIP sichern |
-| **WinOLS-Sync** | PC per Syncthing verbinden (Anleitung steht auf der Seite) |
 | **Einstellungen** | Telegram, Adresse der Seite, automatisches Löschen alter Aufträge (Standard 90 Tage) |
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)
@@ -96,15 +94,6 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 3. Einstellungen neu laden → Chat erscheint → „übernehmen“ → „Telegram testen“.
 
 Nur Knopfdrücke aus diesem Chat werden angenommen.
-
-## WinOLS-Sync
-Auf dem PC entstehen zwei Ordner, die sich automatisch mit dem Server abgleichen:
-- **Tuning-Auftraege** (nur empfangen): jedes Kunden-Original als `Datum_ECU_Software_Option_Datei_Nr_ORI.bin`,
-  dazu `_AUTO.bin` (aus dem Archiv) bzw. `_FERTIG.bin` (von dir hochgeladen). Direkt in WinOLS importieren.
-- **Tuning-Archiv** (beide Richtungen): dein Archiv. Neuen Ordner mit Original + Tuning-File hineinlegen
-  → der Server lernt ihn nach ca. 1 Minute automatisch.
-
-Alte Auftrags-Dateien werden nach der eingestellten Zeit auch auf dem PC entfernt – das Archiv nie.
 
 ## WhatsApp (optional, statt oder zusätzlich zu Telegram)
 Die normale WhatsApp-Business-**App** hat keine Schnittstelle. Benötigt wird die **WhatsApp Business Platform
@@ -142,5 +131,5 @@ python app.py admin chef        # Admin anlegen
 python app.py                   # http://localhost:5000
 ```
 
-Daten liegen neben dem Programm: `archiv/`, `auftraege/`, `export/`, `config.json`, `benutzer.json`
+Daten liegen neben dem Programm: `archiv/`, `auftraege/`, `config.json`, `benutzer.json`
 (alle in `.gitignore`, kommen nie ins Repository). `config.json` enthält Zugangsdaten – nicht weitergeben.

@@ -5,8 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/Kgh56/oneclick-tuning/main/install.sh | bash
 #
 # Richtet ein: Webseite (Dienst, startet nach Neustart automatisch), HTTPS (Caddy),
-# Syncthing fuer den WinOLS-Sync, Firewall, automatische Sicherheitsupdates,
-# taegliches Backup. Kann gefahrlos erneut ausgefuehrt werden (= Update).
+# Firewall, automatische Sicherheitsupdates, taegliches Backup.
+# Kann gefahrlos erneut ausgefuehrt werden (= Update).
 set -euo pipefail
 
 REPO_URL="${ONECLICK_REPO:-https://github.com/Kgh56/oneclick-tuning.git}"
@@ -14,7 +14,6 @@ BRANCH="${ONECLICK_BRANCH:-main}"
 BASIS=/opt/oneclick
 APP="$BASIS/app"
 VENV="$BASIS/venv"
-ST_HOME="$BASIS/syncthing"
 NUTZER=oneclick
 
 gruen() { printf '\n\033[1;32m%s\033[0m\n' "$*"; }
@@ -25,7 +24,7 @@ frage() { local antwort; read -rp "$1" antwort </dev/tty; printf '%s' "$antwort"
 grep -qi ubuntu /etc/os-release || fehler "Dieses Skript ist für Ubuntu gemacht."
 
 # ---------------------------------------------------------------------------
-gruen "1/8  Angaben"
+gruen "1/7  Angaben"
 DOMAIN="${ONECLICK_DOMAIN:-}"
 if [ -z "$DOMAIN" ] && [ -f /etc/caddy/Caddyfile ] && grep -q "# oneclick" /etc/caddy/Caddyfile; then
   DOMAIN=$(awk '/# oneclick/{getline; print $1; exit}' /etc/caddy/Caddyfile)
@@ -36,10 +35,10 @@ DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%%/*}"
 echo "Domain: $DOMAIN"
 
 # ---------------------------------------------------------------------------
-gruen "2/8  Pakete installieren (dauert ein paar Minuten)"
+gruen "2/7  Pakete installieren (dauert ein paar Minuten)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q python3 python3-venv git curl ufw unattended-upgrades syncthing debian-keyring debian-archive-keyring apt-transport-https gnupg
+apt-get install -y -q python3 python3-venv git curl ufw unattended-upgrades debian-keyring debian-archive-keyring apt-transport-https gnupg
 if ! apt-get install -y -q caddy 2>/dev/null; then
   # Caddy aus dem offiziellen Repository, falls Ubuntu es nicht mitbringt
   curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -49,7 +48,7 @@ fi
 dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
-gruen "3/8  Programm holen"
+gruen "3/7  Programm holen"
 id "$NUTZER" >/dev/null 2>&1 || useradd --system --home-dir "$BASIS" --shell /usr/sbin/nologin "$NUTZER"
 mkdir -p "$BASIS"
 if [ -d "$APP/.git" ]; then
@@ -63,44 +62,12 @@ sudo -u "$NUTZER" "$VENV/bin/pip" install -q --upgrade pip
 sudo -u "$NUTZER" "$VENV/bin/pip" install -q -r "$APP/requirements.txt"
 
 # ---------------------------------------------------------------------------
-gruen "4/8  Syncthing (WinOLS-Sync) einrichten"
-if [ ! -f "$ST_HOME/config.xml" ]; then
-  sudo -u "$NUTZER" syncthing generate --home="$ST_HOME" >/dev/null
-fi
-# Weboberflaeche nur lokal, keine Statistik, keine Selbst-Updates (macht apt)
-sudo -u "$NUTZER" python3 - "$ST_HOME/config.xml" <<'PY'
-import re, sys
-p = sys.argv[1]; s = open(p).read()
-s = re.sub(r"(<gui[^>]*>\s*<address>)[^<]*(</address>)", r"\g<1>127.0.0.1:8384\g<2>", s, count=1)
-for tag, wert in [("startBrowser", "false"), ("urAccepted", "-1"), ("autoUpgradeIntervalH", "0"), ("crashReportingEnabled", "false")]:
-    s = re.sub(rf"<{tag}>[^<]*</{tag}>", f"<{tag}>{wert}</{tag}>", s)
-open(p, "w").write(s)
-PY
-ST_KEY=$(grep -oP '(?<=<apikey>)[^<]+' "$ST_HOME/config.xml" | head -1)
-
-cat > /etc/systemd/system/oneclick-syncthing.service <<EOF
-[Unit]
-Description=OneClick Tuning - Syncthing (WinOLS-Sync)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=$NUTZER
-ExecStart=/usr/bin/syncthing serve --home=$ST_HOME --no-browser --no-restart --no-default-folder
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# ---------------------------------------------------------------------------
-gruen "5/8  Webseite einrichten"
-sudo -u "$NUTZER" python3 - "$APP/config.json" "$DOMAIN" "$ST_KEY" <<'PY'
+gruen "4/7  Webseite einrichten"
+sudo -u "$NUTZER" python3 - "$APP/config.json" "$DOMAIN" <<'PY'
 import json, os, sys
-p, domain, key = sys.argv[1:4]
+p, domain = sys.argv[1:3]
 cfg = json.load(open(p)) if os.path.exists(p) else {"aufbewahrung_tage": 90}
-cfg.update(basis_url=f"https://{domain}", syncthing_api_key=key, syncthing_url="http://127.0.0.1:8384")
+cfg.update(basis_url=f"https://{domain}")
 json.dump(cfg, open(p, "w"), indent=2, ensure_ascii=False)
 os.chmod(p, 0o600)
 PY
@@ -108,7 +75,7 @@ PY
 cat > /etc/systemd/system/oneclick.service <<EOF
 [Unit]
 Description=OneClick Tuning - Webseite
-After=network-online.target oneclick-syncthing.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -137,17 +104,14 @@ $DOMAIN {
 EOF
 
 # ---------------------------------------------------------------------------
-gruen "6/8  Firewall"
+gruen "5/7  Firewall"
 ufw allow OpenSSH >/dev/null
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
-ufw allow 22000/tcp >/dev/null    # Syncthing
-ufw allow 22000/udp >/dev/null
-ufw allow 21027/udp >/dev/null
 ufw --force enable >/dev/null
 
 # ---------------------------------------------------------------------------
-gruen "7/8  Tägliches Backup und Update-Befehl"
+gruen "6/7  Tägliches Backup und Update-Befehl"
 mkdir -p /var/backups/oneclick
 cat > /etc/cron.daily/oneclick-backup <<EOF
 #!/bin/sh
@@ -170,9 +134,8 @@ EOF
 chmod 755 /usr/local/bin/oneclick-update
 
 # ---------------------------------------------------------------------------
-gruen "8/8  Starten"
+gruen "7/7  Starten"
 systemctl daemon-reload
-systemctl enable -q --now oneclick-syncthing
 systemctl enable -q oneclick
 systemctl restart oneclick
 systemctl enable -q caddy

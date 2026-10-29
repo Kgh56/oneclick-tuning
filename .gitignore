@@ -1,7 +1,6 @@
 # Daten bleiben auf dem Server, nie ins Repository
 archiv/
 auftraege/
-export/
 index.json
 config.json
 benutzer.json

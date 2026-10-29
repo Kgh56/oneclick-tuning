@@ -48,7 +48,6 @@ AUFTRAEGE = BASE / "auftraege"
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
-EXPORT = BASE / "export"   # Kopien fuer WinOLS, wird per Syncthing auf den PC gespiegelt
 
 OPTION_NAMEN = {
     "stage1": "Stage 1",
@@ -482,8 +481,6 @@ def bestellen(aid):
                        quelle=auftrag["angebot"][option]["quelle"], art=auftrag["angebot"][option]["art"],
                        zeit=datetime.now().isoformat(timespec="seconds"))
         speichere_auftrag(auftrag)
-    exportieren(auftrag, "ORI", (ordner / "ori.bin").read_bytes())
-    exportieren(auftrag, "AUTO", (ordner / "ergebnis.bin").read_bytes())
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
     return redirect(url_for("auftrag_ansicht", aid=aid))
 
@@ -570,7 +567,6 @@ def fertig_hochladen(aid):
         (AUFTRAEGE / aid / "ergebnis.bin").write_bytes(daten)
         auftrag["art"] = "eigenes File"
         speichere_auftrag(auftrag)
-    exportieren(auftrag, "FERTIG", daten)
     meldung = entscheide(aid, True, wer=session["benutzer"])
 
     name = request.form.get("archiv_name", "").strip()
@@ -595,27 +591,15 @@ def index_neu():
 
 
 # ---------------------------------------------------------------------------
-# Export fuer WinOLS, Aufraeumen, Archiv beobachten
+# Aufraeumen
 # ---------------------------------------------------------------------------
 
 def sicherer_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-._")[:120] or "unbenannt"
 
 
-def exportieren(auftrag: dict, art: str, daten: bytes):
-    """Lesbar benannte Kopie in export/ ablegen (z. B. fuer WinOLS auf dem PC)."""
-    teile = [auftrag["zeit"][:16].replace("T", "_").replace(":", ""), auftrag["ecu"].split(",")[0],
-             auftrag["software"].split(",")[0], auftrag["option"], Path(auftrag["datei"]).stem,
-             auftrag["id"][:6], art]
-    try:
-        EXPORT.mkdir(exist_ok=True)
-        (EXPORT / (sicherer_name("_".join(teile)) + ".bin")).write_bytes(daten)
-    except OSError as e:
-        print(f"Export-Fehler: {e}", file=sys.stderr)
-
-
 def aufraeumen() -> int:
-    """Alte, erledigte Auftraege und Export-Kopien loeschen. Das Archiv bleibt unangetastet."""
+    """Alte, erledigte Auftraege und nicht abgeschlossene Entwuerfe loeschen. Das Archiv bleibt unangetastet."""
     tage = int(lade_config().get("aufbewahrung_tage", 90) or 0) or 36500   # 0 = nie
     grenze = datetime.now() - timedelta(days=tage)
     entwurf_grenze = datetime.now() - timedelta(days=1)
@@ -626,46 +610,19 @@ def aufraeumen() -> int:
                 (a["status"] not in ("WARTET", "ENTWURF") and zeit < grenze):
             shutil.rmtree(AUFTRAEGE / a["id"], ignore_errors=True)
             geloescht += 1
-    if EXPORT.exists():
-        for f in EXPORT.iterdir():
-            if f.is_file() and f.stat().st_mtime < grenze.timestamp():
-                f.unlink(missing_ok=True)
     return geloescht
 
 
-def archiv_signatur() -> list:
-    if not oneclick.ARCHIV.exists():
-        return []
-    sig = []
-    for p in oneclick.ARCHIV.rglob("*"):
-        rel = p.relative_to(oneclick.ARCHIV)
-        if p.is_file() and not any(t.startswith(".") for t in rel.parts):
-            st = p.stat()
-            sig.append((str(rel), st.st_size, int(st.st_mtime)))
-    return sorted(sig)
-
-
 def hintergrund():
-    """Index neu bauen, wenn sich das Archiv aendert (z. B. per Syncthing), und taeglich aufraeumen."""
-    letzte = archiv_signatur()
-    letzte_reinigung = 0.0
+    """Alle 6 Stunden aufraeumen."""
     while True:
-        time.sleep(30)
         try:
-            sig = archiv_signatur()
-            if sig != letzte:
-                time.sleep(15)   # warten, bis Uebertragungen fertig sind
-                if archiv_signatur() == sig:
-                    with index_sperre:
-                        oneclick.baue_index()
-                    letzte = sig
-            if time.time() - letzte_reinigung > 6 * 3600:
-                n = aufraeumen()
-                if n:
-                    print(f"Aufgeräumt: {n} alte Aufträge gelöscht.")
-                letzte_reinigung = time.time()
+            n = aufraeumen()
+            if n:
+                print(f"Aufgeräumt: {n} alte Aufträge gelöscht.")
         except Exception as e:  # Hintergrund darf nie sterben
             print(f"Hintergrund-Fehler: {e}", file=sys.stderr)
+        time.sleep(6 * 3600)
 
 
 # ---------------------------------------------------------------------------
@@ -808,90 +765,6 @@ def einstellungen():
 
 
 # ---------------------------------------------------------------------------
-# Admin: WinOLS-Sync (Syncthing)
-# ---------------------------------------------------------------------------
-
-SYNC_ORDNER = {
-    "oneclick-archiv": ("Tuning-Archiv", oneclick.ARCHIV, "sendreceive"),
-    "oneclick-auftraege": ("Tuning-Auftraege", EXPORT, "sendonly"),
-}
-GERAETE_ID = re.compile(r"^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$")
-
-
-def st_api(methode: str, pfad: str, daten=None):
-    cfg = lade_config()
-    if not cfg.get("syncthing_api_key"):
-        raise RuntimeError("Syncthing ist nicht eingerichtet (syncthing_api_key fehlt).")
-    req = urllib.request.Request(
-        cfg.get("syncthing_url", "http://127.0.0.1:8384") + pfad, method=methode,
-        data=None if daten is None else json.dumps(daten).encode(),
-        headers={"X-API-Key": cfg["syncthing_api_key"], "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as r:
-        inhalt = r.read()
-    return json.loads(inhalt) if inhalt.strip() else {}
-
-
-def sync_pc_hinzufuegen(pc_id: str, pc_name: str):
-    if pc_id not in [d["deviceID"] for d in st_api("GET", "/rest/config/devices")]:
-        geraet = st_api("GET", "/rest/config/defaults/device")
-        geraet.update(deviceID=pc_id, name=pc_name)
-        st_api("PUT", f"/rest/config/devices/{pc_id}", geraet)
-    for fid, (label, pfad, typ) in SYNC_ORDNER.items():
-        pfad.mkdir(exist_ok=True)
-        try:
-            ordner = st_api("GET", f"/rest/config/folders/{fid}")
-        except urllib.error.HTTPError:
-            ordner = st_api("GET", "/rest/config/defaults/folder")
-            ordner.update(id=fid, label=label, path=str(pfad), type=typ, devices=[])
-        if pc_id not in [d["deviceID"] for d in ordner.get("devices", [])]:
-            ordner.setdefault("devices", []).append({"deviceID": pc_id})
-        st_api("PUT", f"/rest/config/folders/{fid}", ordner)
-
-
-def sync_pc_entfernen(pc_id: str):
-    for fid in SYNC_ORDNER:
-        try:
-            ordner = st_api("GET", f"/rest/config/folders/{fid}")
-        except urllib.error.HTTPError:
-            continue
-        ordner["devices"] = [d for d in ordner.get("devices", []) if d["deviceID"] != pc_id]
-        st_api("PUT", f"/rest/config/folders/{fid}", ordner)
-    st_api("DELETE", f"/rest/config/devices/{pc_id}")
-
-
-@app.route("/admin/winols", methods=["GET", "POST"])
-@admin_noetig
-def winols_sync():
-    if request.method == "POST":
-        pc_id = request.form.get("pc_id", "").strip().upper()
-        try:
-            if request.form.get("aktion") == "entfernen":
-                sync_pc_entfernen(pc_id)
-                flash("PC entfernt.")
-            elif not GERAETE_ID.match(pc_id):
-                flash("Das sieht nicht wie eine Syncthing-Geräte-ID aus (8 Blöcke à 7 Zeichen).")
-            else:
-                sync_pc_hinzufuegen(pc_id, request.form.get("pc_name", "").strip() or "Werkstatt-PC")
-                flash("PC hinzugefügt. Jetzt in Syncthing auf dem PC die Anfragen annehmen.")
-        except Exception as e:
-            flash(f"Fehler: {e}")
-        return redirect(url_for("winols_sync"))
-
-    status, fehler = {"server_id": None, "pcs": []}, None
-    try:
-        eigene = st_api("GET", "/rest/system/status")["myID"]
-        verbindungen = st_api("GET", "/rest/system/connections").get("connections", {})
-        status["server_id"] = eigene
-        for d in st_api("GET", "/rest/config/devices"):
-            if d["deviceID"] != eigene:
-                status["pcs"].append({"id": d["deviceID"], "name": d.get("name") or "?",
-                                      "verbunden": verbindungen.get(d["deviceID"], {}).get("connected", False)})
-    except Exception as e:
-        fehler = str(e)
-    return render_template("winols.html", status=status, fehler=fehler)
-
-
-# ---------------------------------------------------------------------------
 # Templates
 # ---------------------------------------------------------------------------
 
@@ -950,7 +823,7 @@ ol li{margin-bottom:8px}
 <header><div class="logo">ONE<span>CLICK</span> TUNING</div>
 <nav><a href="{{ url_for('start') }}">Upload</a>
 {% if session.admin %}<a href="{{ url_for('admin') }}">Aufträge</a>
-<a href="{{ url_for('admin_archiv') }}">Archiv</a><a href="{{ url_for('winols_sync') }}">WinOLS-Sync</a>
+<a href="{{ url_for('admin_archiv') }}">Archiv</a>
 <a href="{{ url_for('einstellungen') }}">Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
 <main>
@@ -1180,28 +1053,6 @@ die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: 
 <button class="btn grau">Jetzt aufräumen</button></form></div>
 {% endblock %}""",
 
-"winols.html": """{% extends "basis.html" %}{% block inhalt %}
-<div class="karte"><h1>WinOLS-Sync</h1>
-<p>Alle Kunden-Originale (und erstellte Files) landen automatisch in einem Ordner auf deinem PC, den du in WinOLS öffnen kannst.
-Dein Archiv wird in beide Richtungen abgeglichen: Neue Fahrzeug-Ordner, die du auf dem PC ins Archiv legst, werden auf dem Server automatisch gelernt.</p>
-{% if fehler %}<div class="meldung">Syncthing auf dem Server ist nicht erreichbar: {{ fehler }}</div>{% else %}
-<ol>
-<li><b>Syncthing auf dem PC installieren:</b> <a href="https://syncthing.net/downloads/" target="_blank" rel="noopener">syncthing.net/downloads</a> → für Windows „Syncthing Windows Setup“ nehmen. Danach öffnet sich Syncthing im Browser.</li>
-<li>In Syncthing auf dem PC: <b>Aktionen → ID anzeigen</b> → die lange ID kopieren und unten eintragen.</li>
-<li>Kurz warten, dann erscheinen in Syncthing auf dem PC Anfragen: <b>„Gerät hinzufügen“</b> → annehmen, danach <b>„Tuning-Archiv“</b> und <b>„Tuning-Auftraege“</b> → annehmen und einen Ordner wählen, z. B. <code>C:\\Tuning\\Archiv</code> und <code>C:\\Tuning\\Auftraege</code>.
-Beim Ordner „Tuning-Auftraege“ unter „Erweitert“ den Typ <b>„Nur empfangen“</b> wählen.</li>
-</ol>
-<p class="leise">Server-ID (falls Syncthing danach fragt): <code>{{ status.server_id }}</code></p>
-<form method="post" style="margin-top:14px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="hinzufuegen">
-<label class="feld">Geräte-ID deines PCs</label><input type="text" name="pc_id" placeholder="XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX">
-<label class="feld">Name (frei wählbar)</label><input type="text" name="pc_name" placeholder="Werkstatt-PC">
-<button class="btn">PC hinzufügen</button></form>{% endif %}</div>
-{% if status.pcs %}<div class="karte"><h2>Verbundene PCs</h2><div class="tabelle"><table><tr><th>Name</th><th>Status</th><th>ID</th><th></th></tr>
-{% for pc in status.pcs %}<tr><td>{{ pc.name }}</td><td><span class="status {{ 's-FREIGEGEBEN' if pc.verbunden else 's-WARTET' }}">{{ 'verbunden' if pc.verbunden else 'nicht verbunden' }}</span></td>
-<td class="leise">{{ pc.id[:15] }}…</td><td><form method="post" class="inline" onsubmit="return confirm('PC entfernen?')"><input type="hidden" name="csrf" value="{{ session.csrf }}">
-<input type="hidden" name="aktion" value="entfernen"><input type="hidden" name="pc_id" value="{{ pc.id }}"><button class="btn grau klein">Entfernen</button></form></td></tr>
-{% endfor %}</table></div></div>{% endif %}
-{% endblock %}""",
 }
 app.jinja_loader = DictLoader(TEMPLATES)
 
@@ -1256,7 +1107,6 @@ if __name__ == "__main__":
         print("Gesendet (Fehler würden oben stehen).")
     else:
         AUFTRAEGE.mkdir(exist_ok=True)
-        EXPORT.mkdir(exist_ok=True)
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
         host = os.environ.get("ONECLICK_HOST", "0.0.0.0")
