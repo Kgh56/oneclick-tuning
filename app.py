@@ -77,10 +77,12 @@ if not SECRET_DATEI.exists():
     SECRET_DATEI.write_text(secrets.token_hex(32))
 app.secret_key = SECRET_DATEI.read_text().strip()
 app.permanent_session_lifetime = timedelta(days=365)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 sperre = threading.Lock()
 index_sperre = threading.Lock()
 telegram_chats = {}   # zuletzt gesehene Chats (fuer die Einrichtung im Admin-Bereich)
+versuche = {}         # (art, ip) -> Zeitstempel, gegen Passwort-Raten und Upload-Flut
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +374,28 @@ def admin_noetig(f):
     return wrapper
 
 
+def zu_viele(art: str, limit: int, sekunden: int) -> bool:
+    jetzt = time.time()
+    schluessel = (art, request.remote_addr or "?")
+    liste = [t for t in versuche.get(schluessel, []) if jetzt - t < sekunden]
+    versuche[schluessel] = liste
+    return len(liste) >= limit
+
+
+def merken(art: str):
+    if len(versuche) > 10000:   # Speicher begrenzen
+        versuche.clear()
+    versuche.setdefault((art, request.remote_addr or "?"), []).append(time.time())
+
+
+@app.after_request
+def sicherheits_header(antwort):
+    antwort.headers.setdefault("X-Content-Type-Options", "nosniff")
+    antwort.headers.setdefault("X-Frame-Options", "DENY")
+    antwort.headers.setdefault("Referrer-Policy", "same-origin")
+    return antwort
+
+
 @app.before_request
 def upload_limit():
     if request.path == "/admin/archiv/import" and session.get("admin"):
@@ -394,13 +418,29 @@ def csrf_pruefen():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        if zu_viele("login", 5, 15 * 60):
+            flash("Zu viele Fehlversuche. Bitte 15 Minuten warten.")
+            return render_template("login.html")
         name = request.form.get("name", "").strip()
         b = lade_benutzer().get(name)
         if b and b.get("rolle") == "admin" and check_password_hash(b["pw"], request.form.get("pw", "")):
+            session.clear()
             session["benutzer"], session["admin"] = name, True
+            session["csrf"] = secrets.token_hex(16)
             return redirect(url_for("admin"))
+        merken("login")
         flash("Benutzername oder Passwort falsch.")
     return render_template("login.html")
+
+
+@app.route("/impressum")
+def impressum():
+    return render_template("text.html", titel="Impressum", text=lade_config().get("impressum", ""))
+
+
+@app.route("/datenschutz")
+def datenschutz():
+    return render_template("text.html", titel="Datenschutz", text=lade_config().get("datenschutz", ""))
 
 
 @app.route("/logout")
@@ -420,6 +460,10 @@ def start():
 @app.route("/pruefen", methods=["POST"])
 def pruefen():
     """Schritt 1: Original hochladen, 100-%-Treffer suchen, verfuegbare Optionen anbieten."""
+    if zu_viele("upload", 30, 3600):
+        flash("Zu viele Uploads in kurzer Zeit. Bitte später nochmal versuchen.")
+        return redirect(url_for("start"))
+    merken("upload")
     datei = request.files.get("datei")
     if not datei or not datei.filename:
         flash("Bitte eine Originaldatei auswählen.")
@@ -742,6 +786,9 @@ def einstellungen():
             except ValueError:
                 tage = 90
             speichere_config({
+                "firmenname": request.form.get("firmenname", "").strip()[:60],
+                "impressum": request.form.get("impressum", "").strip()[:20000],
+                "datenschutz": request.form.get("datenschutz", "").strip()[:50000],
                 "basis_url": request.form.get("basis_url", "").strip(),
                 "telegram_token": request.form.get("telegram_token", "").strip(),
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
@@ -755,11 +802,25 @@ def einstellungen():
         elif aktion == "test":
             cfg = lade_config()
             ok = telegram_api("sendMessage", {"chat_id": cfg.get("telegram_chat_id"),
-                                              "text": "✅ OneClick Tuning ist verbunden."})
+                                              "text": f"✅ {cfg.get('firmenname') or 'OneClick Tuning'} ist verbunden."})
             flash("Testnachricht gesendet." if ok and ok.get("ok")
                   else "Senden fehlgeschlagen. Token und Chat-ID prüfen.")
         elif aktion == "aufraeumen":
             flash(f"{aufraeumen()} alte Aufträge gelöscht.")
+        elif aktion == "passwort":
+            benutzer = lade_benutzer()
+            ich = benutzer.get(session["benutzer"])
+            neu = request.form.get("neu", "")
+            if not ich or not check_password_hash(ich["pw"], request.form.get("alt", "")):
+                flash("Das aktuelle Passwort stimmt nicht.")
+            elif len(neu) < 8:
+                flash("Das neue Passwort muss mindestens 8 Zeichen haben.")
+            elif neu != request.form.get("neu2", ""):
+                flash("Die beiden neuen Passwörter sind nicht gleich.")
+            else:
+                ich["pw"] = generate_password_hash(neu)
+                BENUTZER_DATEI.write_text(json.dumps(benutzer, indent=2))
+                flash("Passwort geändert.")
         return redirect(url_for("einstellungen"))
     return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats))
 
@@ -772,7 +833,7 @@ TEMPLATES = {
 "basis.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OneClick Tuning</title>
+<title>{{ firma }}</title>
 <style>
 :root{--bg:#0f1115;--karte:#181b22;--rand:#2a2f3a;--text:#e8eaf0;--leise:#9aa1b2;
 --akzent:#e3342f;--ok:#2fb36d;--warn:#e0a526;--blau:#3b82f6}
@@ -788,7 +849,7 @@ h1{font-size:22px;margin:0 0 16px}h2{font-size:17px;margin:0 0 14px}
 .btn{display:inline-block;background:var(--akzent);color:#fff;border:0;border-radius:8px;
 padding:11px 20px;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none}
 .btn.grau{background:#2e3440}.btn.gruen{background:var(--ok)}.btn.klein{padding:6px 12px;font-size:13px}
-input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 12px;border-radius:8px;
+input[type=text],input[type=password],input[type=number],textarea{width:100%;font-family:inherit;padding:10px 12px;border-radius:8px;
 border:1px solid var(--rand);background:#0f1115;color:var(--text);font-size:15px;margin-bottom:12px}
 .drop{display:block;border:2px dashed var(--rand);border-radius:12px;padding:30px;text-align:center;
 color:var(--leise);cursor:pointer;margin-bottom:18px;transition:.15s}
@@ -819,8 +880,11 @@ padding:12px;overflow-x:auto;font-size:12.5px;max-height:360px}
 label.feld{display:block;font-size:13px;color:var(--leise);margin-bottom:4px}
 code{background:#0b0d11;border:1px solid var(--rand);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
 ol li{margin-bottom:8px}
+textarea{min-height:140px;resize:vertical}
+footer{max-width:1100px;margin:0 auto;padding:10px 16px 30px;font-size:13px;color:var(--leise)}
+footer a{color:var(--leise);margin-right:16px}
 </style></head><body>
-<header><div class="logo">ONE<span>CLICK</span> TUNING</div>
+<header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 <nav><a href="{{ url_for('start') }}">Upload</a>
 {% if session.admin %}<a href="{{ url_for('admin') }}">Aufträge</a>
 <a href="{{ url_for('admin_archiv') }}">Archiv</a>
@@ -829,7 +893,15 @@ ol li{margin-bottom:8px}
 <main>
 {% for m in get_flashed_messages() %}<div class="meldung">{{ m }}</div>{% endfor %}
 {% block inhalt %}{% endblock %}
-</main></body></html>""",
+</main>
+<footer><a href="{{ url_for('impressum') }}">Impressum</a><a href="{{ url_for('datenschutz') }}">Datenschutz</a></footer>
+</body></html>""",
+
+"text.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>{{ titel }}</h1>
+{% if text %}<div style="white-space:pre-line">{{ text }}</div>
+{% else %}<p class="leise">Noch nicht eingetragen.{% if session.admin %} → Einstellungen{% endif %}</p>{% endif %}</div>
+{% endblock %}""",
 
 "login.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte" style="max-width:380px;margin:40px auto">
@@ -1020,6 +1092,8 @@ document.getElementById('zf').addEventListener('submit',()=>{const b=document.ge
 "einstellungen.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Einstellungen</h1>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="speichern">
+<label class="feld">Firmenname (oben links und im Browser-Tab; das erste Wort wird rot)</label>
+<input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Tuning">
 <label class="feld">Adresse der Seite</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
@@ -1032,6 +1106,10 @@ document.getElementById('zf').addEventListener('submit',()=>{const b=document.ge
 <input type="checkbox" name="nur_identisch" value="1" {{ 'checked' if cfg.nur_identisch }} style="margin-top:4px">
 <span><b>Nur komplett identische Originale</b><br><span class="leise" style="font-size:13px">Aus: Treffer auch, wenn das File an allen Stellen,
 die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: nur wenn das ganze File Byte für Byte gleich ist.</span></span></label>
+<label class="feld">Impressum (Pflicht für Firmen-Webseiten: Name, Anschrift, Kontakt, ggf. USt-ID / Handelsregister)</label>
+<textarea name="impressum" placeholder="Firma GmbH&#10;Musterstraße 1&#10;12345 Musterstadt&#10;…">{{ cfg.impressum or '' }}</textarea>
+<label class="feld">Datenschutzerklärung (z. B. mit einem Generator erstellen oder vom Anwalt; die Seite speichert hochgeladene Files und die optionale Kontaktangabe)</label>
+<textarea name="datenschutz">{{ cfg.datenschutz or '' }}</textarea>
 <button class="btn">Speichern</button></form></div>
 
 <div class="karte"><h2>Telegram einrichten</h2>
@@ -1047,6 +1125,13 @@ die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: 
 <form method="post" style="margin-top:16px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="test">
 <button class="btn gruen">Telegram testen</button></form></div>
 
+<div class="karte"><h2>Passwort ändern</h2>
+<form method="post" style="max-width:420px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="passwort">
+<input type="password" name="alt" placeholder="Aktuelles Passwort" autocomplete="current-password">
+<input type="password" name="neu" placeholder="Neues Passwort (mind. 8 Zeichen)" autocomplete="new-password">
+<input type="password" name="neu2" placeholder="Neues Passwort wiederholen" autocomplete="new-password">
+<button class="btn grau">Passwort ändern</button></form></div>
+
 <div class="karte"><h2>Aufräumen</h2>
 <p class="leise">Läuft automatisch alle 6 Stunden. Wartende Aufträge werden nie gelöscht.</p>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="aufraeumen">
@@ -1059,7 +1144,8 @@ app.jinja_loader = DictLoader(TEMPLATES)
 
 @app.context_processor
 def globale():
-    return {"optionen": OPTION_NAMEN, "status_text": STATUS_TEXT, "art_text": ART_TEXT}
+    return {"optionen": OPTION_NAMEN, "status_text": STATUS_TEXT, "art_text": ART_TEXT,
+            "firma": lade_config().get("firmenname") or "OneClick Tuning"}
 
 
 # ---------------------------------------------------------------------------
@@ -1110,6 +1196,7 @@ if __name__ == "__main__":
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
         host = os.environ.get("ONECLICK_HOST", "0.0.0.0")
+        app.config["SESSION_COOKIE_SECURE"] = lade_config().get("basis_url", "").startswith("https://")
         try:
             from waitress import serve
             print(f"Server läuft auf http://{host}:5000")

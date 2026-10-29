@@ -55,7 +55,7 @@ python oneclick.py lernen  ori.bin stage1.bin --name passat_b8_04L906026
    ```
    Das Skript fragt nach Domain, Admin-Name und Admin-Passwort. Nach ein paar Minuten steht da **„Fertig!“**.
 4. Im Browser `https://deine-domain/login` öffnen → anmelden → alles Weitere im Admin-Bereich:
-   - **Einstellungen:** Telegram-Bot eintragen und testen
+   - **Einstellungen:** Firmenname, **Impressum und Datenschutz** (Pflicht für Firmen-Webseiten), Telegram-Bot
    - **Archiv:** eure Files als ZIP hochladen
 
 Falls Strato im Kundenbereich eine eigene Firewall hat: Ports **80** und **443** freigeben.
@@ -86,7 +86,7 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 |---|---|
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
 | **Archiv** | ZIP mit Original/Tuning-Paaren importieren, Einträge löschen, Archiv als ZIP sichern |
-| **Einstellungen** | Telegram, Adresse der Seite, automatisches Löschen alter Aufträge (Standard 90 Tage) |
+| **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern |
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)
 1. In Telegram **@BotFather** öffnen → `/newbot` → Namen vergeben → **Token** in den Einstellungen eintragen → Speichern.
@@ -123,6 +123,18 @@ Die Meldung geht *von* der Business-Nummer *an* eine andere Nummer (z. B. dein p
 Kosten: Meta berechnet Vorlagen-Nachrichten pro Stück (wenige Cent; aktuelle Preise bei Meta prüfen).
 
 ---
+
+# Sicherheit
+- Admin-Login wird nach 5 Fehlversuchen für 15 Minuten gesperrt, Kunden-Uploads sind auf 30 pro Stunde begrenzt.
+- Alle Formulare sind gegen Fremd-Absendungen (CSRF) geschützt, Cookies nur über HTTPS.
+- Webseite und interne Dienste lauschen nur lokal, nach außen nur HTTPS über Caddy. Firewall: nur 22, 80, 443.
+
+# Automatische Tests
+```
+python -m unittest discover tests
+```
+Prüft u. a. alle Treffer-Regeln (identisch, gleiche Stellen, 1 Byte anders, andere Softwarenummer, verschoben),
+den kompletten Kunden-Ablauf, Freigabe/Ablehnung, Login-Sperre, ZIP-Import und Aufräumen.
 
 # Lokal testen (ohne Server)
 ```
