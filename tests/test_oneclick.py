@@ -271,6 +271,42 @@ class WebTests(Basis):
         self.assertTrue((oneclick.ARCHIV / "Audi-A4" / "stage1.bin").exists())
         self.assertIsNotNone(self.hochladen(neu))
 
+    def fahrzeug(self, a, name, ori, **mods):
+        daten = {"csrf": a.csrf, "name": name, "ori": (io.BytesIO(bytes(ori)), "o.bin")}
+        for opt, d in mods.items():
+            daten[opt] = (io.BytesIO(bytes(d)), f"{opt}.bin")
+        r = a.post("/admin/archiv/neu", data=daten, content_type="multipart/form-data", follow_redirects=True)
+        return r.text
+
+    def test_fahrzeug_ohne_zip_anlegen(self):
+        a = self.admin()
+        neu = zufall(GROESSE, 11)
+        st1 = bytearray(neu)
+        st1[0x6000:0x6008] = bytes(8)
+        self.assertIn("angelegt", self.fahrzeug(a, "Passat B8", neu, stage1=st1))
+        aid = self.hochladen(neu)
+        self.assertIn('value="stage1"', self.kunde.get(f"/auftrag/{aid}").text)
+
+    def test_option_zu_vorhandenem_fahrzeug(self):
+        a = self.admin()
+        vmax = bytearray(self.golf)
+        vmax[0x7100:0x7102] = b"\xff\xff"
+        self.assertIn("ergänzt", self.fahrzeug(a, "Golf7", self.golf, vmax=vmax))
+        _, l = oneclick.finde_loesungen(bytes(self.golf))
+        self.assertEqual(set(l), {"stage1", "startstopp", "vmax"})   # vorhandene Optionen bleiben
+        self.assertEqual(l["stage1"]["daten"], bytes(self.stage1))
+
+    def test_fahrzeug_fehler_werden_abgewiesen(self):
+        a = self.admin()
+        anders = zufall(GROESSE, 12)
+        st1 = bytearray(anders)
+        st1[0x6000] ^= 1
+        self.assertIn("anderen Original", self.fahrzeug(a, "Golf7", anders, stage1=st1))
+        self.assertIn("andere Dateigröße", self.fahrzeug(a, "Neu", anders, stage1=st1[:1000]))
+        self.assertIn("identisch mit dem Original", self.fahrzeug(a, "Neu", anders, stage1=anders))
+        self.assertIn("mindestens ein Tuning-File", self.fahrzeug(a, "Neu", anders))
+        self.assertFalse((oneclick.ARCHIV / "Neu").exists())
+
     def test_aufraeumen(self):
         alt = (datetime.now() - timedelta(days=100)).isoformat(timespec="seconds")
         entwurf = self.hochladen(self.golf)

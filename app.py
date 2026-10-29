@@ -398,7 +398,7 @@ def sicherheits_header(antwort):
 
 @app.before_request
 def upload_limit():
-    if request.path == "/admin/archiv/import" and session.get("admin"):
+    if request.path in ("/admin/archiv/import", "/admin/archiv/neu") and session.get("admin"):
         request.max_content_length = 4 * 1024 * 1024 * 1024
 
 
@@ -727,6 +727,59 @@ def admin_archiv():
     return render_template("archiv.html", eintraege=oneclick.lade_index()["eintraege"])
 
 
+@app.route("/admin/archiv/neu", methods=["POST"])
+@admin_noetig
+def archiv_neu():
+    """Ein Fahrzeug ohne ZIP anlegen, oder einem vorhandenen weitere Optionen hinzufuegen."""
+    eingabe = request.form.get("name", "").strip()
+    datei = request.files.get("ori")
+    if not eingabe:
+        flash("Bitte einen Namen für das Fahrzeug eingeben.")
+        return redirect(url_for("admin_archiv"))
+    if not datei or not datei.filename:
+        flash("Bitte das Original auswählen.")
+        return redirect(url_for("admin_archiv"))
+    ori = datei.read()
+    mods = {opt: request.files[opt].read() for opt in oneclick.OPTIONEN
+            if request.files.get(opt) and request.files[opt].filename}
+    if not mods:
+        flash("Bitte mindestens ein Tuning-File auswählen (z. B. Stage 1).")
+        return redirect(url_for("admin_archiv"))
+    fehler = [f"{OPTION_NAMEN[opt]}: andere Dateigröße als das Original." if len(d) != len(ori)
+              else f"{OPTION_NAMEN[opt]}: ist identisch mit dem Original." for opt, d in mods.items()
+              if len(d) != len(ori) or d == ori]
+    if fehler:
+        for f in fehler:
+            flash(f"Nicht gespeichert – {f}")
+        return redirect(url_for("admin_archiv"))
+
+    name = sicherer_name(eingabe)
+    ziel = oneclick.ARCHIV / name
+    with index_sperre:
+        if ziel.exists():
+            ori_name, vorhanden = oneclick.klassifiziere([p.name for p in ziel.iterdir() if p.is_file()])
+            if ori_name and (ziel / ori_name).read_bytes() != ori:
+                flash(f"„{name}“ gibt es schon mit einem anderen Original. Bitte einen anderen Namen wählen.")
+                return redirect(url_for("admin_archiv"))
+            # Vorhandene Dateien eindeutig benennen, damit nichts verwechselt wird
+            if ori_name and ori_name != "ori.bin":
+                (ziel / ori_name).rename(ziel / "ori.bin")
+            for opt, n in vorhanden.items():
+                if n != f"{opt}.bin":
+                    (ziel / n).rename(ziel / f"{opt}.bin")
+            neu = False
+        else:
+            ziel.mkdir(parents=True)
+            neu = True
+        (ziel / "ori.bin").write_bytes(ori)
+        for opt, d in mods.items():
+            (ziel / f"{opt}.bin").write_bytes(d)
+        oneclick.baue_index()
+    liste = ", ".join(OPTION_NAMEN[o] for o in mods)
+    flash(f"„{name}“ angelegt mit {liste}." if neu else f"„{name}“ ergänzt: {liste}.")
+    return redirect(url_for("admin_archiv"))
+
+
 @app.route("/admin/archiv/import", methods=["POST"])
 @admin_noetig
 def archiv_import():
@@ -881,6 +934,11 @@ label.feld{display:block;font-size:13px;color:var(--leise);margin-bottom:4px}
 code{background:#0b0d11;border:1px solid var(--rand);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
 ol li{margin-bottom:8px}
 textarea{min-height:140px;resize:vertical}
+.dateien{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
+label.datei{display:flex;flex-direction:column;gap:6px;border:1px dashed var(--rand);border-radius:10px;padding:12px;cursor:pointer;font-size:14px;font-weight:600;min-width:0}
+label.datei.pflicht{border-color:#e3342f88}
+label.datei.gewaehlt{border-style:solid;border-color:var(--ok);background:#2fb36d10}
+label.datei input{font-size:12px;color:var(--leise);max-width:100%}
 footer{max-width:1100px;margin:0 auto;padding:10px 16px 30px;font-size:13px;color:var(--leise)}
 footer a{color:var(--leise);margin-right:16px}
 </style></head><body>
@@ -1054,8 +1112,22 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 {% endblock %}""",
 
 "archiv.html": """{% extends "basis.html" %}{% block inhalt %}
-<div class="karte"><h1>Archiv</h1>
-<p class="leise">Je mehr Original/Tuning-Paare im Archiv liegen, desto mehr Aufträge werden automatisch erstellt.</p>
+<div class="karte"><h1>Neues Fahrzeug hinzufügen</h1>
+<p class="leise">Je mehr Original/Tuning-Paare im Archiv liegen, desto mehr Kunden bekommen sofort einen Treffer.</p>
+<form method="post" action="{{ url_for('archiv_neu') }}" enctype="multipart/form-data" id="nf">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<label class="feld">Name (z. B. Golf7_2.0TDI_03L906018JL). Einen vorhandenen Namen wählen, um dort weitere Optionen hinzuzufügen.</label>
+<input type="text" name="name" list="namen" autocomplete="off">
+<datalist id="namen">{% for e in eintraege %}<option value="{{ e.name }}">{% endfor %}</datalist>
+<div class="dateien">
+<label class="datei pflicht"><span>Original *</span><input type="file" name="ori"></label>
+{% for key, titel in optionen.items() %}<label class="datei"><span>{{ titel }}</span><input type="file" name="{{ key }}"></label>{% endfor %}
+</div>
+<button class="btn" id="nlos">Speichern</button>
+<div class="hinweis">Original und mindestens ein Tuning-File auswählen, die übrigen Felder leer lassen. Alle Files müssen gleich groß sein (gleiche Leseart).</div>
+</form></div>
+
+<div class="karte"><h2>Viele Fahrzeuge auf einmal (ZIP)</h2>
 <form method="post" action="{{ url_for('archiv_import') }}" enctype="multipart/form-data" id="zf">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
 <label class="drop" id="drop"><input type="file" name="zip" id="zip" accept=".zip">
@@ -1086,6 +1158,9 @@ i.addEventListener('change',zeig);
 ['dragleave','drop'].forEach(e=>d.addEventListener(e,()=>d.classList.remove('aktiv')));
 d.addEventListener('drop',ev=>{ev.preventDefault();i.files=ev.dataTransfer.files;zeig()});
 document.getElementById('zf').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird hochgeladen … (kann dauern)';b.disabled=true});
+document.getElementById('nf').addEventListener('submit',()=>{const b=document.getElementById('nlos');b.textContent='Wird gespeichert …';b.disabled=true});
+document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('change',()=>
+  x.parentElement.classList.toggle('gewaehlt',x.files.length>0)));
 </script>
 {% endblock %}""",
 

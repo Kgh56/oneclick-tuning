@@ -14,8 +14,16 @@ Ohne Treffer entsteht kein Auftrag. Herunterladen kann der Kunde erst nach eurer
 
 Wer nur Variante 1 will: Admin-Bereich → Einstellungen → „Nur komplett identische Originale“.
 
-## Archiv
-Pro Fahrzeug/Softwarestand ein Ordner unter `archiv/` (am einfachsten per ZIP im Admin-Bereich hochladen):
+## Archiv – neue Files hochladen
+Im Admin-Bereich unter **Archiv**:
+- **Neues Fahrzeug hinzufügen:** Name eintragen, Original und Tuning-File(s) auswählen (Stage 1, Stage 2,
+  Start/Stopp, Vmax, Pops & Bangs, Launch – was es gibt) → Speichern. Ab sofort bekommen Kunden mit diesem
+  Original einen Treffer.
+- **Option nachreichen:** einen vorhandenen Namen wählen, dasselbe Original und nur die neue Option auswählen
+  → die bisherigen Optionen bleiben erhalten.
+- **Viele auf einmal:** ZIP mit einem Ordner pro Fahrzeug hochladen.
+
+Aufbau im Archiv-Ordner auf dem Server:
 
 ```
 archiv/
@@ -85,7 +93,7 @@ Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, 
 | Seite | Was |
 |---|---|
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
-| **Archiv** | ZIP mit Original/Tuning-Paaren importieren, Einträge löschen, Archiv als ZIP sichern |
+| **Archiv** | Fahrzeug einzeln hinzufügen oder Option nachreichen, ZIP-Import, Einträge löschen, Archiv als ZIP sichern |
 | **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern |
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)
