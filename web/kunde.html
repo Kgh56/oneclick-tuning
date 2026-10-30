@@ -38,21 +38,6 @@ input{user-select:text}
 #intro .logo-gross span{display:inline-block;opacity:0;transform:translateY(24px) scale(.96);filter:blur(8px);animation:buchstabe .9s var(--feder) forwards}
 #intro .linie{width:0;height:2px;margin:18px auto 0;background:var(--verlauf);border-radius:2px;box-shadow:0 0 18px #ff375f;animation:linie 1.1s .5s var(--feder) forwards}
 @keyframes buchstabe{to{opacity:1;transform:none;filter:none}}
-#update-banner{position:fixed;left:50%;bottom:22px;z-index:45;display:flex;align-items:center;gap:14px;padding:12px 14px 12px 18px;
-  border-radius:18px;background:rgba(22,22,28,.94);backdrop-filter:blur(20px);border:1px solid rgba(48,209,88,.45);
-  box-shadow:0 16px 50px rgba(0,0,0,.5),0 0 30px rgba(48,209,88,.18);transform:translate(-50%,140%);opacity:0;
-  transition:transform .5s var(--feder),opacity .4s;max-width:calc(100vw - 32px)}
-#update-banner.offen{transform:translate(-50%,0);opacity:1}
-#update-banner .ub-punkt{flex:none;width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);animation:blinken 1.4s ease-in-out infinite}
-#update-banner .ub-text{font-size:14px}
-#update-banner .ub-text span{display:block;font-size:12.5px;color:var(--leise)}
-#update{position:fixed;inset:0;z-index:55;display:grid;place-items:center;text-align:center;background:rgba(0,0,0,.82);backdrop-filter:blur(18px);
-  opacity:0;visibility:hidden;transition:opacity .5s var(--feder),visibility .5s}
-#update.offen{opacity:1;visibility:visible}
-#update .ringe{width:120px;height:120px;margin:0 auto 26px}
-#update .ringe b{inset:38px}
-#update h1{font-size:26px}
-#update .balken{width:300px}
 @keyframes linie{to{width:180px}}
 
 /* ---------- Grundlayout ---------- */
@@ -140,6 +125,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.65fr) min
 .suche input::placeholder{color:var(--dunkel)}
 
 /* Fusszeile */
+.fuss a{color:inherit;text-decoration:none}.fuss a:hover{color:var(--text)}
 .fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 32px 14px;font-size:12px;color:var(--dunkel)}
 .fuss span{display:inline-flex;align-items:center;gap:6px}
 .fuss kbd{font:inherit;font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--rand2);color:var(--leise)}
@@ -327,17 +313,31 @@ select.feld option{background:#1c1c1e}
 .toast.ok .t-icon{background:var(--ok);color:#00230b}.toast.fehler .t-icon{background:var(--a1)}.toast.info .t-icon{background:var(--blau)}
 @keyframes toast-rein{from{opacity:0;transform:translateX(40px) scale(.95)}}
 @keyframes toast-raus{to{opacity:0;transform:translateX(40px) scale(.95)}}
-#dialog{position:fixed;inset:0;z-index:45;display:grid;place-items:center;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
-  opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
-#dialog.offen{opacity:1;visibility:visible}
-#dialog .karte{width:min(460px,90vw);transform:scale(.94);transition:transform .4s var(--feder);animation:none}
-#dialog.offen .karte{transform:none}
 #konfetti{position:fixed;inset:0;z-index:60;pointer-events:none}
 
 /* Kleine Fenster: weniger Deko, damit alles passt (am Ende, damit diese Regeln gewinnen) */
 @media (max-width:980px){main{grid-template-columns:1fr;overflow:auto}.stats{display:none}}
 @media (max-height:860px){.schritte{display:none}}
 @media (max-height:700px){.hero{display:none}}
+/* Handy / Tablet: normal scrollende Seite statt festem Fenster */
+@media (max-width:980px){
+  html,body{height:auto}
+  body{overflow-x:hidden;overflow-y:auto;user-select:auto}
+  .app{height:auto;min-height:100vh}
+  header,.hero{padding-left:16px;padding-right:16px}
+  main{grid-template-columns:1fr;overflow:visible;padding:14px 16px 12px;gap:16px}
+  .links,.links>.karte{min-height:0;flex:none}
+  .buehne{flex:none}
+  .ansicht{position:absolute;top:0;left:0;right:0}
+  .ansicht.aktiv{position:relative}
+  #v-upload{min-height:420px}
+  #v-anfrage{overflow:visible;padding-right:0}
+  .loesungen{overflow:visible;margin:0;padding:12px 0 6px}
+  .liste{overflow:visible;flex:none;min-height:180px}
+  .schritte{display:none}
+  .fuss{padding:6px 16px 18px;flex-wrap:wrap}
+  h1{font-size:24px}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -346,17 +346,6 @@ select.feld option{background:#1c1c1e}
 <canvas id="netz"></canvas>
 <div class="raster"></div>
 <div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
-<div id="update-banner"><span class="ub-punkt"></span>
-  <div class="ub-text"><b id="ub-titel">Neue Version verfügbar</b><span>Dauert nur ein paar Sekunden, das Programm startet neu.</span></div>
-  <button class="btn gruen klein" id="ub-jetzt">Jetzt aktualisieren</button>
-  <button class="btn grau klein" id="ub-spaeter">Später</button>
-</div>
-<div id="update"><div>
-  <div class="ringe"><i></i><i></i><i></i><b></b></div>
-  <h1 id="update-titel">Neue Version wird installiert …</h1>
-  <p class="leise" style="margin-top:8px" id="update-text">Einen Moment, das Programm startet gleich neu.</p>
-  <div class="balken"><i></i></div>
-</div></div>
 <canvas id="konfetti"></canvas>
 <div id="toasts"></div>
 
@@ -365,9 +354,6 @@ select.feld option{background:#1c1c1e}
     <div class="marke"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff2d55"/><stop offset="1" stop-color="#ff9f0a"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#0b0b0f"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#1c1c22"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#fff4dc"/></svg><span class="glanz" id="firma">OneClick Tuning</span></div>
     <div class="kopf-rechts">
       <div class="verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
-      <button class="rund" id="einstellungen-knopf" title="Einstellungen">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-      </button>
     </div>
   </header>
 
@@ -451,7 +437,7 @@ select.feld option{background:#1c1c1e}
           <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
           <button class="anfrage-link" id="andere-anfrage">
             <span class="af-icon"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></span>
-            <span class="af-text"><b>Nicht dabei, was du brauchst?</b><span>Stell uns eine Anfrage – wir machen dir das File und melden uns hier im Programm.</span></span>
+            <span class="af-text"><b>Nicht dabei, was du brauchst?</b><span>Stell uns eine Anfrage – wir machen dir das File und melden uns hier, sobald es fertig ist.</span></span>
             <span class="af-pfeil"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
           </button>
         </div>
@@ -459,7 +445,7 @@ select.feld option{background:#1c1c1e}
         <div class="ansicht" id="v-anfrage">
           <h1>Anfrage stellen</h1>
           <p class="leise" style="margin-top:6px">Dein Original ist schon bei uns. Wir machen dir das File und du bekommst es
-            hier im Programm, sobald es fertig ist.</p>
+            hier, sobald es fertig ist.</p>
           <div class="chips" id="af-chips" style="margin-top:12px"></div>
           <h2 style="margin-top:20px">Fahrzeug</h2>
           <div class="fz-raster" id="af-felder"></div>
@@ -498,7 +484,7 @@ select.feld option{background:#1c1c1e}
     <div class="schritte">
       <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg></div><b>1 · Original hochladen</b><span>Wir erkennen Steuergerät und Software automatisch.</span></div>
       <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><path d="M16 16l2 2 4-4"/></svg></div><b>2 · Lösungen wählen</b><span>Eine oder mehrere – alles in einem File.</span></div>
-      <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 15.5v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5"/></svg></div><b>3 · Herunterladen</b><span>Nach unserer Freigabe meldet sich das Programm.</span></div>
+      <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 15.5v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5"/></svg></div><b>3 · Herunterladen</b><span>Nach unserer Freigabe meldet sich die Seite.</span></div>
     </div>
     </div>
 
@@ -520,35 +506,116 @@ select.feld option{background:#1c1c1e}
     </section>
   </main>
   <footer class="fuss">
-    <span id="fuss-version">Version –</span>
-    <span>Updates werden automatisch installiert · <kbd>F11</kbd> Vollbild</span>
+    <span id="fuss-firma">© OneClick Tuning</span>
+    <span><a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></span>
   </footer>
 </div>
 
-<div id="dialog">
-  <div class="karte">
-    <h2>Einstellungen</h2>
-    <p class="leise" style="margin-top:6px;font-size:13px">Adresse des Servers. Normalerweise musst du hier nichts ändern.</p>
-    <input class="feld" id="server-feld">
-    <div class="knoepfe">
-      <button class="btn" id="server-speichern">Speichern</button>
-      <button class="btn grau" id="dialog-zu">Schließen</button>
-    </div>
-    <div class="hinweis" id="version"></div>
-    <button class="btn grau klein" id="update-suchen" style="margin-top:12px">Nach Updates suchen</button>
-  </div>
-</div>
 
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const api = () => window.pywebview.api;
-/* Programm-Funktion aufrufen; geht dabei etwas schief, kommt immer {fehler} zurück statt nichts */
+/* ---------- Verbindung zum Server ----------
+   Meine Auftraege merkt sich der Browser (localStorage), Zugriff auf einen Auftrag nur ueber seine geheime Nummer. */
+const SPEICHER = "oneclick-tuning";
+const lokal = {
+  lesen() {
+    let d = {};
+    try { d = JSON.parse(localStorage.getItem(SPEICHER) || "{}"); } catch (e) {}
+    if (!d || typeof d !== "object" || Array.isArray(d)) d = {};
+    return {kontakt: typeof d.kontakt === "string" ? d.kontakt : "",
+            auftraege: Array.isArray(d.auftraege) ? d.auftraege.filter(a => a && typeof a.id === "string") : []};
+  },
+  schreiben(d) { try { localStorage.setItem(SPEICHER, JSON.stringify(d)); } catch (e) {} },
+  merken(a) {
+    const d = this.lesen(), alt = d.auftraege.find(x => x.id === a.id) || {}, neu = {...alt};
+    ["id", "datei", "zeit", "status", "status_text", "option", "option_name", "grund", "ecu", "software", "typ", "fahrzeug"]
+      .forEach(k => { if (k in a) neu[k] = a[k]; });
+    d.auftraege = [neu, ...d.auftraege.filter(x => x.id !== a.id)].slice(0, 200);
+    this.schreiben(d); return d.auftraege;
+  },
+  kontakt(k) { const d = this.lesen(); d.kontakt = (k || "").trim(); this.schreiben(d); return d.kontakt; },
+};
+async function server(pfad, optionen = {}) {
+  let r;
+  try { r = await fetch(pfad, {cache: "no-store", ...optionen}); }
+  catch (e) { throw new Error("Keine Verbindung zum Server. Bitte Internetverbindung prüfen."); }
+  let daten = null;
+  if ((r.headers.get("Content-Type") || "").includes("json")) { try { daten = await r.json(); } catch (e) {} }
+  if (!r.ok) {
+    const f = new Error((daten && daten.fehler) || {403: "Das File ist noch nicht freigegeben.",
+      404: "Auftrag nicht gefunden (vielleicht schon gelöscht).", 413: "Die Datei ist zu groß (max. 16 MB).",
+      429: "Zu viele Anfragen. Bitte kurz warten."}[r.status] || `Server-Fehler (${r.status}).`);
+    f.daten = daten || {}; throw f;
+  }
+  return {r, daten};
+}
+const json = (methode, daten) => ({method: methode, headers: {"Content-Type": "application/json"}, body: JSON.stringify(daten)});
+const WEB = {
+  async start() {
+    const d = lokal.lesen(), erg = {kontakt: d.kontakt, auftraege: d.auftraege, firma: null, original: "original", optionen: [], fahrzeug_felder: []};
+    try {
+      const {daten: i} = await server("/api/info");
+      Object.assign(erg, {firma: i.firma, original: i.original || "original", optionen: i.optionen || [], fahrzeug_felder: i.fahrzeug_felder || []});
+    } catch (e) { erg.verbindung = e.message; }
+    return erg;
+  },
+  async pruefen(name, datei) {
+    if (datei.size > 16 * 1024 * 1024) return {fehler: "Die Datei ist größer als 16 MB."};
+    const fd = new FormData(); fd.append("datei", datei, name);
+    try { return (await server("/api/pruefen", {method: "POST", body: fd})).daten; }
+    catch (e) {   // nichts gefunden: Original liegt trotzdem auf dem Server -> Anfrage moeglich
+      const d = e.daten || {};
+      return d.anfrage ? {fehler: e.message, anfrage: true, id: d.id, datei: d.datei, ecu: d.ecu, software: d.software} : {fehler: e.message};
+    }
+  },
+  async bestellen(aid, optionen, kontakt) {
+    kontakt = lokal.kontakt(kontakt);
+    try {
+      const {daten: a} = await server(`/api/auftrag/${encodeURIComponent(aid)}/bestellen`, json("POST", {optionen, kontakt}));
+      return {auftrag: a, auftraege: lokal.merken(a)};
+    } catch (e) { return {fehler: e.message}; }
+  },
+  async anfrage(aid, fahrzeug, wunsch, nachricht, kontakt) {
+    kontakt = lokal.kontakt(kontakt);
+    try {
+      const {daten: a} = await server(`/api/auftrag/${encodeURIComponent(aid)}/anfrage`, json("POST", {fahrzeug, wunsch, nachricht, kontakt}));
+      return {auftrag: a, auftraege: lokal.merken(a)};
+    } catch (e) { return {fehler: e.message}; }
+  },
+  async aktualisieren() {
+    const geaendert = [];
+    for (const alt of lokal.lesen().auftraege.filter(a => a.status === "WARTET")) {
+      try {
+        const {daten: neu} = await server(`/api/auftrag/${encodeURIComponent(alt.id)}`);
+        if (neu.status !== alt.status) geaendert.push(neu);
+        lokal.merken(neu);
+      } catch (e) {}
+    }
+    return {auftraege: lokal.lesen().auftraege, geaendert};
+  },
+  async herunterladen(aid) {
+    try {
+      const {r} = await server(`/api/auftrag/${encodeURIComponent(aid)}/download`);
+      const kopf = r.headers.get("Content-Disposition") || "";
+      const m = kopf.match(/filename\*=UTF-8''([^;]+)/i) || kopf.match(/filename="?([^";]+)"?/i);
+      const name = m ? decodeURIComponent(m[1]) : "file.bin";
+      const url = URL.createObjectURL(await r.blob()), link = document.createElement("a");
+      link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return {pfad: name};
+    } catch (e) { return {fehler: e.message}; }
+  },
+  async entfernen(aid) {
+    const d = lokal.lesen(); d.auftraege = d.auftraege.filter(x => x.id !== aid); lokal.schreiben(d);
+    return {auftraege: d.auftraege};
+  },
+};
+/* Funktion aufrufen; geht dabei etwas schief, kommt immer {fehler} zurück statt nichts */
 async function rufe(name, ...args) {
   try {
-    const f = window.pywebview && window.pywebview.api && window.pywebview.api[name];
-    if (!f) return {fehler: "Das Programm ist noch nicht bereit. Bitte kurz warten und nochmal klicken."};
-    return (await f(...args)) || {};
+    if (!WEB[name]) return {fehler: "Unbekannte Funktion."};
+    return (await WEB[name](...args)) || {};
   } catch (e) {
     return {fehler: "Unerwarteter Fehler: " + ((e && e.message) || e)};
   }
@@ -723,6 +790,7 @@ function verbindung(ok, text) {
 function firma(name) {
   if (!name) return;
   $("#firma").textContent = name;
+  $("#fuss-firma").textContent = "© " + new Date().getFullYear() + " " + name;
   document.title = name;
 }
 
@@ -735,14 +803,6 @@ function schrittAnimation() {
   clearInterval(schrittTimer);
   schrittTimer = setInterval(() => { i = Math.min(i + 1, schritte.length - 1); $("#schritt").innerHTML = `<span>${schritte[i]}</span>`; }, 900);
 }
-function dateiLesen(datei) {
-  return new Promise((ok, nein) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).split(",")[1] || "");
-    r.onerror = () => nein(r.error);
-    r.readAsDataURL(datei);
-  });
-}
 async function pruefen(datei) {
   if (!datei) return;
   if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
@@ -751,7 +811,7 @@ async function pruefen(datei) {
   zeige("v-analyse"); schrittAnimation();
   const beginn = Date.now();
   let erg;
-  try { erg = await rufe("pruefen", datei.name, await dateiLesen(datei)); }
+  try { erg = await rufe("pruefen", datei.name, datei); }
   catch (e) { erg = {fehler: "Die Datei konnte nicht gelesen werden."}; }
   await new Promise(r => setTimeout(r, Math.max(0, 1800 - (Date.now() - beginn))));   // Animation kurz zeigen
   clearInterval(schrittTimer);
@@ -885,8 +945,7 @@ async function herunterladen(a, b) {
   try { erg = await rufe("herunterladen", a.id); }
   finally { b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen"; }
   if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
-  else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 10000,
-                           {text: "Im Ordner zeigen", klick: () => rufe("ordner_zeigen", erg.pfad)});
+  else if (erg.pfad) toast("ok", "Heruntergeladen", erg.pfad + " liegt in deinem Download-Ordner. Checksumme beim Schreiben korrigieren lassen.", 10000);
 }
 let aktualisiertGerade = false;
 async function aktualisieren() {
@@ -953,7 +1012,7 @@ function anfrageZeigen() {
     });
     wunsch.appendChild(k);
   });
-  if (!zustand.optionen.length) wunsch.innerHTML = '<p class="leise">Keine Verbindung zum Server – bitte Programm neu starten.</p>';
+  if (!zustand.optionen.length) wunsch.innerHTML = '<p class="leise">Keine Verbindung zum Server – bitte Seite neu laden.</p>';
   $("#af-kontakt").value = $("#kontakt").value;
   $("#af-senden").disabled = false; $("#af-senden").textContent = "Anfrage senden";
   zeige("v-anfrage");
@@ -980,7 +1039,7 @@ async function anfrageSenden() {
   zustand.auftraege = erg.auftraege;
   listeMalen(erg.auftrag.id);
   $("#erfolg-titel").textContent = "Anfrage gesendet";
-  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm hier – du kannst es dann direkt herunterladen.";
+  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich diese Seite – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.";
   zeige("v-erfolg");
   ton(true);
 }
@@ -992,8 +1051,6 @@ $("#af-senden").addEventListener("click", anfrageSenden);
 $("#af-abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#suche").addEventListener("input", e => { zustand.suche = e.target.value; listeMalen(); });
 document.addEventListener("keydown", e => {
-  if (e.key === "F11") { e.preventDefault(); rufe("vollbild"); }
-  if (e.key === "Escape") $("#dialog").classList.remove("offen");
 });
 const zone = $("#zone");
 $("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.target.value = ""; });
@@ -1003,16 +1060,6 @@ document.addEventListener("drop", e => { if (aktuelle === "v-upload" && e.dataTr
 $("#senden").addEventListener("click", senden);
 $("#abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#nochmal").addEventListener("click", () => zeige("v-upload"));
-$("#einstellungen-knopf").addEventListener("click", () => $("#dialog").classList.add("offen"));
-$("#dialog-zu").addEventListener("click", () => $("#dialog").classList.remove("offen"));
-$("#dialog").addEventListener("click", e => { if (e.target.id === "dialog") $("#dialog").classList.remove("offen"); });
-$("#server-speichern").addEventListener("click", async () => {
-  const erg = await rufe("server_setzen", $("#server-feld").value);
-  if (erg.fehler) return toast("fehler", "Nicht gespeichert", erg.fehler);
-  $("#dialog").classList.remove("offen");
-  starten(erg, false);
-  toast(erg.verbindung ? "fehler" : "ok", erg.verbindung ? "Keine Verbindung" : "Gespeichert", erg.verbindung || erg.server);
-});
 
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
@@ -1021,41 +1068,18 @@ function starten(d, mitIntro) {
   zustand.felder = d.fahrzeug_felder || [];
   zustand.auftraege = d.auftraege || [];
   $("#kontakt").value = d.kontakt || "";
-  $("#server-feld").value = d.server || "";
-  $("#version").textContent = "Version " + (d.version || "");
-  $("#fuss-version").textContent = "Version " + (d.version || "–") + " · " + (d.server || "").replace(/^https?:\/\//, "");
   requestAnimationFrame(schieberSetzen);
   if (d.firma) firma(d.firma);
   verbindung(!d.verbindung, d.verbindung ? "Offline" : "Verbunden");
   if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
   listeMalen();
 }
-async function updaten(info) {
-  $("#update-titel").textContent = `Version ${info.version} wird installiert …`;
-  $("#update").classList.add("offen");
-  $("#intro").classList.add("weg");
-  const erg = await rufe("update_installieren");
-  if (erg.ok) {
-    $("#update-titel").textContent = "Fertig – startet neu …";
-    $("#update-text").textContent = "Gleich geht es mit der neuen Version weiter.";
-    return true;
-  }
-  $("#update").classList.remove("offen");
-  toast("fehler", "Update nicht installiert", erg.fehler || "", 9000);
-  return false;
-}
 async function init() {
   const beginn = Date.now();
-  const updateSuche = rufe("update_pruefen");
   const d = await rufe("start");
   if (d.fehler) d.verbindung = d.fehler;
   if (d.firma) intro(d.firma);
   starten(d, true);
-  const info = await updateSuche;
-  if (info.neu && await updaten(info)) return;   // Programm startet gleich neu
-  // Auch waehrend das Programm offen ist nach Updates schauen (alle 15 Min., nach Fehler schon nach 1 Min.)
-  if (info.fehler) setTimeout(updateImHintergrund, 60 * 1000);
-  setInterval(updateImHintergrund, 15 * 60 * 1000);
   setTimeout(() => {
     $("#intro").classList.add("weg");
     if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
@@ -1063,35 +1087,7 @@ async function init() {
   setInterval(aktualisieren, 8000);
   setTimeout(aktualisieren, 2500);
 }
-let updateWartet = null;
-async function updateImHintergrund() {
-  if (updateWartet) return;
-  const info = await rufe("update_pruefen");
-  if (!info.neu) return;
-  updateWartet = info;
-  $("#ub-titel").textContent = `Neue Version ${info.version} verfügbar`;
-  $("#update-banner").classList.add("offen");
-  ton(true);
-}
-$("#ub-jetzt").addEventListener("click", async () => {
-  $("#update-banner").classList.remove("offen");
-  if (updateWartet && !(await updaten(updateWartet))) updateWartet = null;
-});
-$("#ub-spaeter").addEventListener("click", () => {
-  $("#update-banner").classList.remove("offen");
-  const info = updateWartet;   // in 1 Stunde nochmal erinnern
-  setTimeout(() => { if (info === updateWartet) { updateWartet = null; updateImHintergrund(); } }, 60 * 60 * 1000);
-});
-$("#update-suchen").addEventListener("click", async () => {
-  const b = $("#update-suchen"); b.disabled = true; b.textContent = "Suche …";
-  const info = await rufe("update_pruefen");
-  b.disabled = false; b.textContent = "Nach Updates suchen";
-  if (info.neu) { $("#dialog").classList.remove("offen"); $("#update-banner").classList.remove("offen"); await updaten(info); }
-  else if (info.fehler) toast("fehler", "Update-Suche fehlgeschlagen", info.fehler, 8000);
-  else toast("ok", "Alles aktuell", `Du hast die neueste Version${info.aktuell ? " (" + info.aktuell + ")" : ""}.`, 5000);
-});
-if (window.pywebview && window.pywebview.api) init();
-else window.addEventListener("pywebviewready", init);
+init();
 </script>
 </body>
 </html>

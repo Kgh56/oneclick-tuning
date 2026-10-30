@@ -99,12 +99,11 @@ Archiv → „Archiv als ZIP herunterladen“ ab und zu eine Kopie auf den PC ho
 
 # Ablauf
 
-**Kunden arbeiten nur mit dem Windows-Programm** (siehe unten). Die Startseite der Domain zeigt nur noch den
-Download des Programms sowie Impressum und Datenschutz. Hochladen/Bestellen im Browser gibt es nicht mehr.
+**Kunden arbeiten auf der Startseite der Domain** (siehe „Kundenseite“ unten), ohne Login und ohne Installation.
 
-Im Programm: Original auswählen → nur die gefundenen Lösungen werden angezeigt → eine oder mehrere wählen,
+Auf der Seite: Original auswählen → nur die gefundenen Lösungen werden angezeigt → eine oder mehrere wählen,
 optional Name/Telefon → „Auftrag senden“. **Erst nach deiner Freigabe** kann der Kunde herunterladen;
-das Programm fragt den Status selbst ab und meldet sich.
+die Seite fragt den Status selbst ab und meldet sich.
 
 **Du bekommst eine Meldung:**
 - **Telegram** aufs Handy, mit Knöpfen ✅ Bestätigen / ❌ Ablehnen direkt in der Nachricht
@@ -112,7 +111,7 @@ das Programm fragt den Status selbst ab und meldet sich.
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
 ## Anfragen (Tickets)
-Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wird? Dann klickt er im Programm
+Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wird? Dann klickt er auf der Seite
 **„Anfrage stellen“**:
 
 1. Pflicht: **Marke, Modell, Baujahr, Motor/Leistung** (optional Motorcode, Getriebe, Nachricht, Kontakt) und
@@ -123,7 +122,7 @@ Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wir
    (Knopf „Ablehnen“ + Link in den Admin-Bereich). Im Admin-Bereich steht sie unter „Offene Anfragen“.
 4. File bearbeiten → im Admin-Bereich bei der Anfrage **„Hochladen & an Kunden schicken“** (optional mit
    Archivname, dann bekommt der nächste Kunde mit dem File es automatisch). Oder **ablehnen** mit Grund.
-5. Das Programm des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
+5. Die Seite des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
 
 ## Admin-Bereich
 | Seite | Was |
@@ -141,25 +140,16 @@ Nur Knopfdrücke aus diesem Chat werden angenommen.
 
 ---
 
-# Windows-Programm für Kunden
-Kunden arbeiten mit dem Windows-Programm. Es besteht aus `kunde/oneclick_kunde.py` (Verbindung zum Server über
-`/api/...`) und `kunde/ui.html` (Oberfläche mit Animationen, angezeigt über Microsoft Edge WebView2, das in
-Windows 10/11 enthalten ist).
+# Kundenseite
+Kunden arbeiten direkt im Browser auf der Startseite der Domain (`web/kunde.html`, spricht über `/api/...` mit
+dem Server) – am PC und am Handy, ohne Installation.
 
-- **Download für Kunden:** Knopf auf der Startseite bzw.
-  `https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe`
-- **Bauen:** automatisch bei jeder Änderung im Ordner `kunde/` (GitHub Actions auf Windows). Nach dem Bauen wird
-  die .exe zur Probe gestartet (Selbsttest); nur wenn Oberfläche und Verbindung laufen, wird sie veröffentlicht.
-- **Fenster:** startet maximiert; **F11** schaltet echtes Vollbild ein/aus. Auf großen Bildschirmen mit Begrüßung,
-  Kennzahlen, „So funktioniert's“, animiertem Netzwerk-Hintergrund und Lichtschein, der der Maus folgt.
-- **Ablauf im Programm:** Datei hineinziehen oder auswählen → Analyse → verfügbare Lösungen wählen → Auftrag senden →
-  das Programm fragt den Status selbst ab und meldet die Freigabe (mit Ton und Konfetti) → Herunterladen.
-- **Auto-Update:** Beim Öffnen prüft das Programm, ob es eine neuere Version gibt (Datei `version.json` neben der .exe
-  auf GitHub, mit fortlaufender Build-Nummer und SHA-256-Prüfsumme). Wenn ja: herunterladen, Prüfsumme prüfen,
-  laufende .exe austauschen, neu starten. Klappt das nicht (z. B. keine Schreibrechte), läuft die alte Version weiter.
-- **Server-Adresse** ist fest eingestellt und kann im Programm über das Zahnrad geändert werden.
-- Das Programm ist **nicht signiert**: Windows zeigt beim ersten Start „Der Computer wurde durch Windows geschützt“
-  → „Weitere Informationen“ → „Trotzdem ausführen“. Ohne Warnung geht es nur mit einem Code-Signatur-Zertifikat (kostenpflichtig).
+- **Ablauf:** Datei hineinziehen oder auswählen → Analyse → verfügbare Lösungen wählen → Auftrag senden →
+  die Seite fragt den Status selbst ab und meldet die Freigabe (mit Ton und Konfetti) → Herunterladen.
+- **Meine Aufträge** merkt sich der Browser (localStorage) – der Kunde kann die Seite schließen und später
+  wiederkommen. Zugriff auf einen Auftrag gibt es nur über seine geheime 32-stellige Nummer.
+- Große Bildschirme: Begrüßung, Kennzahlen, „So funktioniert's“, animierter Netzwerk-Hintergrund, Lichtschein, der der Maus folgt.
+- Unten: Impressum und Datenschutz (im Admin-Bereich unter Einstellungen pflegen).
 
 # Sicherheit
 - Admin-Login wird nach 5 Fehlversuchen für 15 Minuten gesperrt, Kunden-Uploads sind auf 30 pro Stunde begrenzt.
@@ -180,5 +170,5 @@ python app.py admin chef        # Admin anlegen
 python app.py                   # http://localhost:5000
 ```
 
-Daten liegen neben dem Programm: `archiv/`, `auftraege/`, `config.json`, `benutzer.json`
+Daten liegen neben `app.py`: `archiv/`, `auftraege/`, `config.json`, `benutzer.json`
 (alle in `.gitignore`, kommen nie ins Repository). `config.json` enthält Zugangsdaten – nicht weitergeben.

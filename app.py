@@ -8,10 +8,10 @@ Start:
     python app.py telegram-test    Testnachricht an Telegram senden
     python app.py                  Server starten (http://localhost:5000, Admin unter /login)
 
-Kunden arbeiten mit dem Windows-Programm (kunde/oneclick_kunde.py), das ueber /api/... mit
+Kunden arbeiten auf der Startseite (web/kunde.html), die ueber /api/... mit
 diesem Server spricht: Original hochladen -> 100-%-Treffer im Archiv -> nur die verfuegbaren
 Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den Admin
-(Telegram-Knopf oder Admin-Bereich). Die Startseite zeigt nur den Download des Programms.
+(Telegram-Knopf oder Admin-Bereich). Nichts Passendes: Anfrage (Ticket) mit Fahrzeugdaten.
 """
 
 import getpass
@@ -46,8 +46,7 @@ AUFTRAEGE = BASE / "auftraege"
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
-# Download des Windows-Programms (wird von GitHub automatisch gebaut, siehe .github/workflows)
-PROGRAMM_URL = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe"
+KUNDENSEITE = BASE / "web" / "kunde.html"
 
 
 
@@ -227,7 +226,7 @@ def telegram_text_anfrage(a: dict) -> str:
         zeilen.append(f"Nachricht: {e(a['nachricht'])}")
     if a["status"] == "WARTET":
         zeilen.append("\nOriginal kommt gleich als Datei. Fertiges File im Admin-Bereich hochladen – "
-                      "dann bekommt der Kunde es automatisch im Programm.")
+                      "dann bekommt der Kunde es automatisch auf der Seite.")
     elif a["status"] == "FREIGEGEBEN":
         zeilen.append("\n✅ <b>FERTIG – an den Kunden geschickt</b>")
     elif a["status"] == "ABGELEHNT":
@@ -433,11 +432,17 @@ def logout():
 
 @app.route("/")
 def start():
-    return render_template("start.html")
+    """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
+    seite = KUNDENSEITE.read_text(encoding="utf-8")
+    name = html.escape(lade_config().get("firmenname") or "OneClick Tuning")
+    seite = seite.replace("<title>OneClick Tuning</title>", f"<title>{name}</title>", 1)
+    antwort = app.response_class(seite, mimetype="text/html")
+    antwort.headers["Cache-Control"] = "no-cache"   # nach einem Update sofort die neue Seite
+    return antwort
 
 
 class Abgelehnt(Exception):
-    """Fehler mit einer Meldung fuer den Kunden (Webseite: flash, Programm: JSON)."""
+    """Fehler mit einer Meldung fuer den Kunden (Admin: flash, Kundenseite: JSON)."""
 
 
 class KeineLoesung(Abgelehnt):
@@ -565,7 +570,7 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Schnittstelle fuer das Windows-Programm (JSON, ohne Cookies)
+# Schnittstelle fuer die Kundenseite (JSON, ohne Cookies)
 # ---------------------------------------------------------------------------
 
 def api_auftrag(a: dict) -> dict:
@@ -1134,7 +1139,6 @@ def einstellungen():
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
-                "programm_url": request.form.get("programm_url", "").strip(),
             })
             flash("Gespeichert.")
         elif aktion == "chat":
@@ -1165,7 +1169,7 @@ def einstellungen():
             if als_dienst():
                 threading.Thread(target=neustarten, daemon=True).start()
                 return render_template("neustart.html")
-            flash("Update installiert. Bitte das Programm neu starten, damit es aktiv wird.")
+            flash("Update installiert. Bitte den Server neu starten, damit es aktiv wird.")
         elif aktion == "passwort":
             benutzer = lade_benutzer()
             ich = benutzer.get(session["benutzer"])
@@ -1335,23 +1339,6 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <button class="btn" style="width:100%">Anmelden</button></form></div>
 {% endblock %}""",
 
-"start.html": """{% extends "basis.html" %}{% block inhalt %}
-<div class="hero"><h1>Dein File.<br><span>Ein Klick.</span></h1>
-<p>Mit unserem Programm: Original auswählen, Lösung wählen, fertiges File herunterladen.</p></div>
-<div class="karte" style="text-align:center;max-width:640px;margin:0 auto 22px">
-{% if programm_url %}
-<a class="btn" href="{{ programm_url }}" style="font-size:17px;padding:15px 34px">Windows-Programm herunterladen</a>
-<div class="hinweis">Für Windows 10 und 11. Beim ersten Start meldet Windows eventuell
-„Der Computer wurde durch Windows geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“.</div>
-{% else %}<p class="leise">Das Programm ist gerade nicht verfügbar. Bitte melde dich bei uns.</p>{% endif %}
-</div>
-<div class="raster" style="max-width:900px;margin:0 auto">
-<div class="karte"><div class="zahl">1</div><b>Original auswählen</b><p class="leise" style="margin:6px 0 0">Das Programm prüft sofort, welche Lösungen es für dein File gibt.</p></div>
-<div class="karte"><div class="zahl">2</div><b>Lösungen wählen</b><p class="leise" style="margin:6px 0 0">Eine oder mehrere – zum Beispiel Stage 1 und Start/Stopp in einem File.</p></div>
-<div class="karte"><div class="zahl">3</div><b>Herunterladen</b><p class="leise" style="margin:6px 0 0">Nach unserer Freigabe meldet sich das Programm und du speicherst dein File.</p></div>
-</div>
-{% endblock %}""",
-
 "auftrag.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte">
 <h1>{% if a.typ == 'anfrage' %}📩 Anfrage: {% endif %}{% if a.option %}{{ optionen[a.option] }} · {% endif %}{{ a.datei }}</h1>
@@ -1377,7 +1364,7 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% if session.admin and a.typ == 'anfrage' and a.status == 'WARTET' %}
 <div class="karte"><h2>Anfrage bearbeiten</h2>
 <p class="leise" style="margin-top:-6px">1. Original herunterladen und bearbeiten · 2. Fertiges File hier hochladen –
-der Kunde bekommt es sofort automatisch im Programm.</p>
+der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <p><a class="btn" href="{{ url_for('original', aid=a.id) }}">⬇ Original herunterladen</a></p>
 <form method="post" action="{{ url_for('fertig_hochladen', aid=a.id) }}" enctype="multipart/form-data" style="margin-top:18px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
@@ -1390,7 +1377,7 @@ der Kunde bekommt es sofort automatisch im Programm.</p>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-top:26px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
 <p><b>Oder ablehnen</b></p>
-<input type="text" name="grund" placeholder="Grund (sieht der Kunde im Programm), z. B. Software nicht unterstützt">
+<input type="text" name="grund" placeholder="Grund (sieht der Kunde), z. B. Software nicht unterstützt">
 <button class="btn grau">✕ Anfrage ablehnen</button></form>
 </div>
 {% elif session.admin and a.status != 'ENTWURF' %}
@@ -1564,8 +1551,6 @@ async function kennt(){
 <input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Tuning">
 <label class="feld">Adresse der Seite</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
-<label class="feld">Download-Link für das Windows-Programm (wird auf der Startseite angezeigt)</label>
-<input type="text" name="programm_url" value="{{ programm_url }}">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">
 <label class="feld">Telegram-Chat-ID</label>
@@ -1629,8 +1614,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 @app.context_processor
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
-            "firma": lade_config().get("firmenname") or "OneClick Tuning",
-            "programm_url": lade_config().get("programm_url", PROGRAMM_URL)}
+            "firma": lade_config().get("firmenname") or "OneClick Tuning"}
 
 
 # ---------------------------------------------------------------------------

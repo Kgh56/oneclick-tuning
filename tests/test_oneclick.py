@@ -478,10 +478,7 @@ class WebTests(Basis):
     def test_csrf(self):
         self.assertEqual(A.app.test_client().post("/login", data={"name": "chef", "pw": "Geheim123"}).status_code, 400)
 
-    def test_keine_kunden_webseite_mehr(self):
-        start = self.client().get("/").text
-        self.assertIn("Windows-Programm herunterladen", start)
-        self.assertNotIn('name="datei"', start)
+    def test_alte_formulare_weg_admin_seiten_geschuetzt(self):
         c = self.client()
         self.assertEqual(c.post("/pruefen", data={"csrf": c.csrf}).status_code, 404)
         aid = self.hochladen(self.golf)
@@ -695,20 +692,25 @@ class WebTests(Basis):
 
 
 class ApiTests(Basis):
-    """Schnittstelle fuer das Windows-Programm."""
+    """Schnittstelle fuer die Kundenseite."""
 
     def setUp(self):
         super().setUp()
-        self.c = A.app.test_client()   # ohne Cookies / CSRF, wie das Programm
+        self.c = A.app.test_client()   # ohne Cookies / CSRF, wie die Kundenseite
 
     def pruefen(self, daten, name="kunde.bin"):
         return self.c.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(daten)), name)},
                            content_type="multipart/form-data")
 
-    def test_programm_link(self):
-        self.assertIn("releases/download/programm/OneClick-Tuning.exe", A.app.test_client().get("/").text)
-        A.speichere_config({"programm_url": ""})
-        self.assertNotIn("Windows-Programm", A.app.test_client().get("/").text)
+    def test_kundenseite(self):
+        r = self.c.get("/")
+        self.assertEqual((r.status_code, r.headers["Cache-Control"]), (200, "no-cache"))
+        for teil in ('id="zone"', "/api/pruefen", "/api/auftrag/", "Anfrage stellen", "/impressum", "/datenschutz"):
+            self.assertIn(teil, r.text)
+        for alt in ("pywebview", "OneClick-Tuning.exe", "Windows-Programm"):
+            self.assertNotIn(alt, r.text)
+        A.speichere_config({"firmenname": "Muster <Tuning>"})
+        self.assertIn("<title>Muster &lt;Tuning&gt;</title>", self.c.get("/").text)
 
     def test_info(self):
         j = self.c.get("/api/info").json
@@ -752,212 +754,6 @@ class ApiTests(Basis):
         A.entscheide(aid, False, grund="Software unbekannt")
         j = self.c.get(f"/api/auftrag/{aid}").json
         self.assertEqual((j["status"], j["grund"]), ("ABGELEHNT", "Software unbekannt"))
-
-
-class ProgrammTests(Basis):
-    """Bruecke des Windows-Programms (kunde/oneclick_kunde.py) gegen einen echten, laufenden Server."""
-
-    def setUp(self):
-        super().setUp()
-        import threading
-        from werkzeug.serving import make_server
-        self.server = make_server("127.0.0.1", 0, A.app, threaded=True)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        os.environ["APPDATA"] = str(Path(self.tmp.name) / "appdata")
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kunde"))
-        import oneclick_kunde as K
-        self.K = K
-        speicher = K.Speicher()
-        speicher.daten["server"] = f"http://127.0.0.1:{self.server.server_port}"
-        self.b = K.Bruecke(speicher)
-
-    def tearDown(self):
-        self.server.shutdown()
-        super().tearDown()
-
-    def b64(self, daten):
-        import base64
-        return base64.b64encode(bytes(daten)).decode()
-
-    def test_kompletter_ablauf(self):
-        d = self.b.start()
-        self.assertEqual((d["firma"], d["auftraege"]), ("OneClick Tuning", []))
-        a = self.b.pruefen("golf.bin", self.b64(self.golf))
-        self.assertEqual([o["key"] for o in a["angebot"]], ["stage1", "startstopp"])
-        erg = self.b.bestellen(a["id"], ["stage1", "startstopp"], " Werkstatt X ")
-        self.assertEqual(erg["auftrag"]["status"], "WARTET")
-        self.assertEqual(len(erg["auftraege"]), 1)
-        self.assertEqual(self.b.aktualisieren()["geaendert"], [])
-        A.entscheide(a["id"], True)
-        neu = self.b.aktualisieren()
-        self.assertEqual([x["status"] for x in neu["geaendert"]], ["FREIGEGEBEN"])
-        self.assertEqual(self.b.aktualisieren()["geaendert"], [])   # nur einmal melden
-        ziel = Path(self.tmp.name) / "fertig.bin"
-        self.assertEqual(self.b.herunterladen(a["id"], str(ziel)), {"pfad": str(ziel)})
-        erwartet = bytearray(self.stage1)
-        erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
-        self.assertEqual(ziel.read_bytes(), bytes(erwartet))
-        # Gespeichert: neue Bruecke (= Programm neu gestartet) kennt Auftrag und Kontakt
-        b2 = self.K.Bruecke()
-        b2._api = self.b._api
-        d2 = b2.start()
-        self.assertEqual((d2["kontakt"], d2["auftraege"][0]["status"]), ("Werkstatt X", "FREIGEGEBEN"))
-        self.assertEqual(self.b.entfernen(a["id"])["auftraege"], [])
-
-    def test_fehler_kommen_als_text(self):
-        self.assertIn("keine Lösung", self.b.pruefen("x.bin", self.b64(zufall(GROESSE, 5)))["fehler"])
-        self.assertIn("nicht gelesen", self.b.pruefen("x.bin", "kein base64!!")["fehler"])
-        a = self.b.pruefen("golf.bin", self.b64(self.golf))
-        self.assertIn("fehler", self.b.bestellen(a["id"], ["vmax"], ""))
-        self.assertIn("fehler", self.b.herunterladen("gibtsnicht", "x"))
-
-    def freigegebener_auftrag(self):
-        a = self.b.pruefen("golf.bin", self.b64(self.golf))
-        self.b.bestellen(a["id"], ["stage1"], "")
-        A.entscheide(a["id"], True)
-        self.b.aktualisieren()
-        return a["id"]
-
-    def test_herunterladen_mit_speichern_dialog(self):
-        """Der Fall 'Kunde klickt Herunterladen und nichts passiert' - inkl. aller Ausweichwege."""
-        aid = self.freigegebener_auftrag()
-        home = Path(self.tmp.name) / "home"
-        (home / "Downloads").mkdir(parents=True)
-        alt_home = os.environ.get("HOME")
-        self.addCleanup(lambda: os.environ.__setitem__("HOME", alt_home) if alt_home else os.environ.pop("HOME", None))
-        os.environ["HOME"] = str(home)
-        try:
-            import webview  # noqa: F401
-        except Exception:   # hier ohne Windows-Abhaengigkeiten: nur die Konstante wird gebraucht
-            import types
-            sys.modules["webview"] = types.SimpleNamespace(SAVE_DIALOG=30)
-            self.addCleanup(sys.modules.pop, "webview", None)
-        aufrufe = []
-
-        class Fenster:
-            antwort = None
-
-            def create_file_dialog(self, art, directory="", save_filename="", file_types=()):
-                aufrufe.append((save_filename, file_types))
-                if isinstance(self.antwort, Exception):
-                    raise self.antwort
-                return self.antwort
-        self.b._fenster = f = Fenster()
-
-        # Dialog: Kunde waehlt einen Ort
-        f.antwort = str(home / "gewaehlt.bin")
-        self.assertEqual(self.b.herunterladen(aid), {"pfad": f.antwort})
-        self.assertEqual(Path(f.antwort).read_bytes(), self.stage1)
-        self.assertEqual(aufrufe[0], ("golf_stage1.bin", self.K.DATEI_TYPEN))
-        # Dialog abgebrochen
-        f.antwort = None
-        self.assertEqual(self.b.herunterladen(aid), {"abgebrochen": True})
-        # Dialog geht kaputt -> landet trotzdem in Downloads (zweimal: nichts wird ueberschrieben)
-        f.antwort = ValueError("kaputt")
-        self.assertEqual(self.b.herunterladen(aid), {"pfad": str(home / "Downloads" / "golf_stage1.bin")})
-        self.assertEqual(self.b.herunterladen(aid), {"pfad": str(home / "Downloads" / "golf_stage1 (2).bin")})
-        # Gewaehlter Ordner nicht beschreibbar -> Downloads
-        f.antwort = str(home / "gibtsnicht" / "x.bin")
-        self.assertEqual(self.b.herunterladen(aid)["pfad"], str(home / "Downloads" / "golf_stage1 (3).bin"))
-        # Unerwarteter Fehler -> Meldung statt "passiert nix", und steht im Fehlerprotokoll
-        f.antwort = 12345
-        self.assertIn("Unerwarteter Fehler", self.b.herunterladen(aid)["fehler"])
-        self.assertIn("herunterladen", (self.K.datenordner() / "fehler.log").read_text(encoding="utf-8"))
-
-    def test_dateifilter_passen_zu_pywebview(self):
-        try:
-            from webview.util import parse_file_type
-        except Exception:
-            self.skipTest("pywebview nicht installiert (wird beim Bauen im Selbsttest geprueft)")
-        for typ in self.K.DATEI_TYPEN:
-            parse_file_type(typ)
-        self.assertEqual(self.K.dateiname_sauber('a:b?"c.bin'), "a_b__c.bin")
-
-    def test_server_offline_und_wechseln(self):
-        d = self.b.server_setzen("127.0.0.1:1")   # ohne http:// -> https://, nicht erreichbar
-        self.assertTrue(d["server"].startswith("https://"))
-        self.assertIn("Keine Verbindung", d["verbindung"])
-        d = self.b.server_setzen(f"http://127.0.0.1:{self.server.server_port}/")
-        self.assertNotIn("verbindung", d)
-
-
-class ProgrammUpdateTests(unittest.TestCase):
-    """Auto-Update des Windows-Programms (ohne echtes Windows: Dateien in einem Testordner)."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["APPDATA"] = str(Path(self.tmp.name) / "appdata")
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kunde"))
-        import oneclick_kunde as K
-        self.K = K
-        self.exe = Path(self.tmp.name) / "OneClick-Tuning.exe"
-        self.exe.write_bytes(b"ALTE VERSION")
-        self.neu = random.Random(1).randbytes(2 * 1024 * 1024)
-        import hashlib
-        self.info = {"version": 7, "sha256": hashlib.sha256(self.neu).hexdigest(), "groesse": len(self.neu)}
-        self.abrufe = []
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def holen(self, url, timeout=0):
-        self.abrufe.append(url.rsplit("/", 1)[1])
-        return json.dumps(self.info).encode() if "version.json" in url else self.neu
-
-    def updater(self, eigene=5):
-        return self.K.Updater("https://beispiel.test/programm", self.exe, self.holen, eigene)
-
-    def test_neue_version_wird_erkannt(self):
-        self.assertEqual(self.updater(5).pruefen()["version"], 7)
-        self.assertIsNone(self.updater(7).pruefen())
-        self.assertIsNone(self.updater(9).pruefen())
-
-    def test_installieren_tauscht_exe(self):
-        u = self.updater()
-        u.installieren(u.pruefen())
-        self.assertEqual(self.exe.read_bytes(), self.neu)
-        self.assertEqual(u.alte_exe.read_bytes(), b"ALTE VERSION")
-        u.aufraeumen()
-        self.assertFalse(u.alte_exe.exists())
-
-    def test_beschaedigter_download_wird_nicht_installiert(self):
-        self.info["sha256"] = "0" * 64
-        u = self.updater()
-        with self.assertRaises(RuntimeError):
-            u.installieren(u.pruefen())
-        self.assertEqual(self.exe.read_bytes(), b"ALTE VERSION")
-
-    def test_schreibfehler_stellt_alte_version_wieder_her(self):
-        from unittest import mock
-        u = self.updater()
-        info = u.pruefen()
-        with mock.patch.object(Path, "write_bytes", side_effect=PermissionError("schreibgeschuetzt")):
-            with self.assertRaises(PermissionError):
-                u.installieren(info)
-        self.assertEqual(self.exe.read_bytes(), b"ALTE VERSION")
-        self.assertFalse(u.alte_exe.exists())
-
-    def test_bruecke(self):
-        from unittest import mock
-        b = self.K.Bruecke(updater=self.updater())
-        b._beenden = lambda: None
-        d = b.update_pruefen()
-        self.assertEqual((d["neu"], d["version"]), (True, "2.7"))
-        with mock.patch.object(self.K.Updater, "neu_starten") as start:
-            self.assertEqual(b.update_installieren(), {"ok": True})
-            start.assert_called_once()
-        self.assertEqual(self.exe.read_bytes(), self.neu)
-        # ohne Updater (Entwicklung / Selbsttest): nie updaten
-        self.assertEqual(self.K.Bruecke().update_pruefen(), {"neu": False, "aktuell": self.K.VERSION})
-        self.assertIn("version.json?t=", self.abrufe[0])   # nie eine zwischengespeicherte Versionsinfo
-
-    def test_offline_kein_absturz(self):
-        def offline(url, timeout=0):
-            raise OSError("kein Internet")
-        b = self.K.Bruecke(updater=self.K.Updater("https://x", self.exe, offline, 1))
-        d = b.update_pruefen()
-        self.assertEqual((d["neu"], d["fehler"]), (False, "Update-Server nicht erreichbar. Bitte Internetverbindung prüfen."))
-        self.assertIn("kein Internet", (self.K.datenordner() / "fehler.log").read_text(encoding="utf-8"))
 
 
 class UpdateTests(unittest.TestCase):
