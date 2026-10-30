@@ -76,6 +76,7 @@ STATUS_TEXT = {
 ART_TEXT = {
     "identisch": "File identisch mit Archiv",
     "gleiche Stellen": "Alle Tuning-Stellen identisch",
+    "softwarenummer": "Treffer über Softwarenummer – bitte prüfen",
     "eigenes File": "Eigenes File",
 }
 
@@ -186,7 +187,8 @@ def telegram_text(a: dict) -> str:
         f"ECU: {a['ecu']}",
         f"Software: {a['software']}",
         f"Kontakt: {a['kunde']}",
-        f"Treffer: 100 % – {ART_TEXT.get(a['art'], a['art'])}",
+        (f"Treffer: ⚠️ {ART_TEXT['softwarenummer']}" if a.get("art") == "softwarenummer"
+         else f"Treffer: 100 % – {ART_TEXT.get(a['art'], a['art'])}"),
         f"Quelle: {a['quelle'] or '–'}",
     ]
     if a["status"] == "FREIGEGEBEN":
@@ -544,10 +546,12 @@ def bestellen(aid):
         for rest in ordner.glob("loesung_*.bin"):
             rest.unlink()
         arten = {angebot[o]["art"] for o in auswahl}
+        art = ("softwarenummer" if "softwarenummer" in arten
+               else "identisch" if arten == {"identisch"} else "gleiche Stellen")
         auftrag.update(option="+".join(auswahl), status="WARTET",
                        kunde=request.form.get("kontakt", "").strip()[:100] or "–",
                        quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
-                       art="identisch" if arten == {"identisch"} else "gleiche Stellen",
+                       art=art,
                        zeit=datetime.now().isoformat(timespec="seconds"))
         speichere_auftrag(auftrag)
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
@@ -725,13 +729,13 @@ def importiere_zip(stream) -> list:
         for schluessel, infos in sorted(gruppen.items()):
             namen = {PurePosixPath(i.filename).name: i for i in infos}
             ori_name, optionen = oneclick.klassifiziere(list(namen))
-            if not ori_name or not optionen:
-                meldungen.append(f"Übersprungen: {schluessel} (Original oder Tuning-File nicht erkannt: {', '.join(namen)})")
+            if not ori_name:
+                meldungen.append(f"Übersprungen: {schluessel} (kein Original erkannt: {', '.join(namen)})")
                 continue
             ori = z.read(namen[ori_name])
             passend = {opt: z.read(namen[n]) for opt, n in optionen.items()}
             passend = {opt: d for opt, d in passend.items() if len(d) == len(ori)}
-            if not passend:
+            if optionen and not passend:
                 meldungen.append(f"Übersprungen: {schluessel} (Dateigrößen passen nicht zusammen)")
                 continue
             basis = sicherer_name(PurePosixPath(schluessel).name)
@@ -788,9 +792,6 @@ def archiv_neu():
     namen = option_namen()
     mods = {opt: request.files[opt].read() for opt in oneclick.optionen()
             if request.files.get(opt) and request.files[opt].filename}
-    if not mods:
-        flash("Bitte mindestens ein Tuning-File auswählen (z. B. Stage 1).")
-        return redirect(url_for("admin_archiv"))
     fehler = [f"{namen[opt]}: andere Dateigröße als das Original." if len(d) != len(ori)
               else f"{namen[opt]}: ist identisch mit dem Original." for opt, d in mods.items()
               if len(d) != len(ori) or d == ori]
@@ -822,7 +823,11 @@ def archiv_neu():
             (ziel / f"{opt}.bin").write_bytes(d)
         oneclick.baue_index()
     liste = ", ".join(namen[o] for o in mods)
-    flash(f"„{name}“ angelegt mit {liste}." if neu else f"„{name}“ ergänzt: {liste}.")
+    if not mods:
+        flash(f"„{name}“ als reines Original angelegt (für Rückrüsten über die Softwarenummer)." if neu
+              else f"„{name}“: Original ist schon vorhanden, nichts geändert.")
+    else:
+        flash(f"„{name}“ angelegt mit {liste}." if neu else f"„{name}“ ergänzt: {liste}.")
     return redirect(url_for("admin_archiv"))
 
 
@@ -1179,7 +1184,7 @@ document.getElementById('f').addEventListener('submit',()=>{const b=document.get
 <span class="leise">&nbsp; {{ a.zeit[:16].replace('T',' ') }}</span></p>
 <table><tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
 {% if session.admin %}<tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
-{% if a.art %}<tr><th>Treffer</th><td><span class="status a-AUTOMATISCH">100 %</span> {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
+{% if a.art %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 <tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>
 {% if a.entschieden %}<tr><th>Entschieden</th><td>{{ a.entschieden[:16].replace('T',' ') }} von {{ a.entschieden_von }}</td></tr>{% endif %}
 {% endif %}</table><br>
@@ -1304,7 +1309,8 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 {% for key, titel in archiv_optionen.items() %}<label class="datei"><span>{{ titel }}</span><input type="file" name="{{ key }}"></label>{% endfor %}
 </div>
 <button class="btn" id="nlos">Speichern</button>
-<div class="hinweis">Original und mindestens ein Tuning-File auswählen, die übrigen Felder leer lassen. Alle Files müssen gleich groß sein (gleiche Leseart).</div>
+<div class="hinweis">Original und die vorhandenen Tuning-Files auswählen, die übrigen Felder leer lassen. Alle Files müssen gleich groß sein (gleiche Leseart).
+Nur ein Original ohne Tuning-File geht auch: Dann bekommen Kunden mit einem fremden Tuning-File derselben Software „Original (Rückrüsten)“ angeboten.</div>
 </form></div>
 
 <div class="karte"><h2>Viele Fahrzeuge auf einmal (ZIP)</h2>
@@ -1342,7 +1348,7 @@ Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nich
 {% if eintraege %}<div class="tabelle"><table><tr><th>Name</th><th>ECU</th><th>Software</th><th>Optionen</th><th>Größe</th><th></th></tr>
 {% for e in eintraege %}<tr><td>{{ e.name }}</td><td>{{ e.ecu|join(', ') or '?' }}</td>
 <td>{{ (e.bosch_sw + e.vag_teilenr)|join(', ') or '?' }}</td>
-<td>{% for o in e.optionen %}{{ optionen[o] }}{{ ', ' if not loop.last }}{% endfor %}</td>
+<td>{% for o in e.optionen %}{{ optionen[o] }}{{ ', ' if not loop.last }}{% else %}<span class="leise">nur Original</span>{% endfor %}</td>
 <td>{{ (e.groesse / 1024)|round|int }} KB</td>
 <td><form method="post" action="{{ url_for('archiv_loeschen', name=e.name) }}" class="inline" onsubmit="return confirm('{{ e.name }} wirklich löschen?')">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein">Löschen</button></form></td></tr>

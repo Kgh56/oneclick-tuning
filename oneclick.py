@@ -53,7 +53,8 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 4
+INDEX_VERSION = 5
+MAX_ABWEICHUNG = 0.05   # Rueckruesten ueber Softwarenummer: hoechstens 5 % der Bytes duerfen abweichen
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
 GESPERRT = re.compile(
@@ -199,7 +200,32 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
             loesungen[ORIGINAL] = {"daten": daten, "quelle": e["name"],
                                    "art": "identisch" if identisch else "gleiche Stellen"}
             break
+
+    # Rueckruesten ueber die Softwarenummer: fremdes Tuning-File, im Archiv liegt (nur) das Original.
+    # Kein Byte-fuer-Byte-Nachweis moeglich -> eigene Art, der Admin prueft vor der Freigabe.
+    if ORIGINAL not in loesungen and not nur_identisch and info["bosch_sw"]:
+        for e in kandidaten:
+            if e["sha256"] == info["sha256"] or set(e["bosch_sw"]) != set(info["bosch_sw"]):
+                continue
+            if not nummern_passen(e) or (info["bosch_hw"] and e["bosch_hw"] and set(info["bosch_hw"]) != set(e["bosch_hw"])):
+                continue
+            ori = archiv_datei(e).read_bytes()
+            if abweichende_bytes(neu, ori, int(len(ori) * MAX_ABWEICHUNG)) is not None:
+                loesungen[ORIGINAL] = {"daten": ori, "quelle": e["name"], "art": "softwarenummer"}
+                break
     return info, loesungen
+
+
+def abweichende_bytes(a: bytes, b: bytes, grenze: int):
+    """Anzahl unterschiedlicher Bytes (gleiche Laenge), oder None sobald mehr als grenze."""
+    anzahl, schritt = 0, 4096
+    for basis in range(0, len(a), schritt):
+        x, y = a[basis:basis + schritt], b[basis:basis + schritt]
+        if x != y:
+            anzahl += sum(1 for p, q in zip(x, y) if p != q)
+            if anzahl > grenze:
+                return None
+    return anzahl
 
 
 def kombiniere(basis: bytes, dateien: list):
@@ -343,12 +369,9 @@ def baue_index() -> dict:
                 print(f"  ! {ordner.name}/{name}: identisch mit dem Original, uebersprungen")
                 continue
             optionen[opt] = {"datei": name, "bloecke": bloecke, "sha256": hashlib.sha256(mod).hexdigest()}
-        if not optionen:
-            print(f"  ! {ordner.name}: keine Options-Datei erkannt")
-            continue
-        info = erkenne(ori)
+        info = erkenne(ori)   # ohne Tuning-File: nur Original (fuer Rueckruesten ueber Softwarenummer)
         eintraege.append({"name": ordner.name, "ori_datei": ori_name, **info, "optionen": optionen})
-        print(f"  + {ordner.name}: {', '.join(optionen)} | ECU {', '.join(info['ecu']) or '?'}")
+        print(f"  + {ordner.name}: {', '.join(optionen) or 'nur Original'} | ECU {', '.join(info['ecu']) or '?'}")
 
     index = {"version": INDEX_VERSION, "eintraege": eintraege, "zeit": time.time()}
     tmp = INDEX_DATEI.with_suffix(".tmp")

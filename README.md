@@ -26,6 +26,12 @@ wird ihm **„Original (Rückrüsten)“** angeboten. Nach deiner Freigabe bekom
 dein Archiv-Original, sonst sein File mit den Original-Werten an allen Tuning-Stellen (z. B. FIN bleibt seine).
 Dafür musst du nichts extra hochladen – Original und Tuning-File im Archiv reichen.
 
+**Nur ein Original im Archiv (ohne Tuning-File):** Lädt ein Kunde ein *fremdes* Tuning-File hoch, wird
+„Original (Rückrüsten)“ auch dann angeboten, wenn gleiche Dateigröße, **gleiche Bosch-Softwarenummer** (muss lesbar
+sein), passende Teile-/Hardwarenummer und höchstens 5 % abweichende Bytes vorliegen. Der Kunde bekommt dann dein
+Archiv-Original. Das ist **kein** Byte-für-Byte-Nachweis: In Telegram und im Admin-Bereich steht deshalb
+„⚠️ Treffer über Softwarenummer – bitte prüfen“. Mit „Nur komplett identische Originale“ ist dieser Weg aus.
+
 ## Archiv – neue Files hochladen
 Im Admin-Bereich unter **Archiv**:
 - **Neues Fahrzeug hinzufügen:** Name eintragen, Original und Tuning-File(s) auswählen (Stage 1, Stage 2,

@@ -158,7 +158,10 @@ class KernTests(Basis):
         v = bytearray(self.stage1)
         off, _ = self.stellen[2]
         v[off] ^= 1   # anderes Tuning an einer Stage-1-Stelle
-        self.assertNotIn("original", oneclick.finde_loesungen(bytes(v))[1])
+        l = oneclick.finde_loesungen(bytes(v))[1]
+        # kein 100-%-Treffer mehr, nur noch ueber die Softwarenummer (Admin prueft)
+        self.assertEqual(l["original"]["art"], "softwarenummer")
+        self.assertEqual(l["original"]["daten"], bytes(self.golf))
 
     def test_original_kein_rueckruesten(self):
         self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.golf))[1])
@@ -172,6 +175,44 @@ class KernTests(Basis):
         self.assertIsNotNone(oneclick.kombiniere(basis, [bytes(a), bytes(b)]))
         b[1] = 8   # unterschiedlich -> nicht kombinierbar
         self.assertIsNone(oneclick.kombiniere(basis, [bytes(a), bytes(b)]))
+
+    def nur_original_ablegen(self):
+        """Archiv-Eintrag ohne Tuning-File: nur das Original (mit Softwarenummer)."""
+        self.mazda = zufall(GROESSE, 31)
+        self.mazda[0x100:0x120] = b"EDC17CP42 1037399999 0281099999 "
+        self.ablegen("Mazda_nur_ORI", {"Mazda_ORI.bin": self.mazda})
+        oneclick.baue_index()
+
+    def fremdes_tuning(self, basis, anzahl=3000):
+        mod = bytearray(basis)
+        rnd = random.Random(77)
+        for _ in range(anzahl):
+            mod[rnd.randrange(0x10000, GROESSE)] ^= 0x33
+        return mod
+
+    def test_rueckruesten_ueber_softwarenummer(self):
+        self.nur_original_ablegen()
+        _, l = oneclick.finde_loesungen(bytes(self.fremdes_tuning(self.mazda)))
+        self.assertEqual(set(l), {"original"})
+        self.assertEqual(l["original"]["art"], "softwarenummer")
+        self.assertEqual(l["original"]["daten"], bytes(self.mazda))
+
+    def test_rueckruesten_softwarenummer_grenzen(self):
+        self.nur_original_ablegen()
+        # Original selbst hochgeladen -> nichts zurueckzuruesten
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.mazda))[1])
+        # zu viel veraendert (> 5 %) -> kein Angebot
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.fremdes_tuning(self.mazda, 60000)))[1])
+        # andere Softwarenummer -> kein Angebot
+        v = self.fremdes_tuning(self.mazda)
+        v[0x10A:0x114] = b"1037888888"
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(v))[1])
+        # Softwarenummer nicht lesbar -> kein Angebot
+        v = self.fremdes_tuning(self.mazda)
+        v[0x10A:0x114] = bytes(10)
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(v))[1])
+        # Einstellung "nur identisch" schaltet es ab
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(self.fremdes_tuning(self.mazda)), nur_identisch=True)[1])
 
     def test_dateinamen_erkennung(self):
         k = oneclick.klassifiziere
@@ -283,6 +324,25 @@ class WebTests(Basis):
         aid = self.hochladen(self.stage1, "golf_stage1.bin")
         self.assertIn("nicht mit anderen Lösungen kombiniert", self.bestellen(aid, "original", "startstopp"))
         self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
+
+    def test_nur_original_im_web(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        a = self.admin()
+        mazda = zufall(GROESSE, 32)
+        mazda[0x100:0x120] = b"EDC17CP42 1037311111 0281011111 "
+        self.assertIn("reines Original", self.fahrzeug(a, "Mazda6", mazda))
+        self.assertIn("nur Original", a.get("/admin/archiv").text)
+        fremd = bytearray(mazda)
+        fremd[0x20000:0x20400] = bytes(1024)
+        aid = self.hochladen(fremd, "mazda_mod.bin")
+        self.assertIn('value="original"', self.kunde.get(f"/auftrag/{aid}").text)
+        self.bestellen(aid, "original")
+        import time
+        time.sleep(0.3)
+        self.assertTrue(any("über Softwarenummer" in d["text"] for m, d in self.telegram if m == "sendMessage"))
+        self.assertIn("Prüfen", a.get(f"/auftrag/{aid}").text)
+        A.entscheide(aid, True)
+        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(mazda))
 
     def test_bmw_nur_stage1(self):
         aid = self.hochladen(self.bmw)
@@ -398,7 +458,6 @@ class WebTests(Basis):
         self.assertIn("anderen Original", self.fahrzeug(a, "Golf7", anders, stage1=st1))
         self.assertIn("andere Dateigröße", self.fahrzeug(a, "Neu", anders, stage1=st1[:1000]))
         self.assertIn("identisch mit dem Original", self.fahrzeug(a, "Neu", anders, stage1=anders))
-        self.assertIn("mindestens ein Tuning-File", self.fahrzeug(a, "Neu", anders))
         self.assertFalse((oneclick.ARCHIV / "Neu").exists())
 
     def loesung(self, a, aktion="neu", **daten):
