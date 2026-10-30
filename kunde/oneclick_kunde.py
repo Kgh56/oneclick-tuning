@@ -350,6 +350,22 @@ def selbsttest(fenster, ergebnis_datei: str):
     fenster.destroy()
 
 
+def dunkle_titelleiste(fenster):
+    """Macht die Windows-Titelleiste schwarz (Windows 10: Dunkelmodus, Windows 11 zusätzlich Farbe)."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        hwnd = fenster.native.Handle.ToInt32()
+        dwm = ctypes.windll.dwmapi
+        for attribut, wert in ((20, 1), (19, 1), (35, 0x000000), (36, 0xFFFFFF), (34, 0x000000)):
+            # 20/19 = Dunkelmodus (neu/alt), 35 = Leistenfarbe, 36 = Schriftfarbe, 34 = Rahmenfarbe
+            v = ctypes.c_int(wert)
+            dwm.DwmSetWindowAttribute(hwnd, attribut, ctypes.byref(v), ctypes.sizeof(v))
+    except Exception:
+        pass
+
+
 def main():
     import webview
     bruecke = Bruecke()
@@ -357,6 +373,7 @@ def main():
                                     width=1280, height=820, min_size=(820, 620), background_color="#000000",
                                     maximized=True)
     bruecke._fenster = fenster
+    fenster.events.shown += lambda: dunkle_titelleiste(fenster)
     test = os.environ.get("ONECLICK_SELBSTTEST")
     if test:
         webview.start(selbsttest, (fenster, test))
