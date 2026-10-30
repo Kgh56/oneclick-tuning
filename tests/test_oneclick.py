@@ -13,6 +13,7 @@ import os
 import random
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from datetime import datetime, timedelta
@@ -376,7 +377,82 @@ class WebTests(Basis):
 
     def test_kein_treffer_kein_auftrag(self):
         self.assertIsNone(self.hochladen(zufall(GROESSE, 7)))
-        self.assertEqual(list(A.AUFTRAEGE.iterdir()), [])
+        # Original bleibt nur als Entwurf liegen (fuer eine Anfrage), im Admin-Bereich taucht nichts auf
+        self.assertEqual([a["status"] for a in A.alle_auftraege()], ["ENTWURF"])
+        self.assertIn("Nichts offen", self.admin().get("/admin").text)
+
+    # --- Anfragen (Tickets) ---
+    FAHRZEUG = {"marke": "VW", "modell": "Golf 7", "baujahr": "2016", "motor": "2.0 TDI 150 PS", "getriebe": "DSG"}
+
+    def anfrage(self, aid, **daten):
+        daten = {"fahrzeug": self.FAHRZEUG, "wunsch": ["stage1", "popsbangs"], "nachricht": "Bitte bis Freitag",
+                 "kontakt": "Werkstatt X", **daten}
+        return self.kunde.post(f"/api/auftrag/{aid}/anfrage", json=daten)
+
+    def warte_telegram(self, anzahl):
+        for _ in range(100):
+            if len(self.telegram) >= anzahl:
+                return
+            time.sleep(0.02)
+
+    def test_anfrage_kompletter_ablauf(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        dateien = []
+        A.telegram_datei = lambda chat, pfad, name, antwort_auf=None: dateien.append((pfad.read_bytes(), name, antwort_auf))
+        neu = zufall(GROESSE, 7)
+        r = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(neu)), "passat.bin")},
+                            content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 422)
+        self.assertTrue(r.json["anfrage"])
+        aid = r.json["id"]
+        self.assertIn("Anfrage", r.json["fehler"])
+        # Pflichtfelder und erlaubte Loesungen
+        self.assertIn("Modell", self.anfrage(aid, fahrzeug={**self.FAHRZEUG, "modell": "  "}).json["fehler"])
+        self.assertIn("mindestens eine", self.anfrage(aid, wunsch=["original", "dpf"]).json["fehler"])
+        j = self.anfrage(aid).json
+        self.assertEqual((j["status"], j["typ"], j["option"]), ("WARTET", "anfrage", "stage1+popsbangs"))
+        self.assertEqual(j["fahrzeug"], "VW · Golf 7 · 2016 · 2.0 TDI 150 PS")
+        self.assertEqual(self.anfrage(aid).json["status"], "WARTET")   # Doppelklick: kein zweites Ticket
+        # Telegram: Meldung nur mit "Ablehnen" + Original als Datei
+        self.warte_telegram(1)
+        time.sleep(0.1)
+        m, daten = self.telegram[0]
+        self.assertIn("Neue Anfrage", daten["text"])
+        self.assertIn("Golf 7", daten["text"])
+        self.assertEqual([k["callback_data"] for k in daten["reply_markup"]["inline_keyboard"][0]], [f"nein:{aid}"])
+        self.assertEqual(dateien, [(bytes(neu), "passat.bin", 1)])
+        # Noch kein File: Freigeben geht nicht, Kunde kann nicht laden
+        self.assertIn("Kein File", A.entscheide(aid, True))
+        self.assertEqual(self.laden(aid).status_code, 403)
+        a = self.admin()
+        seite = html.unescape(a.get(f"/auftrag/{aid}").text)
+        for text in ("Anfrage bearbeiten", "Golf 7", "DSG", "Bitte bis Freitag", "Stage 1 + Pops"):
+            self.assertIn(text, seite)
+        self.assertIn("Offene Anfragen", a.get("/admin").text)
+        self.assertEqual(a.get(f"/auftrag/{aid}/original").data, bytes(neu))
+        # Fertiges File hochladen -> Kunde bekommt es
+        fertig = bytearray(neu)
+        fertig[0x5000:0x5010] = bytes(16)
+        a.post(f"/admin/auftrag/{aid}/fertig", data={"csrf": a.csrf, "datei": (io.BytesIO(bytes(fertig)), "f.bin")},
+               content_type="multipart/form-data")
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["status"], "FREIGEGEBEN")
+        r = self.laden(aid)
+        self.assertEqual(r.data, bytes(fertig))
+        self.assertIn("passat_stage1+popsbangs.bin", r.headers["Content-Disposition"])
+
+    def test_anfrage_ablehnen_und_andere_loesung(self):
+        # Auch wenn es Treffer gibt, kann der Kunde etwas anderes anfragen
+        aid = self.hochladen(self.golf)
+        self.assertEqual(self.anfrage(aid, wunsch=["popsbangs"]).json["option"], "popsbangs")
+        self.assertEqual(list((A.AUFTRAEGE / aid).glob("loesung_*")), [])
+        a = self.admin()
+        a.post(f"/admin/auftrag/{aid}/entscheiden", data={"csrf": a.csrf, "aktion": "nein", "grund": "Nicht möglich"})
+        j = self.kunde.get(f"/api/auftrag/{aid}").json
+        self.assertEqual((j["status"], j["grund"]), ("ABGELEHNT", "Nicht möglich"))
+        self.assertIn("nicht mehr auf dem Server", self.anfrage("0" * 32).json["fehler"])
+        info = self.kunde.get("/api/info").json
+        self.assertIn({"key": "popsbangs", "name": "Pops & Bangs"}, info["optionen"])
+        self.assertNotIn("original", [o["key"] for o in info["optionen"]])
 
     def test_ablehnen_mit_grund(self):
         aid = self.hochladen(self.golf)

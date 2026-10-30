@@ -6,7 +6,6 @@ Start:
     python app.py admin <name>     Admin anlegen (fragt nach Passwort)
     python app.py telegram-id      Chat-ID fuer Telegram herausfinden
     python app.py telegram-test    Testnachricht an Telegram senden
-    python app.py whatsapp-test    Test-Vorlage an WhatsApp senden
     python app.py                  Server starten (http://localhost:5000, Admin unter /login)
 
 Kunden arbeiten mit dem Windows-Programm (kunde/oneclick_kunde.py), das ueber /api/... mit
@@ -17,7 +16,6 @@ Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den A
 
 import getpass
 import hashlib
-import hmac
 import html
 import json
 import os
@@ -79,7 +77,12 @@ ART_TEXT = {
     "gleiche Stellen": "Alle Tuning-Stellen identisch",
     "softwarenummer": "Treffer über Softwarenummer – bitte prüfen",
     "eigenes File": "Eigenes File",
+    "anfrage": "Anfrage – File muss bearbeitet werden",
 }
+# Fahrzeugdaten einer Anfrage: (Feld, Bezeichnung, Pflicht)
+FAHRZEUG_FELDER = [("marke", "Marke", True), ("modell", "Modell", True), ("baujahr", "Baujahr", True),
+                   ("motor", "Motor / Leistung", True), ("motorcode", "Motorcode", False),
+                   ("getriebe", "Getriebe", False)]
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -193,6 +196,8 @@ def telegram_api(methode: str, daten: dict, timeout: int = 15):
 
 
 def telegram_text(a: dict) -> str:
+    if a.get("typ") == "anfrage":
+        return telegram_text_anfrage(a)
     a = {k: html.escape(v) if isinstance(v, str) else v for k, v in a.items()}
     zeilen = [
         f"🔧 <b>Neuer Auftrag: {html.escape(option_namen()[a['option']])}</b>",
@@ -209,6 +214,47 @@ def telegram_text(a: dict) -> str:
     elif a["status"] == "ABGELEHNT":
         zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {a['grund']}" if a.get("grund") else ""))
     return "\n".join(zeilen)
+
+
+def telegram_text_anfrage(a: dict) -> str:
+    e = lambda x: html.escape(str(x or "–"))
+    fz = a.get("fahrzeug") or {}
+    zeilen = [f"📩 <b>Neue Anfrage: {e(option_namen()[a['option']])}</b>",
+              *(f"{titel}: {e(fz.get(feld))}" for feld, titel, _ in FAHRZEUG_FELDER),
+              f"ECU: {e(a['ecu'])}", f"Software: {e(a['software'])}", f"Datei: {e(a['datei'])}",
+              f"Kontakt: {e(a['kunde'])}"]
+    if a.get("nachricht"):
+        zeilen.append(f"Nachricht: {e(a['nachricht'])}")
+    if a["status"] == "WARTET":
+        zeilen.append("\nOriginal kommt gleich als Datei. Fertiges File im Admin-Bereich hochladen – "
+                      "dann bekommt der Kunde es automatisch im Programm.")
+    elif a["status"] == "FREIGEGEBEN":
+        zeilen.append("\n✅ <b>FERTIG – an den Kunden geschickt</b>")
+    elif a["status"] == "ABGELEHNT":
+        zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {e(a['grund'])}" if a.get("grund") else ""))
+    return "\n".join(zeilen)
+
+
+def telegram_datei(chat, pfad: Path, name: str, antwort_auf=None):
+    """Datei an Telegram schicken (multipart, bis 50 MB)."""
+    token = lade_config().get("telegram_token")
+    if not token:
+        return None
+    grenze = uuid.uuid4().hex
+    teile = [("chat_id", str(chat))] + ([("reply_to_message_id", str(antwort_auf))] if antwort_auf else [])
+    koerper = b"".join(f'--{grenze}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+                       for k, v in teile)
+    sauber = re.sub(r'["\r\n\\]', "_", name)
+    koerper += (f'--{grenze}\r\nContent-Disposition: form-data; name="document"; filename="{sauber}"\r\n'
+                f"Content-Type: application/octet-stream\r\n\r\n").encode() + pfad.read_bytes() + f"\r\n--{grenze}--\r\n".encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendDocument", data=koerper,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={grenze}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+    except Exception as ex:   # Benachrichtigung darf nie etwas blockieren
+        print(f"Telegram-Fehler (sendDocument): {ex}", file=sys.stderr)
+        return None
 
 
 def telegram_knoepfe(a: dict) -> dict:
@@ -235,6 +281,9 @@ def telegram_melden(auftrag: dict):
             aktuell = finde_auftrag(auftrag["id"])
             aktuell["tg_nachricht"] = antwort["result"]["message_id"]
             speichere_auftrag(aktuell)
+        if auftrag.get("typ") == "anfrage":   # Original gleich mitschicken -> direkt bearbeiten
+            telegram_datei(chat, AUFTRAEGE / auftrag["id"] / "ori.bin", auftrag["datei"],
+                           antwort["result"]["message_id"])
 
 
 def telegram_aktualisieren(auftrag: dict):
@@ -289,109 +338,8 @@ def telegram_runde(offset: list):
         telegram_api("answerCallbackQuery", {"callback_query_id": cb["id"], "text": text})
 
 
-# ---------------------------------------------------------------------------
-# WhatsApp (Business Platform / Cloud API von Meta)
-# ---------------------------------------------------------------------------
-
-def whatsapp_api(daten: dict):
-    cfg = lade_config()
-    if not (cfg.get("whatsapp_token") and cfg.get("whatsapp_phone_id")):
-        return None
-    version = cfg.get("whatsapp_api_version", "v23.0")
-    req = urllib.request.Request(
-        f"https://graph.facebook.com/{version}/{cfg['whatsapp_phone_id']}/messages",
-        data=json.dumps({"messaging_product": "whatsapp", **daten}).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {cfg['whatsapp_token']}"})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        print(f"WhatsApp-Fehler: {e.code} {e.read().decode(errors='ignore')}", file=sys.stderr)
-    except Exception as e:  # Benachrichtigung darf den Upload nie blockieren
-        print(f"WhatsApp-Fehler: {e}", file=sys.stderr)
-    return None
-
-
-def whatsapp_empfaenger() -> list:
-    eintrag = lade_config().get("whatsapp_empfaenger", [])
-    liste = [eintrag] if isinstance(eintrag, str) else eintrag
-    return [n.lstrip("+").replace(" ", "") for n in liste if n]
-
-
-def wa_wert(text: str) -> str:
-    # Vorlagen-Variablen duerfen keine Zeilenumbrueche/Tabs und nicht leer sein
-    text = " ".join(str(text).split())
-    return text[:200] or "-"
-
-
-def whatsapp_melden(auftrag: dict):
-    cfg = lade_config()
-    werte = [option_namen()[auftrag["option"]], auftrag["datei"], auftrag["ecu"], auftrag["kunde"],
-             f"100 % – {ART_TEXT.get(auftrag['art'], auftrag['art'])}"]
-    for nummer in whatsapp_empfaenger():
-        whatsapp_api({
-            "to": nummer,
-            "type": "template",
-            "template": {
-                "name": cfg.get("whatsapp_vorlage", "neuer_auftrag"),
-                "language": {"code": cfg.get("whatsapp_sprache", "de")},
-                "components": [
-                    {"type": "body", "parameters": [{"type": "text", "text": wa_wert(w)} for w in werte]},
-                    {"type": "button", "sub_type": "quick_reply", "index": "0",
-                     "parameters": [{"type": "payload", "payload": f"ok:{auftrag['id']}"}]},
-                    {"type": "button", "sub_type": "quick_reply", "index": "1",
-                     "parameters": [{"type": "payload", "payload": f"nein:{auftrag['id']}"}]},
-                ],
-            },
-        })
-
-
 def benachrichtigen(auftrag: dict):
     telegram_melden(auftrag)
-    whatsapp_melden(auftrag)
-
-
-@app.route("/whatsapp/webhook", methods=["GET"])
-def whatsapp_verifizieren():
-    """Einmalige Pruefung durch Meta beim Einrichten des Webhooks."""
-    token = lade_config().get("whatsapp_verify_token")
-    if token and request.args.get("hub.mode") == "subscribe" and request.args.get("hub.verify_token") == token:
-        return request.args.get("hub.challenge", "")
-    abort(403)
-
-
-@app.route("/whatsapp/webhook", methods=["POST"])
-def whatsapp_webhook():
-    """Knopfdruecke (Bestaetigen/Ablehnen) aus WhatsApp."""
-    geheim = lade_config().get("whatsapp_app_secret", "")
-    signatur = request.headers.get("X-Hub-Signature-256", "")
-    erwartet = "sha256=" + hmac.new(geheim.encode(), request.get_data(), hashlib.sha256).hexdigest()
-    if not geheim or not hmac.compare_digest(signatur, erwartet):
-        abort(403)
-
-    erlaubt = set(whatsapp_empfaenger())
-    daten = request.get_json(silent=True) or {}
-    for eintrag in daten.get("entry", []):
-        for aenderung in eintrag.get("changes", []):
-            for msg in aenderung.get("value", {}).get("messages", []):
-                if msg.get("type") == "button":
-                    payload = msg.get("button", {}).get("payload", "")
-                elif msg.get("type") == "interactive":
-                    payload = msg.get("interactive", {}).get("button_reply", {}).get("id", "")
-                else:
-                    continue
-                absender = msg.get("from", "")
-                if absender not in erlaubt:
-                    continue
-                aktion, _, aid = payload.partition(":")
-                if aktion not in ("ok", "nein"):
-                    continue
-                text = entscheide(aid, aktion == "ok", wer=f"WhatsApp: +{absender}")
-                auftrag = finde_auftrag(aid)
-                if auftrag:
-                    text = f"{auftrag['datei']} ({option_namen()[auftrag['option']]}): {text}"
-                whatsapp_api({"to": absender, "type": "text", "text": {"body": text}})
-    return "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -437,8 +385,8 @@ def upload_limit():
 
 @app.before_request
 def csrf_pruefen():
-    if request.path == "/whatsapp/webhook" or request.path.startswith("/api/"):
-        return  # Meta signiert selbst; die API nutzt keine Cookies (Zugriff ueber die geheime Auftragsnummer)
+    if request.path.startswith("/api/"):
+        return  # die API nutzt keine Cookies (Zugriff ueber die geheime Auftragsnummer)
     session.setdefault("csrf", secrets.token_hex(16))
     if request.method == "POST" and request.form.get("csrf") != session["csrf"]:
         abort(400)
@@ -492,6 +440,14 @@ class Abgelehnt(Exception):
     """Fehler mit einer Meldung fuer den Kunden (Webseite: flash, Programm: JSON)."""
 
 
+class KeineLoesung(Abgelehnt):
+    """Nichts Passendes im Archiv. Das Original ist trotzdem gespeichert (Entwurf), damit der Kunde
+    dazu eine Anfrage stellen kann."""
+    def __init__(self, text: str, auftrag: dict):
+        super().__init__(text)
+        self.auftrag = auftrag
+
+
 def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     """Schritt 1: Original pruefen, 100-%-Treffer suchen, Entwurf mit den verfuegbaren Loesungen anlegen."""
     if zu_viele("upload", 30, 3600):
@@ -503,10 +459,6 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
     ecu = ", ".join(info["ecu"]) or "?"
     software = ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"
-    if not loesungen:
-        raise Abgelehnt(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
-                        "Melde dich gerne bei uns.")
-
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
@@ -527,7 +479,50 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
         "zeit": datetime.now().isoformat(timespec="seconds"),
     }
     speichere_auftrag(auftrag)
+    if not loesungen:
+        raise KeineLoesung(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
+                           "Stell uns einfach eine Anfrage – wir machen dir das File.", auftrag)
     return auftrag
+
+
+def anfrage_abschicken(aid: str, fahrzeug: dict, wunsch: list, nachricht: str, kontakt: str) -> dict:
+    """Ticket: Kunde bittet um ein File, das es im Archiv noch nicht gibt. Das Original liegt schon auf
+    dem Server (vom Pruefen). Der Admin laedt spaeter das fertige File hoch oder lehnt ab."""
+    fz = {}
+    for feld, titel, pflicht in FAHRZEUG_FELDER:
+        wert = " ".join(str(fahrzeug.get(feld) or "").split())[:80]
+        if pflicht and not wert:
+            raise Abgelehnt(f"Bitte „{titel}“ angeben.")
+        fz[feld] = wert
+    erlaubt = oneclick.optionen()
+    wunsch = [o for o in erlaubt if o in wunsch]   # Reihenfolge wie im Archiv, nur bekannte Loesungen
+    if not wunsch:
+        raise Abgelehnt("Bitte mindestens eine gewünschte Lösung auswählen.")
+    with sperre:
+        auftrag = finde_auftrag(aid)
+        if auftrag is None:
+            raise Abgelehnt("Das File ist nicht mehr auf dem Server. Bitte nochmal hochladen.")
+        if auftrag["status"] != "ENTWURF":
+            return auftrag   # schon abgeschickt (z. B. Doppelklick)
+        if zu_viele("anfrage", 10, 3600):
+            raise Abgelehnt("Zu viele Anfragen in kurzer Zeit. Bitte später nochmal versuchen.")
+        merken("anfrage")
+        ordner = AUFTRAEGE / aid
+        for rest in ordner.glob("loesung_*.bin"):
+            rest.unlink()
+        auftrag.update(typ="anfrage", option="+".join(wunsch), status="WARTET", art="anfrage", quelle="",
+                       fahrzeug=fz, nachricht=str(nachricht or "").strip()[:1000],
+                       kunde=str(kontakt or "").strip()[:100] or "–", angebot={},
+                       zeit=datetime.now().isoformat(timespec="seconds"))
+        speichere_auftrag(auftrag)
+    threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
+    return auftrag
+
+
+def fahrzeug_text(a: dict) -> str:
+    fz = a.get("fahrzeug") or {}
+    teile = [fz.get("marke"), fz.get("modell"), fz.get("baujahr"), fz.get("motor")]
+    return " · ".join(x for x in teile if x)
 
 
 def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
@@ -581,13 +576,17 @@ def api_auftrag(a: dict) -> dict:
         "option": a.get("option"), "option_name": namen[a["option"]] if a.get("option") else None,
         "angebot": [{"key": o, "name": namen[o]} for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
         "grund": a.get("grund", ""),
+        "typ": a.get("typ", "auftrag"), "fahrzeug": fahrzeug_text(a),
     }
 
 
 @app.route("/api/info")
 def api_info():
+    namen = option_namen()
     return jsonify(firma=lade_config().get("firmenname") or "OneClick Tuning", api=1,
-                   original=oneclick.ORIGINAL)
+                   original=oneclick.ORIGINAL,
+                   optionen=[{"key": o, "name": namen[o]} for o in oneclick.optionen()],   # fuer Anfragen
+                   fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER])
 
 
 @app.route("/api/pruefen", methods=["POST"])
@@ -597,6 +596,8 @@ def api_pruefen():
         return jsonify(fehler="Bitte eine Originaldatei auswählen."), 400
     try:
         return jsonify(api_auftrag(entwurf_anlegen(datei.read(), datei.filename)))
+    except KeineLoesung as e:   # Anfrage moeglich: Entwurf-Nummer mitschicken
+        return jsonify(fehler=str(e), anfrage=True, **api_auftrag(e.auftrag)), 422
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
 
@@ -614,6 +615,20 @@ def api_bestellen(aid):
     return jsonify(api_auftrag(auftrag))
 
 
+@app.route("/api/auftrag/<aid>/anfrage", methods=["POST"])
+def api_anfrage(aid):
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    fahrzeug = daten.get("fahrzeug") if isinstance(daten.get("fahrzeug"), dict) else {}
+    wunsch = [str(o) for o in daten.get("wunsch")] if isinstance(daten.get("wunsch"), list) else []
+    try:
+        auftrag = anfrage_abschicken(aid, fahrzeug, wunsch, str(daten.get("nachricht") or ""),
+                                     str(daten.get("kontakt") or ""))
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
+    return jsonify(api_auftrag(auftrag))
+
+
 @app.route("/api/auftrag/<aid>")
 def api_auftrag_status(aid):
     return jsonify(api_auftrag(lade_auftrag(aid)))
@@ -622,7 +637,8 @@ def api_auftrag_status(aid):
 @app.route("/auftrag/<aid>")
 @admin_noetig
 def auftrag_ansicht(aid):
-    return render_template("auftrag.html", a=lade_auftrag(aid), hat_file=hat_file(aid))
+    return render_template("auftrag.html", a=lade_auftrag(aid), hat_file=hat_file(aid),
+                           fahrzeug_felder=FAHRZEUG_FELDER)
 
 
 @app.route("/auftrag/<aid>/status")
@@ -663,8 +679,7 @@ def admin():
     return render_template("admin.html", wartend=wartend, alle=alle[:100],
                            archiv=len(oneclick.lade_index()["eintraege"]),
                            freigegeben=sum(a["status"] == "FREIGEGEBEN" for a in alle),
-                           telegram=bool(lade_config().get("telegram_chat_id")),
-                           whatsapp=bool(whatsapp_empfaenger() and lade_config().get("whatsapp_token")))
+                           telegram=bool(lade_config().get("telegram_chat_id")))
 
 
 @app.route("/admin/wartend")
@@ -1339,13 +1354,16 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 
 "auftrag.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte">
-<h1>{% if a.option %}{{ optionen[a.option] }} · {% endif %}{{ a.datei }}</h1>
+<h1>{% if a.typ == 'anfrage' %}📩 Anfrage: {% endif %}{% if a.option %}{{ optionen[a.option] }} · {% endif %}{{ a.datei }}</h1>
 <p><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span>
 <span class="leise">&nbsp; {{ a.zeit[:16].replace('T',' ') }}</span></p>
-<table><tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
+<table>{% if a.typ == 'anfrage' %}{% for feld, titel, _ in fahrzeug_felder %}<tr><th>{{ titel }}</th><td>{{ a.fahrzeug.get(feld) or '–' }}</td></tr>{% endfor %}
+<tr><th>Gewünscht</th><td><b>{{ optionen[a.option] }}</b></td></tr>
+{% if a.nachricht %}<tr><th>Nachricht</th><td style="white-space:pre-wrap">{{ a.nachricht }}</td></tr>{% endif %}{% endif %}
+<tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
 <tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
-{% if a.art %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
-<tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>
+{% if a.art and a.typ != 'anfrage' %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
+{% if a.typ != 'anfrage' %}<tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>{% endif %}
 {% if a.entschieden %}<tr><th>Entschieden</th><td>{{ a.entschieden[:16].replace('T',' ') }} von {{ a.entschieden_von }}</td></tr>{% endif %}
 </table><br>
 
@@ -1356,7 +1374,26 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% endif %}
 </div>
 
-{% if session.admin and a.status != 'ENTWURF' %}
+{% if session.admin and a.typ == 'anfrage' and a.status == 'WARTET' %}
+<div class="karte"><h2>Anfrage bearbeiten</h2>
+<p class="leise" style="margin-top:-6px">1. Original herunterladen und bearbeiten · 2. Fertiges File hier hochladen –
+der Kunde bekommt es sofort automatisch im Programm.</p>
+<p><a class="btn" href="{{ url_for('original', aid=a.id) }}">⬇ Original herunterladen</a></p>
+<form method="post" action="{{ url_for('fertig_hochladen', aid=a.id) }}" enctype="multipart/form-data" style="margin-top:18px">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<p><b>Fertiges File</b> (gleiche Größe wie das Original, Checksumme macht das Flash-Tool)</p>
+<p><input type="file" name="datei"></p>
+<input type="text" name="archiv_name" placeholder="Archivname, z. B. golf7_20tdi_03L906018JL (leer = nicht ins Archiv)">
+<div class="hinweis">Mit Archivname landet das Paar im Archiv – der nächste Kunde mit diesem File bekommt es dann sofort automatisch
+(nur bei einer einzelnen Lösung, nicht bei Kombinationen).</div>
+<button class="btn gruen" style="margin-top:10px">Hochladen &amp; an Kunden schicken</button></form>
+<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-top:26px">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
+<p><b>Oder ablehnen</b></p>
+<input type="text" name="grund" placeholder="Grund (sieht der Kunde im Programm), z. B. Software nicht unterstützt">
+<button class="btn grau">✕ Anfrage ablehnen</button></form>
+</div>
+{% elif session.admin and a.status != 'ENTWURF' %}
 <div class="karte"><h2>Admin</h2>
 <p><a href="{{ url_for('original', aid=a.id) }}">Original herunterladen</a>
 {% if hat_file %} · <a href="{{ url_for('download', aid=a.id) }}">Erstelltes File herunterladen (zum Prüfen)</a>{% endif %}</p>
@@ -1383,31 +1420,33 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 
 "admin.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="raster" style="margin-bottom:22px">
-<div class="karte"><div class="leise">Warten auf Freigabe</div><div class="zahl">{{ wartend|length }}</div></div>
+<div class="karte"><div class="leise">Warten auf Freigabe</div><div class="zahl">{{ wartend|rejectattr('typ', 'equalto', 'anfrage')|list|length }}</div></div>
+<div class="karte"><div class="leise">Offene Anfragen</div><div class="zahl">{{ wartend|selectattr('typ', 'equalto', 'anfrage')|list|length }}</div></div>
 <div class="karte"><div class="leise">Freigegeben</div><div class="zahl">{{ freigegeben }}</div></div>
 <div class="karte"><div class="leise">Files im Archiv</div><div class="zahl">{{ archiv }}</div>
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
 </div>
 <div class="karte"><h2>Warten auf Freigabe</h2>
-<p class="hinweis" style="margin-top:-6px">Telegram: {{ 'aktiv' if telegram else 'nicht eingerichtet' }} · WhatsApp: {{ 'aktiv' if whatsapp else 'nicht eingerichtet' }} ·
+<p class="hinweis" style="margin-top:-6px">Telegram: {{ 'aktiv' if telegram else 'nicht eingerichtet' }} ·
 Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Browser-Benachrichtigungen erlauben</a></p>
 {% if wartend %}<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>ECU</th><th>Treffer</th><th></th></tr>
 {% for a in wartend %}<tr><td>{{ a.zeit[8:10] }}.{{ a.zeit[5:7] }}. {{ a.zeit[11:16] }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
-<td>{{ a.ecu }}</td><td class="leise">{{ art_text.get(a.art, a.art) }}</td>
-<td><form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
+<td>{{ a.ecu }}</td><td class="leise">{% if a.typ == 'anfrage' %}<span class="status s-WARTET">📩 Anfrage</span>
+{{ a.fahrzeug.marke }} {{ a.fahrzeug.modell }}{% else %}{{ art_text.get(a.art, a.art) }}{% endif %}</td>
+<td>{% if a.typ == 'anfrage' %}<a class="btn klein" href="{{ url_for('auftrag_ansicht', aid=a.id) }}">Bearbeiten</a>{% else %}<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
 <input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn gruen klein">✓ Bestätigen</button></form>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
-<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form></td></tr>
+<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form>{% endif %}</td></tr>
 {% endfor %}</table></div>{% else %}<p class="leise">Nichts offen.</p>{% endif %}</div>
 <div class="karte"><h2>Alle Aufträge</h2>
 <div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th></tr>
 {% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
-<td class="leise">{{ a.quelle or '–' }}</td>
+<td class="leise">{% if a.typ == 'anfrage' %}📩 Anfrage{% else %}{{ a.quelle or '–' }}{% endif %}</td>
 <td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td></tr>
 {% endfor %}</table></div></div>
 <script>
@@ -1631,12 +1670,6 @@ if __name__ == "__main__":
         cfg = lade_config()
         ok = telegram_api("sendMessage", {"chat_id": cfg.get("telegram_chat_id"), "text": "✅ OneClick Tuning ist verbunden."})
         print("Gesendet." if ok and ok.get("ok") else f"Fehler: {ok}")
-    elif befehl == "whatsapp-test":
-        if not whatsapp_empfaenger():
-            sys.exit("whatsapp_empfaenger fehlt in config.json")
-        whatsapp_melden({"id": "test", "option": "stage1", "datei": "test.bin", "ecu": "EDC17C46",
-                         "kunde": "Testkunde", "art": "identisch"})
-        print("Gesendet (Fehler würden oben stehen).")
     else:
         AUFTRAEGE.mkdir(exist_ok=True)
         threading.Thread(target=telegram_schleife, daemon=True).start()

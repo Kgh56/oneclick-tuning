@@ -33,7 +33,6 @@ import uuid
 from pathlib import Path
 
 STANDARD_SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping.de")
-WHATSAPP_URL = "https://wa.me/4915568540674"
 UPDATE_URL = os.environ.get("ONECLICK_UPDATE_URL", "https://github.com/Kgh56/oneclick-tuning/releases/download/programm")
 MAX_GROESSE = 16 * 1024 * 1024
 # Filter fuer den Speichern-Dialog. pywebview erlaubt im Namen nur Buchstaben, Ziffern und Leerzeichen
@@ -170,7 +169,9 @@ class Updater:
 # ---------------------------------------------------------------------------
 
 class Fehler(Exception):
-    pass
+    def __init__(self, text: str, daten: dict = None):
+        super().__init__(text)
+        self.daten = daten or {}   # Antwort des Servers (z. B. Entwurf-Nummer fuer eine Anfrage)
 
 
 class Api:
@@ -186,14 +187,16 @@ class Api:
                 return r.read()
         except urllib.error.HTTPError as e:
             try:
-                text = json.loads(e.read()).get("fehler")
+                daten = json.loads(e.read())
+                daten = daten if isinstance(daten, dict) else {}
             except Exception:
-                text = None
+                daten = {}
+            text = daten.get("fehler")
             if e.code == 403 and not text:
                 text = "Das File ist noch nicht freigegeben."
             if e.code == 404 and not text:
                 text = "Auftrag nicht gefunden (vielleicht schon gelöscht)."
-            raise Fehler(text or f"Server-Fehler ({e.code}).")
+            raise Fehler(text or f"Server-Fehler ({e.code}).", daten)
         except (urllib.error.URLError, TimeoutError, OSError):
             raise Fehler("Keine Verbindung zum Server. Bitte Internetverbindung prüfen.")
 
@@ -213,6 +216,10 @@ class Api:
     def bestellen(self, aid: str, optionen: list, kontakt: str) -> dict:
         daten = json.dumps({"optionen": optionen, "kontakt": kontakt}).encode()
         return self._json("POST", f"/api/auftrag/{aid}/bestellen", daten, "application/json")
+
+    def anfrage(self, aid: str, fahrzeug: dict, wunsch: list, nachricht: str, kontakt: str) -> dict:
+        daten = json.dumps({"fahrzeug": fahrzeug, "wunsch": wunsch, "nachricht": nachricht, "kontakt": kontakt}).encode()
+        return self._json("POST", f"/api/auftrag/{aid}/anfrage", daten, "application/json")
 
     def status(self, aid: str) -> dict:
         return self._json("GET", f"/api/auftrag/{aid}", timeout=20)
@@ -259,7 +266,8 @@ class Speicher:
         liste = [x for x in self.daten["auftraege"] if x["id"] != a["id"]]
         alt = next((x for x in self.daten["auftraege"] if x["id"] == a["id"]), {})
         eintrag = {**alt, **{k: a.get(k) for k in ("id", "datei", "zeit", "status", "status_text",
-                                                    "option", "option_name", "grund", "ecu", "software")}}
+                                                    "option", "option_name", "grund", "ecu", "software",
+                                                    "typ", "fahrzeug")}}
         self.daten["auftraege"] = ([eintrag] + liste)[:200]
         self.speichern()
 
@@ -285,10 +293,12 @@ class Bruecke:
     def start(self) -> dict:
         d = self._speicher.daten
         ergebnis = {"server": d["server"], "kontakt": d["kontakt"], "auftraege": d["auftraege"],
-                    "firma": None, "original": "original", "version": VERSION}
+                    "firma": None, "original": "original", "version": VERSION, "optionen": [],
+                    "fahrzeug_felder": []}
         try:
             info = self._api.info()
-            ergebnis.update(firma=info.get("firma"), original=info.get("original", "original"))
+            ergebnis.update(firma=info.get("firma"), original=info.get("original", "original"),
+                            optionen=info.get("optionen") or [], fahrzeug_felder=info.get("fahrzeug_felder") or [])
         except Fehler as e:
             ergebnis["verbindung"] = str(e)
         return ergebnis
@@ -304,13 +314,27 @@ class Bruecke:
         try:
             return self._api.pruefen(dateiname, inhalt)
         except Fehler as e:
-            return {"fehler": str(e)}
+            # Nichts gefunden: Server hat das Original trotzdem gespeichert -> Anfrage moeglich
+            mehr = {k: e.daten.get(k) for k in ("id", "datei", "ecu", "software")} if e.daten.get("anfrage") else {}
+            return {"fehler": str(e), "anfrage": bool(mehr), **mehr}
 
     @sicher
     def bestellen(self, aid: str, optionen: list, kontakt: str) -> dict:
         self._speicher.daten["kontakt"] = (kontakt or "").strip()
         try:
             a = self._api.bestellen(aid, list(optionen), self._speicher.daten["kontakt"])
+        except Fehler as e:
+            self._speicher.speichern()
+            return {"fehler": str(e)}
+        self._speicher.auftrag_merken(a)
+        return {"auftrag": a, "auftraege": self._speicher.daten["auftraege"]}
+
+    @sicher
+    def anfrage(self, aid: str, fahrzeug: dict, wunsch: list, nachricht: str, kontakt: str) -> dict:
+        self._speicher.daten["kontakt"] = (kontakt or "").strip()
+        try:
+            a = self._api.anfrage(aid, dict(fahrzeug or {}), list(wunsch or []), nachricht or "",
+                                  self._speicher.daten["kontakt"])
         except Fehler as e:
             self._speicher.speichern()
             return {"fehler": str(e)}
@@ -417,12 +441,6 @@ class Bruecke:
     def vollbild(self) -> dict:
         if self._fenster:
             self._fenster.toggle_fullscreen()
-        return {}
-
-    @sicher
-    def whatsapp(self) -> dict:
-        import webbrowser
-        webbrowser.open(WHATSAPP_URL)
         return {}
 
     @sicher

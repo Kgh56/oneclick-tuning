@@ -132,7 +132,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.65fr) min
 .suche input::placeholder{color:var(--dunkel)}
 
 /* Fusszeile */
-.fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 110px 14px 32px;font-size:12px;color:var(--dunkel)}
+.fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 32px 14px;font-size:12px;color:var(--dunkel)}
 .fuss span{display:inline-flex;align-items:center;gap:6px}
 .fuss kbd{font:inherit;font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--rand2);color:var(--leise)}
 
@@ -165,6 +165,21 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
   transition:opacity .45s var(--feder),transform .55s var(--feder),visibility .45s}
 .ansicht.aktiv{opacity:1;visibility:visible;transform:none}
 .ansicht.raus{transform:translateX(-30px)}
+#v-anfrage{overflow-y:auto;overflow-x:hidden;padding-right:6px}
+#v-anfrage > *{flex:none}
+#v-anfrage .loesungen{overflow:visible;margin:10px 0 0;padding:0}
+.fz-raster{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:14px}
+.fz-raster label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--leise,#a1a1a6)}
+.fz-raster label b{color:var(--rot,#ff453a);font-weight:600}
+.fz-raster .feld{margin-top:0}
+.fz-raster .feld.fehlt{border-color:#ff453a;box-shadow:0 0 0 4px rgba(255,69,58,.18)}
+textarea.feld{resize:vertical;min-height:70px;font:inherit;color:inherit}
+select.feld{appearance:none;color:inherit;font:inherit}
+select.feld option{background:#1c1c1e}
+.anfrage-link{margin-top:14px;background:none;border:0;color:var(--blau,#0a84ff);font:inherit;font-size:13.5px;cursor:pointer;padding:0;text-align:left}
+.anfrage-link:hover{text-decoration:underline}
+.typ-anfrage{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;margin-right:6px;
+  background:rgba(10,132,255,.15);color:#64b5ff;vertical-align:1px}
 
 /* ---------- Upload-Zone ---------- */
 .zone{flex:1;margin-top:18px;position:relative;border-radius:22px;display:grid;place-items:center;text-align:center;cursor:pointer;
@@ -297,17 +312,6 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 
 /* Kleine Fenster: weniger Deko, damit alles passt (am Ende, damit diese Regeln gewinnen) */
 @media (max-width:980px){main{grid-template-columns:1fr;overflow:auto}.stats{display:none}}
-#whatsapp{position:fixed;right:26px;bottom:26px;z-index:35;width:60px;height:60px;border-radius:50%;border:0;cursor:pointer;
-  display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#2be36f,#12a84c);
-  box-shadow:0 10px 30px rgba(37,211,102,.45),inset 0 1px 0 rgba(255,255,255,.35);
-  animation:wa-schweben 3.6s ease-in-out infinite;transition:transform .25s cubic-bezier(.2,.9,.3,1.4),box-shadow .25s}
-#whatsapp::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(37,211,102,.6);animation:wa-welle 2.4s ease-out infinite}
-#whatsapp:hover{transform:scale(1.1);box-shadow:0 14px 40px rgba(37,211,102,.65)}
-#whatsapp .tipp{position:absolute;right:74px;white-space:nowrap;font-size:13px;font-weight:600;padding:8px 12px;border-radius:10px;
-  background:rgba(20,20,24,.92);border:1px solid var(--rand,rgba(255,255,255,.1));opacity:0;transform:translateX(8px);transition:.25s;pointer-events:none}
-#whatsapp:hover .tipp{opacity:1;transform:none}
-@keyframes wa-schweben{50%{translate:0 -6px}}
-@keyframes wa-welle{from{transform:scale(1);opacity:.9}to{transform:scale(1.6);opacity:0}}
 @media (max-height:860px){.schritte{display:none}}
 @media (max-height:700px){.hero{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
@@ -326,8 +330,6 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 </div></div>
 <canvas id="konfetti"></canvas>
 <div id="toasts"></div>
-<button id="whatsapp" title="WhatsApp" aria-label="Per WhatsApp schreiben"><span class="tipp">Fragen? Schreib uns auf WhatsApp</span>
-  <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.14-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.05 21.5h-.01a9.4 9.4 0 0 1-4.8-1.32l-.34-.2-3.57.94.95-3.48-.22-.36a9.43 9.43 0 0 1-1.45-5.03c0-5.2 4.24-9.44 9.45-9.44 2.52 0 4.89.99 6.67 2.77a9.38 9.38 0 0 1 2.76 6.68c0 5.21-4.24 9.44-9.44 9.44zm8.04-17.48A11.3 11.3 0 0 0 12.04.7C5.77.7.67 5.79.67 12.06c0 2 .52 3.96 1.52 5.68L.57 23.3l5.7-1.5a11.33 11.33 0 0 0 5.77 1.47h.01c6.27 0 11.37-5.1 11.37-11.36 0-3.04-1.18-5.89-3.33-8.04z"/></svg></button>
 
 <div class="app">
   <header>
@@ -418,12 +420,31 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
             <button class="btn grau" id="abbrechen">Abbrechen</button>
           </div>
           <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
+          <button class="anfrage-link" id="andere-anfrage">Nicht dabei, was du brauchst? → Anfrage stellen</button>
+        </div>
+
+        <div class="ansicht" id="v-anfrage">
+          <h1>Anfrage stellen</h1>
+          <p class="leise" style="margin-top:6px">Dein Original ist schon bei uns. Wir machen dir das File und du bekommst es
+            hier im Programm, sobald es fertig ist.</p>
+          <div class="chips" id="af-chips" style="margin-top:12px"></div>
+          <h2 style="margin-top:20px">Fahrzeug</h2>
+          <div class="fz-raster" id="af-felder"></div>
+          <h2 style="margin-top:22px">Was brauchst du? <span class="leise" style="font-weight:400;font-size:13px">– eine oder mehrere</span></h2>
+          <div class="loesungen" id="af-wunsch" style="margin-top:10px"></div>
+          <textarea class="feld" id="af-nachricht" maxlength="1000" placeholder="Nachricht an uns (optional), z. B. Umbauten, Wünsche …"></textarea>
+          <input class="feld" id="af-kontakt" maxlength="100" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
+          <div class="knoepfe">
+            <button class="btn" id="af-senden">Anfrage senden</button>
+            <button class="btn grau" id="af-abbrechen">Abbrechen</button>
+          </div>
+          <div class="hinweis">Felder mit <b style="color:#ff453a">*</b> bitte ausfüllen. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
         </div>
 
         <div class="ansicht" id="v-erfolg">
           <div class="mitte erfolg"><div>
             <svg viewBox="0 0 110 110"><circle cx="55" cy="55" r="50"/><path d="M33 57l15 15 30-32"/></svg>
-            <h1>Auftrag gesendet</h1>
+            <h1 id="erfolg-titel">Auftrag gesendet</h1>
             <p class="leise" style="margin-top:8px" id="erfolg-text"></p>
           </div></div>
         </div>
@@ -433,7 +454,10 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
             <div class="warnsymbol">!</div>
             <h1 id="fehler-titel">Keine Lösung gefunden</h1>
             <p class="leise" style="margin:10px auto 22px;max-width:440px" id="fehler-text"></p>
-            <button class="btn" id="nochmal">Anderes File wählen</button>
+            <div class="knoepfe" style="justify-content:center">
+              <button class="btn" id="anfrage-knopf" style="display:none">Anfrage stellen</button>
+              <button class="btn" id="nochmal">Anderes File wählen</button>
+            </div>
           </div></div>
         </div>
       </div>
@@ -495,7 +519,7 @@ async function rufe(name, ...args) {
     return {fehler: "Unerwarteter Fehler: " + ((e && e.message) || e)};
   }
 }
-let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: ""};
+let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: "", optionen: [], felder: [], wunsch: new Set()};
 const ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* ---------- Begruessung ---------- */
@@ -697,12 +721,17 @@ async function pruefen(datei) {
   catch (e) { erg = {fehler: "Die Datei konnte nicht gelesen werden."}; }
   await new Promise(r => setTimeout(r, Math.max(0, 1800 - (Date.now() - beginn))));   // Animation kurz zeigen
   clearInterval(schrittTimer);
-  if (erg.fehler) return fehler(erg.fehler.includes("keine Lösung") ? "Keine Lösung gefunden" : "Das hat nicht geklappt", erg.fehler);
+  if (erg.fehler) {
+    zustand.entwurf = erg.anfrage ? erg : null;   // Original liegt auf dem Server -> Anfrage moeglich
+    return fehler(erg.anfrage ? "Noch nicht im Archiv" : "Das hat nicht geklappt", erg.fehler, erg.anfrage);
+  }
   auswahlZeigen(erg);
 }
-function fehler(titel, text) {
+function fehler(titel, text, anfrage = false) {
   $("#fehler-titel").textContent = titel;
   $("#fehler-text").textContent = text;
+  $("#anfrage-knopf").style.display = anfrage ? "" : "none";
+  $("#nochmal").className = anfrage ? "btn grau" : "btn";
   zeige("v-fehler");
   const box = $("#fehler-box"); box.classList.remove("wackeln"); void box.offsetWidth; box.classList.add("wackeln");
   ton(false);
@@ -758,6 +787,7 @@ async function senden() {
   }
   zustand.auftraege = erg.auftraege;
   listeMalen(erg.auftrag.id);
+  $("#erfolg-titel").textContent = "Auftrag gesendet";
   $("#erfolg-text").textContent = `„${erg.auftrag.option_name}“ wartet jetzt auf unsere Freigabe. Du bekommst hier Bescheid.`;
   zeige("v-erfolg");
   ton(true);
@@ -793,11 +823,14 @@ function listeMalen(hervorheben) {
       <span class="pille ${a.status}">${a.status === "WARTET" ? "<i></i>" : ""}<span></span></span></div>
       <div class="a-fuss"><span class="leise" style="font-size:12.5px"></span><span class="aktionen"></span></div>`;
     el.querySelector(".a-datei").textContent = a.datei;
-    el.querySelector(".a-info").textContent = (a.option_name || "–") + " · " + datum(a.zeit);
-    el.querySelector(".pille span").textContent = a.status_text || a.status;
+    el.querySelector(".a-info").textContent = (a.option_name || "–") + (a.fahrzeug ? " · " + a.fahrzeug : "") + " · " + datum(a.zeit);
+    if (a.typ === "anfrage") el.querySelector(".a-info").insertAdjacentHTML("afterbegin", '<span class="typ-anfrage">Anfrage</span>');
+    el.querySelector(".pille span").textContent = a.typ === "anfrage" ? {WARTET: "In Bearbeitung", FREIGEGEBEN: "Fertig"}[a.status] || a.status_text || a.status
+                                                                      : a.status_text || a.status;
     const unten = el.querySelector(".a-fuss .leise"), aktionen = el.querySelector(".aktionen");
     if (a.status === "ABGELEHNT") unten.textContent = a.grund ? "Grund: " + a.grund : "Bei Fragen melde dich gerne bei uns.";
-    else if (a.status === "WARTET") unten.textContent = "Wird gerade von uns geprüft …";
+    else if (a.status === "WARTET") unten.textContent = a.typ === "anfrage" ? "Wir machen dein File – du bekommst hier Bescheid."
+                                                                            : "Wird gerade von uns geprüft …";
     if (a.status === "FREIGEGEBEN") {
       const b = document.createElement("button"); b.className = "btn gruen klein mit-symbol"; b.innerHTML = SYMBOL_DOWNLOAD + "<span>Herunterladen</span>";
       b.addEventListener("click", () => herunterladen(a, b)); aktionen.appendChild(b);
@@ -832,16 +865,98 @@ async function aktualisieren() {
     zustand.auftraege = erg.auftraege;
     listeMalen(erg.geaendert[0].id);
     erg.geaendert.forEach(a => {
-      if (a.status === "FREIGEGEBEN") { toast("ok", "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 8000); konfetti(); ton(true); }
-      else if (a.status === "ABGELEHNT") { toast("fehler", "Abgelehnt", `${a.datei}${a.grund ? " – " + a.grund : ""}`, 9000); ton(false); }
+      if (a.status === "FREIGEGEBEN") { toast("ok", a.typ === "anfrage" ? "Dein File ist fertig! 🎉" : "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 10000); konfetti(); ton(true); }
+      else if (a.status === "ABGELEHNT") { toast("fehler", a.typ === "anfrage" ? "Anfrage abgelehnt" : "Abgelehnt", `${a.datei}${a.grund ? " – " + a.grund : ""}`, 9000); ton(false); }
     });
   } catch (e) {
   } finally { aktualisiertGerade = false; }
 }
 
+/* ---------- Anfrage (Ticket) ---------- */
+function anfrageZeigen() {
+  const e = zustand.entwurf; if (!e) return;
+  $("#af-chips").innerHTML = "";
+  [["Datei", e.datei], ["ECU", e.ecu], ["Software", e.software]].forEach(([k, v]) => {
+    const c = document.createElement("span"); c.className = "chip"; c.innerHTML = `${k} <b></b>`; c.querySelector("b").textContent = v || "?";
+    $("#af-chips").appendChild(c);
+  });
+  const felder = $("#af-felder"), alt = {};
+  felder.querySelectorAll(".feld").forEach(f => alt[f.dataset.key] = f.value);   // Eingaben behalten
+  felder.innerHTML = "";
+  (zustand.felder.length ? zustand.felder : [
+    {key: "marke", name: "Marke", pflicht: true}, {key: "modell", name: "Modell", pflicht: true},
+    {key: "baujahr", name: "Baujahr", pflicht: true}, {key: "motor", name: "Motor / Leistung", pflicht: true},
+    {key: "motorcode", name: "Motorcode", pflicht: false}, {key: "getriebe", name: "Getriebe", pflicht: false}]
+  ).forEach(f => {
+    const l = document.createElement("label");
+    l.innerHTML = "<span></span>";
+    l.querySelector("span").textContent = f.name;
+    if (f.pflicht) l.querySelector("span").insertAdjacentHTML("beforeend", " <b>*</b>");
+    let feld;
+    if (f.key === "getriebe") {
+      feld = document.createElement("select");
+      ["", "Schaltgetriebe", "Automatik", "DSG / Doppelkupplung", "Weiß ich nicht"].forEach(o => {
+        const op = document.createElement("option"); op.value = o; op.textContent = o || "– bitte wählen –"; feld.appendChild(op); });
+    } else {
+      feld = document.createElement("input"); feld.maxLength = 80;
+      feld.placeholder = {marke: "z. B. VW", modell: "z. B. Golf 7", baujahr: "z. B. 2016", motor: "z. B. 2.0 TDI 150 PS",
+                          motorcode: "z. B. CRLB"}[f.key] || "";
+    }
+    feld.className = "feld"; feld.dataset.key = f.key; feld.dataset.pflicht = f.pflicht ? "1" : "";
+    feld.value = alt[f.key] || "";
+    feld.addEventListener("input", () => feld.classList.remove("fehlt"));
+    l.appendChild(feld); felder.appendChild(l);
+  });
+  const wunsch = $("#af-wunsch"); wunsch.innerHTML = "";
+  zustand.wunsch = new Set();
+  zustand.optionen.forEach((o, i) => {
+    const k = document.createElement("div");
+    k.className = "loesung"; k.dataset.key = o.key; k.style.animationDelay = (0.05 + i * 0.05) + "s";
+    k.innerHTML = HAKEN + "<span></span>"; k.querySelector("span:last-child").textContent = o.name;
+    k.addEventListener("click", () => {
+      zustand.wunsch.has(o.key) ? zustand.wunsch.delete(o.key) : zustand.wunsch.add(o.key);
+      k.classList.toggle("an", zustand.wunsch.has(o.key));
+    });
+    wunsch.appendChild(k);
+  });
+  if (!zustand.optionen.length) wunsch.innerHTML = '<p class="leise">Keine Verbindung zum Server – bitte Programm neu starten.</p>';
+  $("#af-kontakt").value = $("#kontakt").value;
+  $("#af-senden").disabled = false; $("#af-senden").textContent = "Anfrage senden";
+  zeige("v-anfrage");
+  $("#v-anfrage").scrollTop = 0;
+}
+async function anfrageSenden() {
+  const fahrzeug = {}; let fehlt = null;
+  document.querySelectorAll("#af-felder .feld").forEach(f => {
+    fahrzeug[f.dataset.key] = f.value.trim();
+    if (f.dataset.pflicht && !f.value.trim()) { f.classList.add("fehlt"); fehlt = fehlt || f; }
+  });
+  if (fehlt) { fehlt.focus(); return toast("fehler", "Fahrzeugdaten fehlen", "Bitte alle Felder mit * ausfüllen.", 6000); }
+  const wunsch = zustand.optionen.map(o => o.key).filter(k => zustand.wunsch.has(k));
+  if (!wunsch.length) return toast("fehler", "Was brauchst du?", "Bitte mindestens eine Lösung auswählen.", 6000);
+  const b = $("#af-senden"); b.disabled = true; b.textContent = "Wird gesendet …";
+  const erg = await rufe("anfrage", zustand.entwurf.id, fahrzeug, wunsch, $("#af-nachricht").value, $("#af-kontakt").value);
+  if (erg.fehler || !erg.auftrag) {
+    b.disabled = false; b.textContent = "Anfrage senden";
+    return toast("fehler", "Nicht gesendet", erg.fehler || "Unerwartete Antwort. Bitte nochmal versuchen.", 8000);
+  }
+  $("#kontakt").value = $("#af-kontakt").value;
+  $("#af-nachricht").value = "";
+  document.querySelectorAll("#af-felder .feld").forEach(f => f.value = "");
+  zustand.auftraege = erg.auftraege;
+  listeMalen(erg.auftrag.id);
+  $("#erfolg-titel").textContent = "Anfrage gesendet";
+  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm hier – du kannst es dann direkt herunterladen.";
+  zeige("v-erfolg");
+  ton(true);
+}
+
 /* ---------- Ereignisse ---------- */
+$("#anfrage-knopf").addEventListener("click", anfrageZeigen);
+$("#andere-anfrage").addEventListener("click", anfrageZeigen);
+$("#af-senden").addEventListener("click", anfrageSenden);
+$("#af-abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#suche").addEventListener("input", e => { zustand.suche = e.target.value; listeMalen(); });
-$("#whatsapp").addEventListener("click", () => { rufe("whatsapp"); });
 document.addEventListener("keydown", e => {
   if (e.key === "F11") { e.preventDefault(); rufe("vollbild"); }
   if (e.key === "Escape") $("#dialog").classList.remove("offen");
@@ -868,6 +983,8 @@ $("#server-speichern").addEventListener("click", async () => {
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
   zustand.original = d.original || "original";
+  zustand.optionen = d.optionen || [];
+  zustand.felder = d.fahrzeug_felder || [];
   zustand.auftraege = d.auftraege || [];
   $("#kontakt").value = d.kontakt || "";
   $("#server-feld").value = d.server || "";

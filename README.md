@@ -111,7 +111,19 @@ das Programm fragt den Status selbst ab und meldet sich.
 - **Admin-Bereich** (`/login`): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
-Kein Treffer? Dann meldet das Programm „Für dieses File haben wir leider noch keine Lösung“, es entsteht kein Auftrag.
+## Anfragen (Tickets)
+Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wird? Dann klickt er im Programm
+**„Anfrage stellen“**:
+
+1. Pflicht: **Marke, Modell, Baujahr, Motor/Leistung** (optional Motorcode, Getriebe, Nachricht, Kontakt) und
+   mindestens eine gewünschte Lösung (Stage 1, Pops & Bangs, eigene Lösungen …).
+2. Das Original liegt dabei schon auf dem Server (wird beim Prüfen gespeichert, nicht abgeschickte Entwürfe
+   werden nach 1 Tag gelöscht).
+3. Du bekommst in **Telegram** die Anfrage mit allen Fahrzeugdaten und **das Original direkt als Datei**
+   (Knopf „Ablehnen“ + Link in den Admin-Bereich). Im Admin-Bereich steht sie unter „Offene Anfragen“.
+4. File bearbeiten → im Admin-Bereich bei der Anfrage **„Hochladen & an Kunden schicken“** (optional mit
+   Archivname, dann bekommt der nächste Kunde mit dem File es automatisch). Oder **ablehnen** mit Grund.
+5. Das Programm des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
 
 ## Admin-Bereich
 | Seite | Was |
@@ -126,33 +138,6 @@ Kein Treffer? Dann meldet das Programm „Für dieses File haben wir leider noch
 3. Einstellungen neu laden → Chat erscheint → „übernehmen“ → „Telegram testen“.
 
 Nur Knopfdrücke aus diesem Chat werden angenommen.
-
-## WhatsApp (optional, statt oder zusätzlich zu Telegram)
-Die normale WhatsApp-Business-**App** hat keine Schnittstelle. Benötigt wird die **WhatsApp Business Platform
-(Cloud API)** von Meta. Mit „Coexistence“ kann deine bestehende Business-Nummer dabei in der App weiterlaufen.
-Die Meldung geht *von* der Business-Nummer *an* eine andere Nummer (z. B. dein privates WhatsApp).
-
-1. **Meta-App anlegen:** developers.facebook.com → „App erstellen“ → Typ *Business* → Produkt **WhatsApp** hinzufügen.
-2. **Nummer verbinden** (Coexistence per QR-Code aus der Business-App, sonst über einen Anbieter wie 360dialog
-   oder mit einer zweiten Nummer) → **Phone-Number-ID** → `whatsapp_phone_id`.
-3. **Dauerhafter Token:** business.facebook.com → Einstellungen → Systemnutzer → Token mit
-   `whatsapp_business_messaging` → `whatsapp_token`.
-4. **Vorlage** (WhatsApp Manager → Nachrichtenvorlagen), muss von Meta genehmigt werden:
-   Name `neuer_auftrag`, Kategorie **Utility**, Sprache **Deutsch (de)**, Text:
-   ```
-   Neuer Tuning-Auftrag: {{1}}
-   Datei: {{2}}
-   ECU: {{3}}
-   Kontakt: {{4}}
-   Automatik: {{5}}
-   ```
-   Schaltflächen: **Schnellantwort** „Bestätigen“ (1.) und „Ablehnen“ (2.), genau in dieser Reihenfolge.
-5. **Webhook:** Callback-URL `https://deine-seite.de/whatsapp/webhook`, Verify-Token = `whatsapp_verify_token`,
-   Feld **messages** abonnieren, App-Geheimcode → `whatsapp_app_secret`.
-6. `whatsapp_empfaenger`: deine Nummer(n) mit Ländervorwahl, z. B. `["4917612345678"]`.
-7. Werte in `config.json` auf dem Server eintragen (Vorlage: `config.example.json`), `python app.py whatsapp-test`.
-
-Kosten: Meta berechnet Vorlagen-Nachrichten pro Stück (wenige Cent; aktuelle Preise bei Meta prüfen).
 
 ---
 
