@@ -161,9 +161,9 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
   transition:opacity .45s var(--feder),transform .55s var(--feder),visibility .45s}
 .ansicht.aktiv{opacity:1;visibility:visible;transform:none}
 .ansicht.raus{transform:translateX(-30px)}
-#v-anfrage{overflow-y:auto;overflow-x:hidden;padding-right:6px}
-#v-anfrage > *{flex:none}
-#v-anfrage .loesungen{overflow:visible;margin:10px 0 0;padding:0}
+#v-anfrage,#v-auswahl{overflow-y:auto;overflow-x:hidden;padding-right:6px}
+#v-anfrage > *,#v-auswahl > *{flex:none}
+#v-anfrage .loesungen,#v-auswahl .loesungen{overflow:visible;margin:10px 0 0;padding:0}
 .fz-raster{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:14px}
 .fz-raster label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--leise,#a1a1a6)}
 .fz-raster label b{color:var(--rot,#ff453a);font-weight:600}
@@ -172,6 +172,20 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 textarea.feld{resize:vertical;min-height:70px;font:inherit;color:inherit}
 select.feld{appearance:none;color:inherit;font:inherit}
 select.feld option{background:#1c1c1e}
+.loesung .preis{display:block;margin-top:4px;font-size:.82em;font-weight:500;color:var(--leise)}
+.gesamt{margin-top:14px;display:flex;align-items:baseline;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;padding:10px 16px;
+  border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rand)}
+.gesamt b{font-size:20px;letter-spacing:-.02em}
+.gesamt span{font-size:13px;color:var(--leise)}
+.btn.bezahlen{background:linear-gradient(135deg,#ffd60a,#ff9f0a);color:#1c1c1e;box-shadow:0 8px 26px rgba(255,159,10,.35);white-space:nowrap;flex:none}
+#zahl-dialog{position:fixed;inset:0;z-index:48;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.6);
+  backdrop-filter:blur(10px);opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+#zahl-dialog.offen{opacity:1;visibility:visible}
+#zahl-dialog .karte{width:min(480px,100%);transform:scale(.95);transition:transform .35s var(--feder);animation:none}
+#zahl-dialog.offen .karte{transform:none}
+#zahl-dialog .betrag{font-size:34px;font-weight:700;letter-spacing:-.03em;margin:6px 0 4px}
+#zahl-dialog label{display:flex;gap:12px;align-items:flex-start;margin-top:16px;font-size:13.5px;color:var(--leise);cursor:pointer;user-select:auto}
+#zahl-dialog input[type=checkbox]{flex:none;width:20px;height:20px;margin-top:1px;accent-color:#ff9f0a}
 .anfrage-link{position:relative;flex:none;margin-top:18px;display:flex;align-items:center;gap:16px;width:100%;padding:16px 18px;
   border-radius:18px;cursor:pointer;text-align:left;color:var(--text);font:inherit;border:1.5px solid transparent;
   background:linear-gradient(rgba(16,16,22,.92),rgba(16,16,22,.92)) padding-box,
@@ -292,8 +306,8 @@ select.feld option{background:#1c1c1e}
 .a-kopf{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .a-datei{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .a-info{font-size:12.5px;color:var(--leise);margin-top:2px}
-.a-fuss{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px}
-.aktionen{display:flex;align-items:center;gap:6px}
+.a-fuss{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap}
+.aktionen{display:flex;align-items:center;gap:6px;margin-left:auto}
 .pille{flex:none;display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:600}
 .pille.WARTET{background:rgba(255,214,10,.12);color:var(--warn)}
 .pille.WARTET i{width:7px;height:7px;border-radius:50%;background:var(--warn);animation:blinken 1.4s ease-in-out infinite}
@@ -354,6 +368,19 @@ select.feld option{background:#1c1c1e}
 <canvas id="netz"></canvas>
 <div class="raster"></div>
 <div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
+<div id="zahl-dialog"><div class="karte">
+  <h2>Jetzt bezahlen</h2>
+  <p class="leise" style="margin-top:6px" id="zd-was"></p>
+  <div class="betrag" id="zd-betrag"></div>
+  <p class="leise" style="font-size:13px">Du wirst zur sicheren Bezahlseite von Stripe weitergeleitet (Karte, Apple Pay, PayPal …).
+    Danach kommst du automatisch hierher zurück und kannst dein File herunterladen. Die Rechnung kommt per E-Mail.</p>
+  <label><input type="checkbox" id="zd-ok"><span>Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung
+    beginnt. Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere.</span></label>
+  <div class="knoepfe">
+    <button class="btn bezahlen" id="zd-los" disabled>Weiter zur Bezahlung</button>
+    <button class="btn grau" id="zd-zu">Abbrechen</button>
+  </div>
+</div></div>
 <canvas id="konfetti"></canvas>
 <div id="toasts"></div>
 
@@ -437,6 +464,8 @@ select.feld option{background:#1c1c1e}
           <div class="chips" id="aw-chips"></div>
           <h2 id="aw-titel">Verfügbare Lösungen</h2>
           <div class="loesungen" id="aw-loesungen" style="margin-top:10px"></div>
+          <div class="gesamt" id="aw-gesamt" style="display:none"><span>Preis</span><b id="aw-summe"></b>
+            <span style="flex-basis:100%">Bezahlt wird erst, nachdem wir deinen Auftrag freigegeben haben.</span></div>
           <input class="feld" id="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
           <div class="knoepfe">
             <button class="btn" id="senden">Auftrag senden</button>
@@ -537,7 +566,8 @@ const lokal = {
   schreiben(d) { try { localStorage.setItem(SPEICHER, JSON.stringify(d)); } catch (e) {} },
   merken(a) {
     const d = this.lesen(), alt = d.auftraege.find(x => x.id === a.id) || {}, neu = {...alt};
-    ["id", "datei", "zeit", "status", "status_text", "option", "option_name", "grund", "ecu", "software", "typ", "fahrzeug"]
+    ["id", "datei", "zeit", "status", "status_text", "option", "option_name", "grund", "ecu", "software", "typ", "fahrzeug",
+     "preis", "preis_text", "zahlung"]
       .forEach(k => { if (k in a) neu[k] = a[k]; });
     d.auftraege = [neu, ...d.auftraege.filter(x => x.id !== a.id)].slice(0, 200);
     this.schreiben(d); return d.auftraege;
@@ -561,10 +591,12 @@ async function server(pfad, optionen = {}) {
 const json = (methode, daten) => ({method: methode, headers: {"Content-Type": "application/json"}, body: JSON.stringify(daten)});
 const WEB = {
   async start() {
-    const d = lokal.lesen(), erg = {kontakt: d.kontakt, auftraege: d.auftraege, firma: null, original: "original", optionen: [], fahrzeug_felder: []};
+    const d = lokal.lesen(), erg = {kontakt: d.kontakt, auftraege: d.auftraege, firma: null, original: "original", optionen: [], fahrzeug_felder: [],
+                                    zahlung_aktiv: false, preise: {}};
     try {
       const {daten: i} = await server("/api/info");
-      Object.assign(erg, {firma: i.firma, original: i.original || "original", optionen: i.optionen || [], fahrzeug_felder: i.fahrzeug_felder || []});
+      Object.assign(erg, {firma: i.firma, original: i.original || "original", optionen: i.optionen || [], fahrzeug_felder: i.fahrzeug_felder || [],
+                          zahlung_aktiv: !!i.zahlung_aktiv, preise: i.preise || {}});
     } catch (e) { erg.verbindung = e.message; }
     return erg;
   },
@@ -593,10 +625,11 @@ const WEB = {
   },
   async aktualisieren() {
     const geaendert = [];
-    for (const alt of lokal.lesen().auftraege.filter(a => a.status === "WARTET")) {
+    // wartende Auftraege und freigegebene, die noch bezahlt werden muessen
+    for (const alt of lokal.lesen().auftraege.filter(a => a.status === "WARTET" || a.zahlung === "offen")) {
       try {
         const {daten: neu} = await server(`/api/auftrag/${encodeURIComponent(alt.id)}`);
-        if (neu.status !== alt.status) geaendert.push(neu);
+        if (neu.status !== alt.status || neu.zahlung !== alt.zahlung) geaendert.push(neu);
         lokal.merken(neu);
       } catch (e) {}
     }
@@ -614,6 +647,14 @@ const WEB = {
       return {pfad: name};
     } catch (e) { return {fehler: e.message}; }
   },
+  async bezahlen(aid) {
+    try { return (await server(`/api/auftrag/${encodeURIComponent(aid)}/bezahlen`, json("POST", {zustimmung: true}))).daten; }
+    catch (e) { return {fehler: e.message}; }
+  },
+  async status(aid) {
+    try { const {daten: a} = await server(`/api/auftrag/${encodeURIComponent(aid)}`); lokal.merken(a); return {auftrag: a, auftraege: lokal.lesen().auftraege}; }
+    catch (e) { return {fehler: e.message}; }
+  },
   async entfernen(aid) {
     const d = lokal.lesen(); d.auftraege = d.auftraege.filter(x => x.id !== aid); lokal.schreiben(d);
     return {auftraege: d.auftraege};
@@ -628,7 +669,7 @@ async function rufe(name, ...args) {
     return {fehler: "Unerwarteter Fehler: " + ((e && e.message) || e)};
   }
 }
-let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: "", optionen: [], felder: [], wunsch: new Set()};
+let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: "", optionen: [], felder: [], wunsch: new Set(), zahlung: false, preise: {}};
 const ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
 /* Vergroesserung auf grossen Monitoren (CSS zoom) - Mauspositionen umrechnen */
 const zoomFaktor = () => parseFloat(getComputedStyle(document.querySelector(".app")).zoom) || 1;
@@ -866,6 +907,10 @@ function auswahlZeigen(a) {
     const k = document.createElement("div");
     k.className = "loesung"; k.dataset.key = o.key; k.style.animationDelay = (0.08 + i * 0.07) + "s";
     k.innerHTML = HAKEN + "<span></span>"; k.querySelector("span:last-child").textContent = o.name;
+    if (zustand.zahlung && zustand.preise[o.key]) {
+      const p = document.createElement("span"); p.className = "preis"; p.textContent = euro(zustand.preise[o.key]);
+      k.querySelector("span:last-child").appendChild(p);
+    }
     k.addEventListener("click", () => umschalten(o.key));
     feld.appendChild(k);
   });
@@ -883,8 +928,14 @@ function umschalten(key) {
   auswahlMalen();
 }
 function auswahlMalen() {
-  document.querySelectorAll(".loesung").forEach(k => k.classList.toggle("an", zustand.auswahl.has(k.dataset.key)));
+  document.querySelectorAll("#aw-loesungen .loesung").forEach(k => k.classList.toggle("an", zustand.auswahl.has(k.dataset.key)));
   $("#senden").disabled = zustand.auswahl.size === 0;
+  const summe = [...zustand.auswahl].reduce((s, k) => s + (zustand.preise[k] || 0), 0);
+  $("#aw-gesamt").style.display = zustand.zahlung && summe > 0 ? "" : "none";
+  $("#aw-summe").textContent = euro(summe);
+}
+function euro(cent) {
+  return ((cent || 0) / 100).toLocaleString("de-DE", {style: "currency", currency: "EUR"});
 }
 async function senden() {
   const b = $("#senden"); b.disabled = true; b.textContent = "Wird gesendet …";
@@ -930,18 +981,26 @@ function listeMalen(hervorheben) {
     el.className = "auftrag" + (a.id === hervorheben ? " neu" : "");
     el.style.animationDelay = (i * 0.04) + "s";
     el.innerHTML = `<div class="a-kopf"><div style="min-width:0"><div class="a-datei"></div><div class="a-info"></div></div>
-      <span class="pille ${a.status}">${a.status === "WARTET" ? "<i></i>" : ""}<span></span></span></div>
+      <span class="pille ${a.zahlung === "offen" ? "WARTET" : a.status}">${a.status === "WARTET" || a.zahlung === "offen" ? "<i></i>" : ""}<span></span></span></div>
       <div class="a-fuss"><span class="leise" style="font-size:12.5px"></span><span class="aktionen"></span></div>`;
     el.querySelector(".a-datei").textContent = a.datei;
     el.querySelector(".a-info").textContent = (a.option_name || "–") + (a.fahrzeug ? " · " + a.fahrzeug : "") + " · " + datum(a.zeit);
     if (a.typ === "anfrage") el.querySelector(".a-info").insertAdjacentHTML("afterbegin", '<span class="typ-anfrage">Anfrage</span>');
-    el.querySelector(".pille span").textContent = a.typ === "anfrage" ? {WARTET: "In Bearbeitung", FREIGEGEBEN: "Fertig"}[a.status] || a.status_text || a.status
-                                                                      : a.status_text || a.status;
+    el.querySelector(".pille span").textContent = a.zahlung === "offen" ? "Bitte bezahlen"
+      : a.typ === "anfrage" ? {WARTET: "In Bearbeitung", FREIGEGEBEN: "Fertig"}[a.status] || a.status_text || a.status
+      : a.status_text || a.status;
     const unten = el.querySelector(".a-fuss .leise"), aktionen = el.querySelector(".aktionen");
     if (a.status === "ABGELEHNT") unten.textContent = a.grund ? "Grund: " + a.grund : "Bei Fragen melde dich gerne bei uns.";
     else if (a.status === "WARTET") unten.textContent = a.typ === "anfrage" ? "Wir machen dein File – du bekommst hier Bescheid."
                                                                             : "Wird gerade von uns geprüft …";
-    if (a.status === "FREIGEGEBEN") {
+    else if (a.status === "WARTET" && a.preis_text) unten.textContent += " · " + a.preis_text;
+    if (a.status === "FREIGEGEBEN" && a.zahlung === "offen") {
+      unten.textContent = "Freigegeben – nach der Zahlung kannst du herunterladen.";
+      const b = document.createElement("button"); b.className = "btn bezahlen klein";
+      b.textContent = "Jetzt bezahlen · " + (a.preis_text || euro(a.preis));
+      b.addEventListener("click", () => bezahlenDialog(a)); aktionen.appendChild(b);
+    } else if (a.status === "FREIGEGEBEN") {
+      if (a.zahlung === "bezahlt") unten.textContent = "Bezahlt ✓";
       const b = document.createElement("button"); b.className = "btn gruen klein mit-symbol"; b.innerHTML = SYMBOL_DOWNLOAD + "<span>Herunterladen</span>";
       b.addEventListener("click", () => herunterladen(a, b)); aktionen.appendChild(b);
     }
@@ -974,11 +1033,54 @@ async function aktualisieren() {
     zustand.auftraege = erg.auftraege;
     listeMalen(erg.geaendert[0].id);
     erg.geaendert.forEach(a => {
-      if (a.status === "FREIGEGEBEN") { toast("ok", a.typ === "anfrage" ? "Dein File ist fertig! 🎉" : "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 10000); konfetti(); ton(true); }
+      if (a.status === "FREIGEGEBEN" && a.zahlung === "offen") { toast("ok", a.typ === "anfrage" ? "Dein File ist fertig! 🎉" : "Freigegeben! 🎉", `${a.option_name} für ${a.datei}: jetzt bezahlen und herunterladen.`, 10000); konfetti(); ton(true); }
+      else if (a.status === "FREIGEGEBEN" && a.zahlung === "bezahlt") { toast("ok", "Bezahlt – danke! 🎉", `${a.datei} kann jetzt heruntergeladen werden.`, 10000); konfetti(); ton(true); }
+      else if (a.status === "FREIGEGEBEN") { toast("ok", a.typ === "anfrage" ? "Dein File ist fertig! 🎉" : "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 10000); konfetti(); ton(true); }
       else if (a.status === "ABGELEHNT") { toast("fehler", a.typ === "anfrage" ? "Anfrage abgelehnt" : "Abgelehnt", `${a.datei}${a.grund ? " – " + a.grund : ""}`, 9000); ton(false); }
     });
   } catch (e) {
   } finally { aktualisiertGerade = false; }
+}
+
+/* ---------- Bezahlen (Stripe) ---------- */
+let zahlAuftrag = null;
+function bezahlenDialog(a) {
+  zahlAuftrag = a;
+  $("#zd-was").textContent = `${a.option_name} · ${a.datei}`;
+  $("#zd-betrag").textContent = a.preis_text || euro(a.preis);
+  $("#zd-ok").checked = false; $("#zd-los").disabled = true; $("#zd-los").textContent = "Weiter zur Bezahlung";
+  $("#zahl-dialog").classList.add("offen");
+}
+$("#zd-ok").addEventListener("change", e => { $("#zd-los").disabled = !e.target.checked; });
+$("#zd-zu").addEventListener("click", () => $("#zahl-dialog").classList.remove("offen"));
+$("#zahl-dialog").addEventListener("click", e => { if (e.target.id === "zahl-dialog") $("#zahl-dialog").classList.remove("offen"); });
+$("#zd-los").addEventListener("click", async () => {
+  const b = $("#zd-los"); b.disabled = true; b.textContent = "Bezahlseite wird geöffnet …";
+  const erg = await rufe("bezahlen", zahlAuftrag.id);
+  if (erg.url) { location.href = erg.url; return; }
+  b.disabled = false; b.textContent = "Weiter zur Bezahlung";
+  $("#zahl-dialog").classList.remove("offen");
+  toast("fehler", "Bezahlen nicht möglich", erg.fehler || "Bitte gleich nochmal versuchen.", 9000);
+  aktualisieren();
+});
+async function zurueckVonStripe() {
+  const q = new URLSearchParams(location.search), aid = q.get("bezahlt"), weg = q.get("abgebrochen");
+  if (!aid && !weg) return;
+  history.replaceState(null, "", location.pathname);   // Parameter aus der Adresse entfernen
+  if (weg) return toast("fehler", "Zahlung abgebrochen", "Kein Problem – du kannst jederzeit erneut auf „Jetzt bezahlen“ klicken.", 8000);
+  toast("ok", "Zahlung wird bestätigt …", "Einen Moment, gleich kannst du herunterladen.", 4000);
+  for (let i = 0; i < 15; i++) {   // Stripe meldet die Zahlung meist nach wenigen Sekunden
+    const erg = await rufe("status", aid);
+    if (erg.auftrag) {
+      zustand.auftraege = erg.auftraege; listeMalen(aid);
+      if (erg.auftrag.zahlung !== "offen") {
+        toast("ok", "Bezahlt – danke! 🎉", "Dein File kann jetzt heruntergeladen werden.", 10000); konfetti(); ton(true);
+        return;
+      }
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  toast("fehler", "Zahlung noch nicht bestätigt", "Das kann bei manchen Zahlarten etwas dauern. Die Seite meldet sich automatisch.", 10000);
 }
 
 /* ---------- Anfrage (Ticket) ---------- */
@@ -1022,6 +1124,10 @@ function anfrageZeigen() {
     const k = document.createElement("div");
     k.className = "loesung"; k.dataset.key = o.key; k.style.animationDelay = (0.05 + i * 0.05) + "s";
     k.innerHTML = HAKEN + "<span></span>"; k.querySelector("span:last-child").textContent = o.name;
+    if (zustand.zahlung && zustand.preise[o.key]) {
+      const p = document.createElement("span"); p.className = "preis"; p.textContent = euro(zustand.preise[o.key]);
+      k.querySelector("span:last-child").appendChild(p);
+    }
     k.addEventListener("click", () => {
       zustand.wunsch.has(o.key) ? zustand.wunsch.delete(o.key) : zustand.wunsch.add(o.key);
       k.classList.toggle("an", zustand.wunsch.has(o.key));
@@ -1082,6 +1188,8 @@ function starten(d, mitIntro) {
   zustand.original = d.original || "original";
   zustand.optionen = d.optionen || [];
   zustand.felder = d.fahrzeug_felder || [];
+  zustand.zahlung = !!d.zahlung_aktiv;
+  zustand.preise = d.preise || {};
   zustand.auftraege = d.auftraege || [];
   $("#kontakt").value = d.kontakt || "";
   requestAnimationFrame(schieberSetzen);
@@ -1102,6 +1210,7 @@ async function init() {
   }, Math.max(300, 2100 - (Date.now() - beginn)));
   setInterval(aktualisieren, 8000);
   setTimeout(aktualisieren, 2500);
+  zurueckVonStripe();
 }
 init();
 </script>

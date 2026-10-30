@@ -125,6 +125,23 @@ Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wir
    Archivname, dann bekommt der nächste Kunde mit dem File es automatisch). Oder **ablehnen** mit Grund.
 5. Die Seite des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
 
+## Bezahlen mit Stripe
+Ablauf: Kunde wählt Lösungen (Preise werden angezeigt, mehrere werden addiert) → Auftrag → **du gibst frei** →
+Kunde klickt „Jetzt bezahlen“, bestätigt den Hinweis zum Widerrufsrecht und bezahlt auf der Stripe-Bezahlseite →
+Stripe meldet die Zahlung (Webhook, zusätzlich fragt der Server selbst nach) → **Download wird freigeschaltet**.
+Vorher liefert der Download nur „Bitte zuerst bezahlen“. Stripe schickt dem Kunden die Rechnung per E-Mail.
+
+Einrichten (Admin → Einstellungen → „Bezahlen mit Stripe“):
+1. Stripe → Entwickler → API-Schlüssel → geheimen Schlüssel (`sk_live_…`, zum Ausprobieren `sk_test_…`) eintragen.
+2. Stripe → Entwickler → Webhooks → Endpunkt `https://deine-seite.de/stripe/webhook` mit den Ereignissen
+   `checkout.session.completed` und `checkout.session.async_payment_succeeded` → Signaturgeheimnis (`whsec_…`) eintragen.
+3. „Stripe testen“. Zahlungsarten (Karte, Apple Pay, PayPal, Klarna …) stellst du in Stripe ein.
+4. Admin → Archiv → **Preise** eintragen. Ohne Preis = kostenlos. Beim Freigeben kannst du den Preis für einen
+   einzelnen Auftrag ändern, bei Anfragen trägst du ihn beim Hochladen des fertigen Files ein.
+
+Ohne Stripe-Schlüssel ist Bezahlen aus und alles läuft wie vorher. Die Schlüssel werden nie angezeigt.
+Im Testmodus (`sk_test_…`) mit der Testkarte 4242 4242 4242 4242, beliebiges Datum in der Zukunft, beliebige Prüfziffer.
+
 ## Admin-Bereich
 | Seite | Was |
 |---|---|

@@ -16,6 +16,7 @@ Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den A
 
 import getpass
 import hashlib
+import hmac
 import html
 import json
 import os
@@ -27,6 +28,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
@@ -156,8 +158,9 @@ def hat_file(aid: str) -> bool:
     return (AUFTRAEGE / aid / "ergebnis.bin").exists()
 
 
-def entscheide(aid: str, freigeben: bool, grund: str = "", wer: str = "") -> str:
-    """Auftrag freigeben oder ablehnen. Wird von Webseite und Telegram genutzt."""
+def entscheide(aid: str, freigeben: bool, grund: str = "", wer: str = "", preis: int = None) -> str:
+    """Auftrag freigeben oder ablehnen. Wird von Webseite und Telegram genutzt.
+    preis (Cent): anderer Preis fuer genau diesen Auftrag (sonst der beim Bestellen berechnete)."""
     with sperre:
         auftrag = finde_auftrag(aid)
         if auftrag is None:
@@ -167,6 +170,8 @@ def entscheide(aid: str, freigeben: bool, grund: str = "", wer: str = "") -> str
         if freigeben and not hat_file(aid):
             return "Kein File vorhanden. Erst die fertige Datei hochladen."
         auftrag["status"] = "FREIGEGEBEN" if freigeben else "ABGELEHNT"
+        if freigeben and preis is not None:
+            auftrag["preis"] = preis
         auftrag["grund"] = grund.strip()[:300]
         auftrag["entschieden"] = datetime.now().isoformat(timespec="seconds")
         auftrag["entschieden_von"] = wer
@@ -208,13 +213,23 @@ def telegram_text(a: dict) -> str:
          else f"Treffer: 100 % – {ART_TEXT.get(a['art'], a['art'])}"),
         f"Quelle: {a['quelle'] or '–'}",
     ]
+    if zahlung_aktiv() and a.get("preis"):
+        zeilen.append(f"Preis: {euro(a['preis'])}")
     if a["status"] == "WARTET" and not lade_config().get("basis_url", "").startswith("https://"):
         zeilen.append("\nDetails im Admin-Bereich.")
     if a["status"] == "FREIGEGEBEN":
-        zeilen.append("\n✅ <b>FREIGEGEBEN</b>")
+        zeilen.append("\n✅ <b>FREIGEGEBEN</b>" + zahlung_zeile(a))
     elif a["status"] == "ABGELEHNT":
         zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {a['grund']}" if a.get("grund") else ""))
     return "\n".join(zeilen)
+
+
+def zahlung_zeile(a: dict) -> str:
+    if a.get("bezahlt"):
+        return f"\n💶 <b>BEZAHLT</b> ({euro(a.get('betrag') or a.get('preis') or 0)})"
+    if zahlung_offen(a):
+        return f"\n⏳ Zahlung offen ({euro(a['preis'])})"
+    return ""
 
 
 def telegram_text_anfrage(a: dict) -> str:
@@ -227,7 +242,7 @@ def telegram_text_anfrage(a: dict) -> str:
         zeilen.append("\nOriginal und alle Angaben im Admin-Bereich. Fertiges File dort hochladen – "
                       "dann bekommt der Kunde es automatisch auf der Seite.")
     elif a["status"] == "FREIGEGEBEN":
-        zeilen.append("\n✅ <b>FERTIG – an den Kunden geschickt</b>")
+        zeilen.append("\n✅ <b>FERTIG – an den Kunden geschickt</b>" + zahlung_zeile(a))
     elif a["status"] == "ABGELEHNT":
         zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {e(a['grund'])}" if a.get("grund") else ""))
     return "\n".join(zeilen)
@@ -358,8 +373,8 @@ def upload_limit():
 
 @app.before_request
 def csrf_pruefen():
-    if request.path.startswith("/api/"):
-        return  # die API nutzt keine Cookies (Zugriff ueber die geheime Auftragsnummer)
+    if request.path.startswith("/api/") or request.path == "/stripe/webhook":
+        return  # API: keine Cookies (Zugriff ueber die geheime Auftragsnummer); Stripe signiert selbst
     session.setdefault("csrf", secrets.token_hex(16))
     if request.method == "POST" and request.form.get("csrf") != session["csrf"]:
         abort(400)
@@ -490,6 +505,7 @@ def anfrage_abschicken(aid: str, fahrzeug: dict, wunsch: list, nachricht: str, k
         for rest in ordner.glob("loesung_*.bin"):
             rest.unlink()
         auftrag.update(typ="anfrage", option="+".join(wunsch), status="WARTET", art="anfrage", quelle="",
+                       preis=preis_von(wunsch),
                        fahrzeug=fz, nachricht=str(nachricht or "").strip()[:1000],
                        kunde=str(kontakt or "").strip()[:100] or "–", angebot={},
                        zeit=datetime.now().isoformat(timespec="seconds"))
@@ -533,7 +549,7 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
         arten = {angebot[o]["art"] for o in auswahl}
         art = ("softwarenummer" if "softwarenummer" in arten
                else "identisch" if arten == {"identisch"} else "gleiche Stellen")
-        auftrag.update(option="+".join(auswahl), status="WARTET",
+        auftrag.update(option="+".join(auswahl), status="WARTET", preis=preis_von(auswahl),
                        kunde=kontakt.strip()[:100] or "–",
                        quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
                        art=art,
@@ -541,6 +557,191 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
         speichere_auftrag(auftrag)
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
     return auftrag
+
+
+# ---------------------------------------------------------------------------
+# Bezahlen mit Stripe: erst Freigabe, dann Zahlung, dann Download
+# ---------------------------------------------------------------------------
+
+STRIPE_API = "https://api.stripe.com/v1"
+ZUSTIMMUNG_TEXT = ("Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung beginnt. "
+                   "Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere.")
+_stripe_zuletzt = {}   # Auftrag -> Zeitpunkt der letzten Nachfrage bei Stripe (nicht oefter als alle 5 s)
+
+
+def zahlung_aktiv() -> bool:
+    return bool(lade_config().get("stripe_key"))
+
+
+def preise() -> dict:
+    """Feste Preise pro Loesung in Cent (Admin -> Archiv -> Lösungen)."""
+    roh = lade_config().get("preise") or {}
+    return {k: v for k, v in roh.items() if isinstance(v, int) and v > 0}
+
+
+def preis_von(optionen) -> int:
+    p = preise()
+    return sum(p.get(o, 0) for o in optionen)
+
+
+def euro(cent: int) -> str:
+    text = f"{(cent or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{text} €"
+
+
+def cent_aus(text: str) -> int:
+    """'249', '249,00', '1.249,50 €' -> Cent."""
+    t = str(text).replace("€", "").replace(" ", "").strip()
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    try:
+        wert = round(float(t) * 100)
+    except ValueError:
+        raise ValueError(f"„{text}“ ist kein gültiger Preis.")
+    if wert < 0 or wert > 10_000_000:
+        raise ValueError(f"„{text}“ ist kein gültiger Preis.")
+    return wert
+
+
+def zahlung_offen(a: dict) -> bool:
+    return (a.get("status") == "FREIGEGEBEN" and (a.get("preis") or 0) > 0 and not a.get("bezahlt")
+            and zahlung_aktiv())
+
+
+def stripe_anfrage(methode: str, pfad: str, felder: list = None) -> dict:
+    schluessel = lade_config().get("stripe_key", "")
+    daten = urllib.parse.urlencode(felder).encode() if felder is not None else None
+    req = urllib.request.Request(STRIPE_API + pfad, data=daten, method=methode,
+                                 headers={"Authorization": f"Bearer {schluessel}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            text = json.loads(e.read())["error"]["message"]
+        except Exception:
+            text = f"HTTP {e.code}"
+        raise RuntimeError(f"Stripe: {text}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise RuntimeError(f"Stripe nicht erreichbar: {e}")
+
+
+def basis_adresse() -> str:
+    basis = lade_config().get("basis_url", "").rstrip("/")
+    return basis if basis.startswith(("https://", "http://")) else request.host_url.rstrip("/")
+
+
+def bezahlen_starten(aid: str, zustimmung: bool) -> str:
+    """Stripe-Bezahlseite fuer einen freigegebenen Auftrag -> URL."""
+    auftrag = finde_auftrag(aid)
+    if auftrag is None:
+        raise Abgelehnt("Auftrag nicht gefunden.")
+    if not zahlung_offen(auftrag):
+        raise Abgelehnt("Für diesen Auftrag ist nichts zu bezahlen.")
+    if not zustimmung:
+        raise Abgelehnt("Bitte bestätige vorher den Hinweis zum Widerrufsrecht.")
+    if zu_viele("bezahlen", 20, 3600):
+        raise Abgelehnt("Zu viele Versuche. Bitte später nochmal.")
+    merken("bezahlen")
+    try:
+        if auftrag.get("stripe_session"):   # noch offene Bezahlseite weiterverwenden
+            s = stripe_anfrage("GET", f"/checkout/sessions/{auftrag['stripe_session']}")
+            if s.get("payment_status") == "paid":
+                zahlung_verbuchen(s)
+                raise Abgelehnt("Schon bezahlt – du kannst jetzt herunterladen.")
+            if s.get("status") == "open" and s.get("amount_total") == auftrag["preis"]:
+                return s["url"]
+        basis = basis_adresse()
+        name = option_namen()[auftrag["option"]]
+        s = stripe_anfrage("POST", "/checkout/sessions", [
+            ("mode", "payment"),
+            ("locale", "de"),
+            ("success_url", f"{basis}/?bezahlt={aid}"),
+            ("cancel_url", f"{basis}/?abgebrochen={aid}"),
+            ("client_reference_id", aid),
+            ("metadata[auftrag]", aid),
+            ("payment_intent_data[metadata][auftrag]", aid),
+            ("line_items[0][quantity]", "1"),
+            ("line_items[0][price_data][currency]", "eur"),
+            ("line_items[0][price_data][unit_amount]", str(auftrag["preis"])),
+            ("line_items[0][price_data][product_data][name]", name),
+            ("line_items[0][price_data][product_data][description]", f"ECU-File · Auftrag {aid[:8]}"),
+            ("invoice_creation[enabled]", "true"),   # Rechnung per E-Mail von Stripe
+        ])
+    except RuntimeError as e:
+        print(f"Bezahlen fehlgeschlagen ({aid}): {e}", file=sys.stderr)
+        raise Abgelehnt("Die Bezahlseite ist gerade nicht erreichbar. Bitte gleich nochmal versuchen.")
+    with sperre:
+        aktuell = finde_auftrag(aid)
+        aktuell.update(stripe_session=s["id"], zustimmung=datetime.now().isoformat(timespec="seconds"),
+                       zustimmung_text=ZUSTIMMUNG_TEXT)
+        speichere_auftrag(aktuell)
+    return s["url"]
+
+
+def zahlung_verbuchen(s: dict) -> bool:
+    """Stripe-Checkout-Session (bezahlt) dem Auftrag gutschreiben. Prueft Betrag und Waehrung."""
+    aid = (s.get("metadata") or {}).get("auftrag") or s.get("client_reference_id") or ""
+    if s.get("payment_status") != "paid":
+        return False
+    with sperre:
+        auftrag = finde_auftrag(aid)
+        if auftrag is None or auftrag.get("bezahlt"):
+            return False
+        if s.get("currency") != "eur" or s.get("amount_total") != auftrag.get("preis"):
+            print(f"Zahlung passt nicht zum Auftrag {aid}: {s.get('amount_total')} {s.get('currency')}", file=sys.stderr)
+            return False
+        auftrag.update(bezahlt=True, bezahlt_am=datetime.now().isoformat(timespec="seconds"),
+                       betrag=s["amount_total"], zahlung_id=s.get("payment_intent") or s.get("id"),
+                       stripe_session=s.get("id"))
+        speichere_auftrag(auftrag)
+    def melden():
+        chat = lade_config().get("telegram_chat_id")
+        if chat:
+            telegram_api("sendMessage", {"chat_id": chat, "parse_mode": "HTML", "text":
+                         f"💶 <b>Bezahlt:</b> {html.escape(option_namen()[auftrag['option']])} – {euro(auftrag['betrag'])}"})
+        telegram_aktualisieren(auftrag)
+    threading.Thread(target=melden, daemon=True).start()
+    return True
+
+
+def stripe_pruefen(auftrag: dict) -> dict:
+    """Bei Stripe nachfragen, ob die Bezahlseite eines Auftrags bezahlt wurde (falls der Webhook fehlt)."""
+    sid = auftrag.get("stripe_session")
+    if not sid or time.time() - _stripe_zuletzt.get(auftrag["id"], 0) < 5:
+        return auftrag
+    _stripe_zuletzt[auftrag["id"]] = time.time()
+    if len(_stripe_zuletzt) > 5000:
+        _stripe_zuletzt.clear()
+    try:
+        zahlung_verbuchen(stripe_anfrage("GET", f"/checkout/sessions/{sid}"))
+    except RuntimeError as e:
+        print(f"Stripe-Prüfung ({auftrag['id']}): {e}", file=sys.stderr)
+    return finde_auftrag(auftrag["id"]) or auftrag
+
+
+def stripe_signatur_ok(inhalt: bytes, kopf: str, geheim: str, toleranz: int = 300) -> bool:
+    teile = [x.split("=", 1) for x in kopf.split(",") if "=" in x]
+    zeit = next((v for k, v in teile if k == "t"), "")
+    signaturen = [v for k, v in teile if k == "v1"]
+    try:
+        if not signaturen or abs(time.time() - int(zeit)) > toleranz:
+            return False
+    except ValueError:
+        return False
+    erwartet = hmac.new(geheim.encode(), zeit.encode() + b"." + inhalt, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(erwartet, s) for s in signaturen)
+
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    geheim = lade_config().get("stripe_webhook_secret", "")
+    if not geheim or not stripe_signatur_ok(request.get_data(), request.headers.get("Stripe-Signature", ""), geheim):
+        abort(400)
+    ereignis = request.get_json(silent=True) or {}
+    if ereignis.get("type") in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+        zahlung_verbuchen((ereignis.get("data") or {}).get("object") or {})
+    return jsonify(ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +757,9 @@ def api_auftrag(a: dict) -> dict:
         "angebot": [{"key": o, "name": namen[o]} for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
         "grund": a.get("grund", ""),
         "typ": a.get("typ", "auftrag"), "fahrzeug": fahrzeug_text(a),
+        "preis": a.get("preis", 0) if zahlung_aktiv() else 0,
+        "preis_text": euro(a["preis"]) if zahlung_aktiv() and a.get("preis") else "",
+        "zahlung": "bezahlt" if a.get("bezahlt") else "offen" if zahlung_offen(a) else None,
     }
 
 
@@ -565,7 +769,8 @@ def api_info():
     return jsonify(firma=lade_config().get("firmenname") or "OneClick Tuning", api=1,
                    original=oneclick.ORIGINAL,
                    optionen=[{"key": o, "name": namen[o]} for o in oneclick.optionen()],   # fuer Anfragen
-                   fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER])
+                   fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER],
+                   zahlung_aktiv=zahlung_aktiv(), preise=preise() if zahlung_aktiv() else {})
 
 
 @app.route("/api/pruefen", methods=["POST"])
@@ -610,14 +815,28 @@ def api_anfrage(aid):
 
 @app.route("/api/auftrag/<aid>")
 def api_auftrag_status(aid):
-    return jsonify(api_auftrag(lade_auftrag(aid)))
+    auftrag = lade_auftrag(aid)
+    if zahlung_offen(auftrag):   # falls die Meldung von Stripe (Webhook) noch fehlt: selbst nachfragen
+        auftrag = stripe_pruefen(auftrag)
+    return jsonify(api_auftrag(auftrag))
+
+
+@app.route("/api/auftrag/<aid>/bezahlen", methods=["POST"])
+def api_bezahlen(aid):
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    try:
+        return jsonify(url=bezahlen_starten(aid, daten.get("zustimmung") is True))
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
 
 
 @app.route("/auftrag/<aid>")
 @admin_noetig
 def auftrag_ansicht(aid):
     return render_template("auftrag.html", a=lade_auftrag(aid), hat_file=hat_file(aid),
-                           fahrzeug_felder=FAHRZEUG_FELDER)
+                           fahrzeug_felder=FAHRZEUG_FELDER, zahlung=zahlung_aktiv(), euro=euro,
+                           stripe_key=lade_config().get("stripe_key", ""))
 
 
 @app.route("/auftrag/<aid>/status")
@@ -634,6 +853,10 @@ def download(aid):
         abort(403)
     if not hat_file(aid):
         abort(404)
+    if not session.get("admin") and zahlung_offen(auftrag):
+        auftrag = stripe_pruefen(auftrag)
+        if zahlung_offen(auftrag):
+            return jsonify(fehler="Bitte zuerst bezahlen – danach kannst du das File herunterladen."), 402
     stamm = Path(auftrag["datei"]).stem
     return send_file(AUFTRAEGE / aid / "ergebnis.bin", as_attachment=True,
                      download_name=f"{stamm}_{auftrag['option']}.bin")
@@ -658,7 +881,9 @@ def admin():
     return render_template("admin.html", wartend=wartend, alle=alle[:100],
                            archiv=len(oneclick.lade_index()["eintraege"]),
                            freigegeben=sum(a["status"] == "FREIGEGEBEN" for a in alle),
-                           telegram=bool(lade_config().get("telegram_chat_id")))
+                           telegram=bool(lade_config().get("telegram_chat_id")),
+                           zahlung=zahlung_aktiv(), euro=euro,
+                           bezahlt=sum(a.get("betrag") or 0 for a in alle if a.get("bezahlt")))
 
 
 @app.route("/admin/wartend")
@@ -671,7 +896,12 @@ def admin_wartend():
 @admin_noetig
 def admin_entscheiden(aid):
     freigeben = request.form.get("aktion") == "ok"
-    flash(entscheide(aid, freigeben, request.form.get("grund", ""), wer=session["benutzer"]))
+    try:
+        preis = cent_aus(request.form["preis"]) if request.form.get("preis", "").strip() else None
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("auftrag_ansicht", aid=aid))
+    flash(entscheide(aid, freigeben, request.form.get("grund", ""), wer=session["benutzer"], preis=preis))
     zurueck = request.form.get("zurueck", "")
     if not (zurueck.startswith("/") and not zurueck.startswith("//")):   # nur Seiten dieses Servers
         zurueck = url_for("auftrag_ansicht", aid=aid)
@@ -687,6 +917,11 @@ def fertig_hochladen(aid):
     if not datei or not datei.filename:
         flash("Bitte die fertige Datei auswählen.")
         return redirect(url_for("auftrag_ansicht", aid=aid))
+    try:
+        preis = cent_aus(request.form["preis"]) if request.form.get("preis", "").strip() else None
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("auftrag_ansicht", aid=aid))
     daten = datei.read()
     ori = (AUFTRAEGE / aid / "ori.bin").read_bytes()
     if len(daten) != len(ori):
@@ -701,7 +936,7 @@ def fertig_hochladen(aid):
         (AUFTRAEGE / aid / "ergebnis.bin").write_bytes(daten)
         auftrag["art"] = "eigenes File"
         speichere_auftrag(auftrag)
-    meldung = entscheide(aid, True, wer=session["benutzer"])
+    meldung = entscheide(aid, True, wer=session["benutzer"], preis=preis)
 
     name = request.form.get("archiv_name", "").strip()
     if name:
@@ -922,13 +1157,30 @@ def admin_archiv():
     for e in eintraege:
         zaehler.setdefault(e.get("ori_sha256"), []).append(e["name"])
     doppelt = {n: [x for x in namen if x != n] for namen in zaehler.values() if len(namen) > 1 for n in namen}
-    return render_template("archiv.html", eintraege=eintraege, doppelt=doppelt,
+    return render_template("archiv.html", eintraege=eintraege, doppelt=doppelt, preise=preise(),
+                           zahlung=zahlung_aktiv(), euro=euro,
                            eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen())
 
 
 @app.route("/admin/loesungen", methods=["POST"])
 @admin_noetig
 def loesungen_verwalten():
+    if request.form.get("aktion") == "preise":
+        neu, fehler = {}, []
+        for key in [*oneclick.optionen(), oneclick.ORIGINAL]:
+            wert = request.form.get(f"preis_{key}", "").strip()
+            if wert:
+                try:
+                    neu[key] = cent_aus(wert)
+                except ValueError as e:
+                    fehler.append(f"{option_namen()[key]}: {e}")
+        if fehler:
+            for f in fehler:
+                flash(f"Nicht gespeichert – {f}")
+        else:
+            speichere_config({"preise": neu})
+            flash("Preise gespeichert.")
+        return redirect(url_for("admin_archiv") + "#preise")
     try:
         with index_sperre:
             if request.form.get("aktion") == "loeschen":
@@ -1115,6 +1367,34 @@ def einstellungen():
                 "nur_identisch": request.form.get("nur_identisch") == "1",
             })
             flash("Gespeichert.")
+        elif aktion == "stripe":
+            aenderung = {}
+            schluessel = request.form.get("stripe_key", "").strip()
+            geheim = request.form.get("stripe_webhook_secret", "").strip()
+            if schluessel and not schluessel.startswith(("sk_live_", "sk_test_", "rk_live_", "rk_test_")):
+                flash("Der Stripe-Schlüssel muss mit sk_live_ oder sk_test_ (bzw. rk_…) anfangen.")
+            elif geheim and not geheim.startswith("whsec_"):
+                flash("Das Webhook-Geheimnis muss mit whsec_ anfangen.")
+            else:
+                if schluessel:
+                    aenderung["stripe_key"] = schluessel
+                if geheim:
+                    aenderung["stripe_webhook_secret"] = geheim
+                speichere_config(aenderung)
+                flash("Stripe gespeichert. Jetzt „Stripe testen“ drücken." if aenderung else "Nichts geändert.")
+        elif aktion == "stripe_test":
+            try:
+                stripe_anfrage("GET", "/balance")
+                modus = "TESTMODUS (keine echten Zahlungen)" if "_test_" in lade_config().get("stripe_key", "") else "LIVE"
+                flash(f"Verbindung zu Stripe klappt – {modus}.")
+            except RuntimeError as e:
+                flash(f"Stripe-Test fehlgeschlagen: {e}")
+        elif aktion == "stripe_aus":
+            cfg = lade_config()
+            cfg.pop("stripe_key", None)
+            cfg.pop("stripe_webhook_secret", None)
+            json_speichern(CONFIG_DATEI, cfg)
+            flash("Stripe entfernt – Bezahlen ist aus, Downloads sind wieder ohne Zahlung möglich.")
         elif aktion == "chat":
             speichere_config({"telegram_chat_id": request.form.get("chat_id", "")})
             flash("Chat übernommen. Jetzt „Telegram testen“ drücken.")
@@ -1366,6 +1646,11 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
 {% if a.art and a.typ != 'anfrage' %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 {% if a.typ != 'anfrage' %}<tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>{% endif %}
+{% if zahlung or a.bezahlt %}<tr><th>Preis</th><td>{{ euro(a.preis or 0) if a.preis else 'kostenlos' }}</td></tr>
+<tr><th>Zahlung</th><td>{% if a.bezahlt %}<span class="status s-FREIGEGEBEN">bezahlt</span> {{ euro(a.betrag or 0) }} am {{ a.bezahlt_am[:16].replace('T',' ') }}
+{% if a.zahlung_id %}<a class="leise" href="https://dashboard.stripe.com/{{ 'test/' if '_test_' in (stripe_key or '') }}payments/{{ a.zahlung_id }}" target="_blank" rel="noopener">bei Stripe ansehen</a>{% endif %}
+{% elif a.status == 'FREIGEGEBEN' and a.preis %}<span class="status s-WARTET">offen</span> – der Kunde kann jetzt bezahlen
+{% elif a.status == 'WARTET' and a.preis %}<span class="leise">nach der Freigabe</span>{% else %}–{% endif %}</td></tr>{% endif %}
 {% if a.entschieden %}<tr><th>Entschieden</th><td>{{ a.entschieden[:16].replace('T',' ') }} von {{ a.entschieden_von }}</td></tr>{% endif %}
 </table><br>
 
@@ -1388,6 +1673,8 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <input type="text" name="archiv_name" placeholder="Archivname, z. B. golf7_20tdi_03L906018JL (leer = nicht ins Archiv)">
 <div class="hinweis">Mit Archivname landet das Paar im Archiv – der nächste Kunde mit diesem File bekommt es dann sofort automatisch
 (nur bei einer einzelnen Lösung, nicht bei Kombinationen).</div>
+{% if zahlung %}<label class="feld" style="margin-top:12px">Preis in € (bezahlt der Kunde, bevor er herunterladen kann)</label>
+<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}">{% endif %}
 <button class="btn gruen" style="margin-top:10px">Hochladen &amp; an Kunden schicken</button></form>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-top:26px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
@@ -1401,8 +1688,10 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 {% if hat_file %} · <a href="{{ url_for('download', aid=a.id) }}">Erstelltes File herunterladen (zum Prüfen)</a>{% endif %}</p>
 {% if a.status == 'WARTET' %}
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
-<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
+<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
+{% if zahlung %}<label class="leise" style="display:flex;gap:8px;align-items:center;font-size:14px">Preis
+<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}" style="width:110px;margin:0"> €</label>{% endif %}
 <button class="btn gruen">✓ Bestätigen</button></form>
 </div>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-bottom:22px">
@@ -1414,6 +1703,8 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <p><b>Oder stattdessen eigenes File hochladen und freigeben</b> (ohne Checksumme ist ok)</p>
 <p><input type="file" name="datei"></p>
 <input type="text" name="archiv_name" placeholder="Archivname, z. B. golf7_20tdi_03L906018JL (leer = nicht ins Archiv)">
+{% if zahlung %}<label class="feld">Preis in € für diesen Auftrag</label>
+<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}">{% endif %}
 <button class="btn grau">Hochladen &amp; freigeben</button></form>
 {% endif %}
 </div>
@@ -1425,6 +1716,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <div class="karte"><div class="leise">Warten auf Freigabe</div><div class="zahl">{{ wartend|rejectattr('typ', 'equalto', 'anfrage')|list|length }}</div></div>
 <div class="karte"><div class="leise">Offene Anfragen</div><div class="zahl">{{ wartend|selectattr('typ', 'equalto', 'anfrage')|list|length }}</div></div>
 <div class="karte"><div class="leise">Freigegeben</div><div class="zahl">{{ freigegeben }}</div></div>
+{% if zahlung %}<div class="karte"><div class="leise">Bezahlt (gesamt)</div><div class="zahl" style="font-size:32px">{{ euro(bezahlt) }}</div></div>{% endif %}
 <div class="karte"><div class="leise">Files im Archiv</div><div class="zahl">{{ archiv }}</div>
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
@@ -1445,11 +1737,14 @@ Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Bro
 <input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form>{% endif %}</td></tr>
 {% endfor %}</table></div>{% else %}<p class="leise">Nichts offen.</p>{% endif %}</div>
 <div class="karte"><h2>Alle Aufträge</h2>
-<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th></tr>
+<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th>{% if zahlung %}<th>Zahlung</th>{% endif %}</tr>
 {% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
 <td class="leise">{% if a.typ == 'anfrage' %}📩 Anfrage{% else %}{{ a.quelle or '–' }}{% endif %}</td>
-<td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td></tr>
+<td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td>
+{% if zahlung %}<td>{% if a.bezahlt %}<span class="status s-FREIGEGEBEN">{{ euro(a.betrag or 0) }} ✓</span>
+{% elif a.preis and a.status == 'FREIGEGEBEN' %}<span class="status s-WARTET">{{ euro(a.preis) }} offen</span>
+{% elif a.preis and a.status == 'WARTET' %}<span class="leise">{{ euro(a.preis) }}</span>{% else %}–{% endif %}</td>{% endif %}</tr>
 {% endfor %}</table></div></div>
 <script>
 let bekannt=new Set({{ wartend|map(attribute='id')|list|tojson }});
@@ -1510,6 +1805,22 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="neu">
 <input type="text" name="name" placeholder="Neue Lösung, z. B. Drallklappen" maxlength="40" style="flex:1;min-width:220px">
 <button class="btn grau">Lösung anlegen</button></form>
+<form method="post" action="{{ url_for('loesungen_verwalten') }}" id="preise" style="margin-top:22px">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="preise">
+<h2 style="margin-top:8px">Preise</h2>
+{% if not zahlung %}<p class="leise" style="margin-top:-6px">Bezahlen ist noch aus. Erst unter Einstellungen → Stripe den Schlüssel eintragen,
+dann gelten diese Preise.</p>{% endif %}
+<div class="dateien">
+{% for key, titel in archiv_optionen.items() %}<label class="datei" style="cursor:default"><span>{{ titel }}</span>
+<input type="text" name="preis_{{ key }}" inputmode="decimal" placeholder="Preis in €" value="{{ (preise[key] / 100)|round(2)|string|replace('.', ',') if key in preise else '' }}" style="margin:0">
+{% if zahlung and key not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>{% endfor %}
+<label class="datei" style="cursor:default"><span>{{ optionen[original] }}</span>
+<input type="text" name="preis_{{ original }}" inputmode="decimal" placeholder="Preis in €" value="{{ (preise[original] / 100)|round(2)|string|replace('.', ',') if original in preise else '' }}" style="margin:0">
+{% if zahlung and original not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>
+</div>
+<button class="btn">Preise speichern</button>
+<div class="hinweis">Bei mehreren Lösungen werden die Preise addiert. Bezahlt wird erst nach deiner Freigabe.
+Für einzelne Aufträge kannst du den Preis beim Freigeben ändern.</div></form>
 <div class="hinweis">„Original (Rückrüsten)“ gibt es automatisch: Lädt ein Kunde ein getuntes File hoch, das zu einem Tuning-File im Archiv passt, kann er das Original bekommen.
 Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
 Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.</div></div>
@@ -1581,6 +1892,30 @@ die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: 
 <label class="feld">Datenschutzerklärung (z. B. mit einem Generator erstellen oder vom Anwalt; die Seite speichert hochgeladene Files und die optionale Kontaktangabe)</label>
 <textarea name="datenschutz">{{ cfg.datenschutz or '' }}</textarea>
 <button class="btn">Speichern</button></form></div>
+
+<div class="karte" id="stripe"><h2>Bezahlen mit Stripe</h2>
+<p class="leise" style="margin-top:-6px">Status: {% if cfg.stripe_key %}<span class="status s-FREIGEGEBEN">aktiv{{ ' – Testmodus' if '_test_' in cfg.stripe_key }}</span>
+{% else %}<span class="status s-ENTWURF">aus</span> – ohne Schlüssel können Kunden nach der Freigabe kostenlos herunterladen{% endif %}</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="stripe">
+<label class="feld">Geheimer Schlüssel (Stripe → Entwickler → API-Schlüssel, fängt mit sk_live_ an; zum Ausprobieren sk_test_)</label>
+<input type="password" name="stripe_key" autocomplete="off" placeholder="{{ 'gespeichert ✓ – leer lassen zum Behalten' if cfg.stripe_key else 'sk_live_…' }}">
+<label class="feld">Webhook-Geheimnis (whsec_…, siehe Schritt 2)</label>
+<input type="password" name="stripe_webhook_secret" autocomplete="off" placeholder="{{ 'gespeichert ✓ – leer lassen zum Behalten' if cfg.stripe_webhook_secret else 'whsec_…' }}">
+<button class="btn">Speichern</button></form>
+<ol style="margin-top:18px">
+<li>In Stripe: <b>Entwickler → API-Schlüssel</b> → „Geheimer Schlüssel“ kopieren und oben eintragen.</li>
+<li>In Stripe: <b>Entwickler → Webhooks → Endpunkt hinzufügen</b>: URL <code>{{ (cfg.basis_url or 'https://deine-seite.de').rstrip('/') }}/stripe/webhook</code>,
+Ereignisse <code>checkout.session.completed</code> und <code>checkout.session.async_payment_succeeded</code> → „Signaturgeheimnis“ (whsec_…) oben eintragen.</li>
+<li>Unter <b>Einstellungen → Zahlungsmethoden</b> in Stripe auswählen, was Kunden nutzen dürfen (Karte, Apple Pay, PayPal, Klarna …).</li>
+<li>Unter Archiv → <b>Preise</b> die Preise eintragen.</li>
+</ol>
+<form method="post" class="inline"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="stripe_test">
+<button class="btn gruen">Stripe testen</button></form>
+{% if cfg.stripe_key %}<form method="post" class="inline" onsubmit="return confirm('Stripe wirklich entfernen? Danach ist Bezahlen aus.')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="stripe_aus">
+<button class="btn grau">Stripe entfernen</button></form>{% endif %}
+<div class="hinweis">Die Schlüssel werden nur hier auf deinem Server gespeichert und nicht angezeigt. Bitte nirgendwo sonst weitergeben.
+Ablauf: Kunde bestellt → du gibst frei → Kunde bezahlt bei Stripe → Download wird automatisch freigeschaltet. Stripe schickt dem Kunden eine Rechnung per E-Mail.</div></div>
 
 <div class="karte"><h2>Telegram einrichten</h2>
 <ol>

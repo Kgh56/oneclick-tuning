@@ -694,6 +694,143 @@ class WebTests(Basis):
         self.assertTrue((A.AUFTRAEGE / wartet).exists())   # wartende nie loeschen
 
 
+class ZahlungTests(WebTests):
+    """Bezahlen mit Stripe: erst Freigabe, dann Zahlung, dann Download (Stripe selbst ist nachgebaut)."""
+
+    def setUp(self):
+        super().setUp()
+        A.speichere_config({"stripe_key": "sk_test_abc", "stripe_webhook_secret": "whsec_test",
+                            "preise": {"stage1": 19900, "startstopp": 4950}, "basis_url": "https://files.test"})
+        self.stripe = {"anfragen": [], "sitzungen": {}}
+        A._stripe_zuletzt.clear()
+
+        def stripe(methode, pfad, felder=None):
+            self.stripe["anfragen"].append((methode, pfad, dict(felder or [])))
+            if methode == "POST" and pfad == "/checkout/sessions":
+                f = dict(felder)
+                s = {"id": f"cs_{len(self.stripe['sitzungen'])}", "url": "https://checkout.stripe.test/x",
+                     "status": "open", "payment_status": "unpaid", "currency": "eur",
+                     "amount_total": int(f["line_items[0][price_data][unit_amount]"]),
+                     "metadata": {"auftrag": f["metadata[auftrag]"]}, "payment_intent": "pi_1"}
+                self.stripe["sitzungen"][s["id"]] = s
+                return dict(s)
+            if methode == "GET" and pfad.startswith("/checkout/sessions/"):
+                return dict(self.stripe["sitzungen"][pfad.rsplit("/", 1)[1]])
+            return {}
+        A.stripe_anfrage = stripe
+
+    def webhook(self, s, geheim="whsec_test", zeit=None):
+        import hashlib as h, hmac as hm
+        inhalt = json.dumps({"type": "checkout.session.completed", "data": {"object": s}}).encode()
+        zeit = str(int(time.time()) if zeit is None else zeit)
+        sig = hm.new(geheim.encode(), zeit.encode() + b"." + inhalt, h.sha256).hexdigest()
+        return self.client().post("/stripe/webhook", data=inhalt, content_type="application/json",
+                                  headers={"Stripe-Signature": f"t={zeit},v1={sig}"})
+
+    def freigegeben(self, *optionen):
+        aid = self.hochladen(self.golf)
+        self.bestellen(aid, *optionen)
+        A.entscheide(aid, True)
+        return aid
+
+    def test_preise_und_ablauf(self):
+        info = self.kunde.get("/api/info").json
+        self.assertEqual((info["zahlung_aktiv"], info["preise"]), (True, {"stage1": 19900, "startstopp": 4950}))
+        aid = self.hochladen(self.golf)
+        j = json.loads(self.bestellen(aid, "stage1", "startstopp"))
+        self.assertEqual((j["preis"], j["preis_text"], j["zahlung"]), (24850, "248,50 €", None))   # wartet: noch nichts zu zahlen
+        self.assertEqual(self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True}).status_code, 422)
+        A.entscheide(aid, True)
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"], "offen")
+        r = self.laden(aid)
+        self.assertEqual(r.status_code, 402)
+        self.assertIn("zuerst bezahlen", r.json["fehler"])
+        # Ohne Zustimmung zum Widerrufs-Hinweis keine Bezahlseite
+        self.assertIn("Widerrufsrecht", self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={}).json["fehler"])
+        url = self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True}).json["url"]
+        self.assertTrue(url.startswith("https://checkout.stripe.test"))
+        felder = self.stripe["anfragen"][-1][2]
+        self.assertEqual((felder["line_items[0][price_data][unit_amount]"], felder["success_url"]),
+                         ("24850", f"https://files.test/?bezahlt={aid}"))
+        self.assertNotIn("golf", json.dumps(felder).lower())   # kein Dateiname an Stripe
+        a = self.auftrag(aid)
+        self.assertTrue(a["zustimmung"] and "Widerrufsrecht" in a["zustimmung_text"])
+        # Zweiter Klick: dieselbe offene Bezahlseite, keine neue
+        self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True})
+        self.assertEqual(len(self.stripe["sitzungen"]), 1)
+        # Stripe meldet: bezahlt (Webhook mit gueltiger Signatur)
+        s = dict(self.stripe["sitzungen"]["cs_0"], payment_status="paid", status="complete")
+        self.assertEqual(self.webhook(s, geheim="falsch").status_code, 400)
+        self.assertEqual(self.webhook(s, zeit=time.time() - 3600).status_code, 400)   # zu alt
+        self.assertEqual(self.webhook(s).status_code, 200)
+        a = self.auftrag(aid)
+        self.assertEqual((a["bezahlt"], a["betrag"], a["zahlung_id"]), (True, 24850, "pi_1"))
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"], "bezahlt")
+        self.assertEqual(self.laden(aid).status_code, 200)
+
+    def test_bezahlt_ohne_webhook_und_falscher_betrag(self):
+        aid = self.freigegeben("stage1")
+        self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True})
+        # falscher Betrag wird nicht verbucht
+        self.stripe["sitzungen"]["cs_0"].update(payment_status="paid", amount_total=100)
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"], "offen")
+        # Webhook kam nicht an: Statusabfrage fragt selbst bei Stripe nach
+        self.stripe["sitzungen"]["cs_0"]["amount_total"] = 19900
+        A._stripe_zuletzt.clear()
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"], "bezahlt")
+        self.assertEqual(self.laden(aid).status_code, 200)
+
+    def test_admin_preise_und_preis_beim_freigeben(self):
+        a = self.admin()
+        r = a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "preise", "preis_stage1": "299,00",
+                                             "preis_original": "49", "preis_vmax": ""}, follow_redirects=True)
+        self.assertIn("Preise gespeichert", r.text)
+        self.assertEqual(A.lade_config()["preise"], {"stage1": 29900, "original": 4900})
+        self.assertIn("kein Preis", a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "preise", "preis_stage1": "abc"},
+                                           follow_redirects=True).text.replace("gültiger Preis", "kein Preis"))
+        aid = self.hochladen(self.golf)
+        self.bestellen(aid, "stage1")
+        self.assertIn("299,00 €", a.get(f"/auftrag/{aid}").text)
+        a.post(f"/admin/auftrag/{aid}/entscheiden", data={"csrf": a.csrf, "aktion": "ok", "preis": "250"})
+        self.assertEqual((self.auftrag(aid)["status"], self.auftrag(aid)["preis"]), ("FREIGEGEBEN", 25000))
+        seite = a.get("/admin").text
+        self.assertIn("250,00 € offen", seite)
+        # Preis 0 beim Freigeben = kostenlos
+        aid2 = self.hochladen(self.golf)
+        self.bestellen(aid2, "stage1")
+        a.post(f"/admin/auftrag/{aid2}/entscheiden", data={"csrf": a.csrf, "aktion": "ok", "preis": "0"})
+        self.assertEqual(self.laden(aid2).status_code, 200)
+
+    def test_einstellungen_schluessel_nie_anzeigen(self):
+        a = self.admin()
+        seite = a.get("/admin/einstellungen").text
+        self.assertNotIn("sk_test_abc", seite)
+        self.assertNotIn("whsec_test", seite)
+        self.assertIn("gespeichert ✓", seite)
+        self.assertIn("muss mit sk_live_", a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "stripe",
+                                                  "stripe_key": "pk_live_x"}, follow_redirects=True).text)
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "stripe", "stripe_key": ""})
+        self.assertEqual(A.lade_config()["stripe_key"], "sk_test_abc")   # leer = behalten
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "stripe_aus"})
+        self.assertNotIn("stripe_key", A.lade_config())
+        # Ohne Stripe: wie frueher, kein Bezahlen
+        aid = self.freigegeben("stage1")
+        self.assertIsNone(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"])
+        self.assertEqual(self.laden(aid).status_code, 200)
+
+    def test_cent_und_euro(self):
+        self.assertEqual([A.cent_aus(x) for x in ("249", "249,5", "1.249,50 €", "0")], [24900, 24950, 124950, 0])
+        for falsch in ("abc", "-5", ""):
+            with self.assertRaises(ValueError):
+                A.cent_aus(falsch)
+        self.assertEqual(A.euro(124950), "1.249,50 €")
+
+
+# ZahlungTests nutzt nur die Hilfsfunktionen von WebTests, nicht deren Tests (die laufen ohne Bezahlen)
+for _name in [n for n in vars(WebTests) if n.startswith("test_") and n not in vars(ZahlungTests)]:
+    setattr(ZahlungTests, _name, None)
+
+
 class ApiTests(Basis):
     """Schnittstelle fuer die Kundenseite."""
 
