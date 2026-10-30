@@ -9,11 +9,10 @@ Start:
     python app.py whatsapp-test    Test-Vorlage an WhatsApp senden
     python app.py                  Server starten (http://localhost:5000, Admin unter /login)
 
-Kunden brauchen kein Login: Original hochladen -> die Seite sucht einen 100-%-Treffer im
-Archiv und zeigt nur die Optionen an, die es dafuer gibt. Ohne Treffer entsteht kein Auftrag.
-Der Kunde kann das File erst herunterladen, wenn der Admin den Auftrag bestaetigt hat
-(per Telegram- oder WhatsApp-Knopf oder im Admin-Bereich). Bis dahin wartet die Seite des
-Kunden und aktualisiert sich selbst.
+Kunden arbeiten mit dem Windows-Programm (kunde/oneclick_kunde.py), das ueber /api/... mit
+diesem Server spricht: Original hochladen -> 100-%-Treffer im Archiv -> nur die verfuegbaren
+Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den Admin
+(Telegram-Knopf oder Admin-Bereich). Die Startseite zeigt nur den Download des Programms.
 """
 
 import getpass
@@ -87,7 +86,6 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 if not SECRET_DATEI.exists():
     SECRET_DATEI.write_text(secrets.token_hex(32))
 app.secret_key = SECRET_DATEI.read_text().strip()
-app.permanent_session_lifetime = timedelta(days=365)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 sperre = threading.Lock()
@@ -472,9 +470,7 @@ def logout():
 
 @app.route("/")
 def start():
-    meine = session.get("auftraege", [])
-    eigene = [a for a in alle_auftraege() if a["id"] in meine and a["status"] != "ENTWURF"]
-    return render_template("start.html", auftraege=eigene)
+    return render_template("start.html")
 
 
 class Abgelehnt(Exception):
@@ -558,31 +554,6 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
     return auftrag
 
 
-@app.route("/pruefen", methods=["POST"])
-def pruefen():
-    datei = request.files.get("datei")
-    if not datei or not datei.filename:
-        flash("Bitte eine Originaldatei auswählen.")
-        return redirect(url_for("start"))
-    try:
-        auftrag = entwurf_anlegen(datei.read(), datei.filename)
-    except Abgelehnt as e:
-        flash(str(e))
-        return redirect(url_for("start"))
-    session.permanent = True
-    session["auftraege"] = ([auftrag["id"]] + session.get("auftraege", []))[:50]
-    return redirect(url_for("auftrag_ansicht", aid=auftrag["id"]))
-
-
-@app.route("/auftrag/<aid>/bestellen", methods=["POST"])
-def bestellen(aid):
-    try:
-        auftrag_abschicken(aid, set(request.form.getlist("option")), request.form.get("kontakt", ""))
-    except Abgelehnt as e:
-        flash(str(e))
-    return redirect(url_for("auftrag_ansicht", aid=aid))
-
-
 # ---------------------------------------------------------------------------
 # Schnittstelle fuer das Windows-Programm (JSON, ohne Cookies)
 # ---------------------------------------------------------------------------
@@ -631,11 +602,13 @@ def api_auftrag_status(aid):
 
 
 @app.route("/auftrag/<aid>")
+@admin_noetig
 def auftrag_ansicht(aid):
     return render_template("auftrag.html", a=lade_auftrag(aid), hat_file=hat_file(aid))
 
 
 @app.route("/auftrag/<aid>/status")
+@admin_noetig
 def auftrag_status(aid):
     return jsonify(status=lade_auftrag(aid)["status"])
 
@@ -1182,8 +1155,8 @@ footer a{color:#6e6e73;margin-right:18px;text-decoration:none}footer a:hover{col
 @media (max-width:600px){.karte{padding:20px;border-radius:18px}main{padding:22px 14px}h1{font-size:25px}.hero{padding:16px 0 20px}}
 </style></head><body>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
-<nav><a href="{{ url_for('start') }}">Upload</a>
-{% if session.admin %}<a href="{{ url_for('admin') }}">Aufträge</a>
+<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
+<a href="{{ url_for('admin') }}">Aufträge</a>
 <a href="{{ url_for('admin_archiv') }}">Archiv</a>
 <a href="{{ url_for('einstellungen') }}">Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
@@ -1222,34 +1195,19 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 
 "start.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="hero"><h1>Dein File.<br><span>Ein Klick.</span></h1>
-<p>Original hochladen, Lösung wählen, fertiges File herunterladen.</p>
-{% if programm_url %}<p style="font-size:14px;margin-top:14px"><a href="{{ programm_url }}" style="color:var(--blau);text-decoration:none">Lieber als Windows-Programm? Hier herunterladen ›</a></p>{% endif %}</div>
-<div class="karte">
-<form method="post" action="{{ url_for('pruefen') }}" enctype="multipart/form-data" id="f">
-<input type="hidden" name="csrf" value="{{ session.csrf }}">
-<label class="drop" id="drop"><input type="file" name="datei" id="datei">
-<div id="dropText"><b>Originaldatei hierher ziehen</b><br>oder klicken zum Auswählen (.bin, .ori, max. 16 MB)</div></label>
-<div style="text-align:center"><button class="btn" id="los">File prüfen</button></div>
-<div class="hinweis" style="text-align:center">Wir prüfen sofort, welche Lösungen es für dein File gibt. Danach wählst du aus,
-und nach unserer Freigabe kannst du das File herunterladen.</div>
-</form></div>
-
-<div class="karte"><h2>Meine Aufträge <span class="leise" style="font-weight:400;font-size:13px">(in diesem Browser)</span></h2>
-{% if auftraege %}<div class="tabelle"><table><tr><th>Datum</th><th>Datei</th><th>Option</th><th>ECU</th><th>Status</th><th></th></tr>
-{% for a in auftraege %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.datei }}</td>
-<td>{{ optionen[a.option] }}</td><td>{{ a.ecu }}</td>
-<td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td>
-<td>{% if a.status == 'FREIGEGEBEN' %}<a href="{{ url_for('download', aid=a.id) }}">Download</a>{% else %}<a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">Details</a>{% endif %}</td></tr>
-{% endfor %}</table></div>{% else %}<p class="leise">Noch keine Aufträge.</p>{% endif %}</div>
-<script>
-const d=document.getElementById('drop'),i=document.getElementById('datei'),t=document.getElementById('dropText');
-const zeig=()=>{if(i.files.length)t.innerHTML='<b>'+i.files[0].name+'</b><br>'+(i.files[0].size/1024).toFixed(0)+' KB'};
-i.addEventListener('change',zeig);
-['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('aktiv')}));
-['dragleave','drop'].forEach(e=>d.addEventListener(e,()=>d.classList.remove('aktiv')));
-d.addEventListener('drop',ev=>{ev.preventDefault();i.files=ev.dataTransfer.files;zeig()});
-document.getElementById('f').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird geprüft …';b.disabled=true});
-</script>
+<p>Mit unserem Programm: Original auswählen, Lösung wählen, fertiges File herunterladen.</p></div>
+<div class="karte" style="text-align:center;max-width:640px;margin:0 auto 22px">
+{% if programm_url %}
+<a class="btn" href="{{ programm_url }}" style="font-size:17px;padding:15px 34px">Windows-Programm herunterladen</a>
+<div class="hinweis">Für Windows 10 und 11. Beim ersten Start meldet Windows eventuell
+„Der Computer wurde durch Windows geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“.</div>
+{% else %}<p class="leise">Das Programm ist gerade nicht verfügbar. Bitte melde dich bei uns.</p>{% endif %}
+</div>
+<div class="raster" style="max-width:900px;margin:0 auto">
+<div class="karte"><div class="zahl">1</div><b>Original auswählen</b><p class="leise" style="margin:6px 0 0">Das Programm prüft sofort, welche Lösungen es für dein File gibt.</p></div>
+<div class="karte"><div class="zahl">2</div><b>Lösungen wählen</b><p class="leise" style="margin:6px 0 0">Eine oder mehrere – zum Beispiel Stage 1 und Start/Stopp in einem File.</p></div>
+<div class="karte"><div class="zahl">3</div><b>Herunterladen</b><p class="leise" style="margin:6px 0 0">Nach unserer Freigabe meldet sich das Programm und du speicherst dein File.</p></div>
+</div>
 {% endblock %}""",
 
 "auftrag.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -1258,48 +1216,16 @@ document.getElementById('f').addEventListener('submit',()=>{const b=document.get
 <p><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span>
 <span class="leise">&nbsp; {{ a.zeit[:16].replace('T',' ') }}</span></p>
 <table><tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
-{% if session.admin %}<tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
+<tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
 {% if a.art %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 <tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>
 {% if a.entschieden %}<tr><th>Entschieden</th><td>{{ a.entschieden[:16].replace('T',' ') }} von {{ a.entschieden_von }}</td></tr>{% endif %}
-{% endif %}</table><br>
+</table><br>
 
 {% if a.status == 'ENTWURF' %}
-<p><b>Für dein File haben wir folgende Lösungen:</b>{% if a.angebot|length > 1 %} <span class="leise">– eine oder mehrere wählen</span>{% endif %}</p>
-<form method="post" action="{{ url_for('bestellen', aid=a.id) }}" id="b">
-<input type="hidden" name="csrf" value="{{ session.csrf }}">
-<div class="optionen">
-{% for opt in a.angebot %}
-<label><input type="checkbox" name="option" value="{{ opt }}" {{ 'checked' if loop.first }}><span>{{ optionen[opt] }}</span></label>
-{% endfor %}</div>
-<input type="text" name="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
-<button class="btn" id="senden">Auftrag senden</button>
-<div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei, danach kannst du das File herunterladen.
-Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div></form>
-<script>
-const kaestchen=[...document.querySelectorAll('#b input[name=option]')], senden=document.getElementById('senden');
-// "Original (Rueckruesten)" laesst sich nicht kombinieren
-kaestchen.forEach(k=>k.addEventListener('change',()=>{
-  if(k.checked) kaestchen.forEach(x=>{if(x!==k&&(k.value==='{{ original }}'||x.value==='{{ original }}'))x.checked=false});
-  senden.disabled=!kaestchen.some(x=>x.checked)}));
-document.getElementById('b').addEventListener('submit',e=>{if(!kaestchen.some(x=>x.checked)){e.preventDefault();return}
-  senden.textContent='Wird gesendet …';senden.disabled=true});
-</script>
-{% elif a.status == 'FREIGEGEBEN' %}
-<a class="btn gruen" href="{{ url_for('download', aid=a.id) }}">File herunterladen</a>
-<div class="hinweis">Checksumme beim Schreiben vom Flash-Tool korrigieren lassen.</div>
-{% elif a.status == 'ABGELEHNT' %}
-<p><b>Dieser Auftrag wurde abgelehnt.</b>{% if a.grund %}<br>Grund: {{ a.grund }}{% endif %}</p>
-<p class="leise">Bei Fragen melde dich gerne bei uns.</p>
-{% else %}
-<div class="warten"><div class="kreis"></div><div><b>Wartet auf Freigabe</b><br>
-<span class="leise">Wir prüfen deinen Auftrag. Diese Seite aktualisiert sich automatisch, sobald du das File herunterladen kannst.</span></div></div>
-<div class="meldung" style="margin-top:14px">Du kannst die Seite auch schließen. Mit diesem Link kommst du später wieder hierher:<br>
-<b style="word-break:break-all">{{ request.url }}</b></div>
-<script>
-setInterval(()=>fetch('{{ url_for('auftrag_status', aid=a.id) }}').then(r=>r.json())
-  .then(j=>{if(j.status!=='WARTET')location.reload()}).catch(()=>{}),5000);
-</script>
+<p class="leise">Der Kunde hat das File geprüft, aber noch keinen Auftrag abgeschickt.</p>
+{% elif a.status == 'ABGELEHNT' and a.grund %}
+<p>Grund der Ablehnung (sieht der Kunde): {{ a.grund }}</p>
 {% endif %}
 </div>
 
@@ -1449,7 +1375,7 @@ document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('ch
 <input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Tuning">
 <label class="feld">Adresse der Seite</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
-<label class="feld">Download-Link für das Windows-Programm (leer = Link auf der Startseite ausblenden)</label>
+<label class="feld">Download-Link für das Windows-Programm (wird auf der Startseite angezeigt)</label>
 <input type="text" name="programm_url" value="{{ programm_url }}">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">

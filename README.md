@@ -97,20 +97,21 @@ Archiv → „Archiv als ZIP herunterladen“ ab und zu eine Kopie auf den PC ho
 
 ---
 
-# Webseite
+# Ablauf
 
-**Kunden brauchen kein Login:** Original hochladen → „File prüfen“ → nur die gefundenen Optionen werden angezeigt →
-Option wählen, optional Name/Telefon → „Auftrag senden“. **Erst nach deiner Freigabe** kann der Kunde herunterladen.
-Bis dahin zeigt seine Seite „Wartet auf Freigabe“ und aktualisiert sich alle 5 Sekunden selbst.
-Wird abgelehnt, sieht der Kunde das (mit Grund, falls angegeben).
+**Kunden arbeiten nur mit dem Windows-Programm** (siehe unten). Die Startseite der Domain zeigt nur noch den
+Download des Programms sowie Impressum und Datenschutz. Hochladen/Bestellen im Browser gibt es nicht mehr.
+
+Im Programm: Original auswählen → nur die gefundenen Lösungen werden angezeigt → eine oder mehrere wählen,
+optional Name/Telefon → „Auftrag senden“. **Erst nach deiner Freigabe** kann der Kunde herunterladen;
+das Programm fragt den Status selbst ab und meldet sich.
 
 **Du bekommst eine Meldung:**
 - **Telegram** aufs Handy, mit Knöpfen ✅ Bestätigen / ❌ Ablehnen direkt in der Nachricht
-- **Admin-Bereich** (`/login`, nicht im Menü verlinkt): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
+- **Admin-Bereich** (`/login`): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
-Kein 100-%-Treffer? Dann sieht der Kunde „Für dieses File haben wir leider noch keine Lösung“, es entsteht kein Auftrag.
-Vor dem Bestätigen kannst du im Admin-Bereich auch ein eigenes File hochladen, das dann stattdessen ausgeliefert wird.
+Kein Treffer? Dann meldet das Programm „Für dieses File haben wir leider noch keine Lösung“, es entsteht kein Auftrag.
 
 ## Admin-Bereich
 | Seite | Was |

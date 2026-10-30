@@ -242,43 +242,44 @@ class WebTests(Basis):
             c.csrf = s["csrf"]
         return c
 
+    # --- Kunde = Windows-Programm (Schnittstelle /api/...) ---
     def hochladen(self, daten, name="kunde.bin"):
-        r = self.kunde.post("/pruefen", data={"csrf": self.kunde.csrf, "datei": (io.BytesIO(bytes(daten)), name)},
+        r = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(daten)), name)},
                             content_type="multipart/form-data")
-        ort = r.headers.get("Location", "")
-        return ort.rsplit("/", 1)[1] if "/auftrag/" in ort else None
+        return r.json["id"] if r.status_code == 200 else None
+
+    def angebot(self, aid):
+        """{schluessel: Anzeigename} der Loesungen, die das Programm anzeigt."""
+        return {o["key"]: o["name"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]}
+
+    def laden(self, aid):
+        return self.kunde.get(f"/api/auftrag/{aid}/download")
 
     def auftrag(self, aid):
         return json.loads((A.AUFTRAEGE / aid / "auftrag.json").read_text())
 
     def test_ablauf_komplett(self):
         aid = self.hochladen(self.golf)
-        seite = self.kunde.get(f"/auftrag/{aid}").text
-        self.assertIn('value="stage1"', seite)
-        self.assertIn('value="startstopp"', seite)
-        self.assertNotIn('value="vmax"', seite)
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").status_code, 403)
+        self.assertEqual(list(self.angebot(aid)), ["stage1", "startstopp"])
+        self.assertEqual(self.laden(aid).status_code, 403)
         self.assertEqual(self.telegram, [])   # Meldung erst nach dem Bestellen
 
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "startstopp"})
+        self.bestellen(aid, "startstopp")
         self.assertEqual(self.auftrag(aid)["status"], "WARTET")
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").status_code, 403)
+        self.assertEqual(self.laden(aid).status_code, 403)
 
         A.entscheide(aid, True, wer="test")
-        d = self.kunde.get(f"/auftrag/{aid}/download")
+        d = self.laden(aid)
         self.assertEqual(d.status_code, 200)
         self.assertEqual(d.data, bytes(self.startstopp))
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
-        seite = self.kunde.get(f"/auftrag/{aid}").text
-        self.assertIn('value="original"', seite)
-        self.assertIn("Original (Rückrüsten)", seite)
-        self.assertNotIn('value="stage1"', seite)
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "original"})
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").status_code, 403)
+        self.assertEqual(self.angebot(aid), {"original": "Original (Rückrüsten)"})
+        self.bestellen(aid, "original")
+        self.assertEqual(self.laden(aid).status_code, 403)
         A.entscheide(aid, True)
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(self.bmw))
+        self.assertEqual(self.laden(aid).data, bytes(self.bmw))
         # Im Archiv-Formular gibt es kein Upload-Feld fuer "Original (Rueckruesten)"
         self.assertNotIn('name="original"', self.admin().get("/admin/archiv").text)
 
@@ -288,14 +289,14 @@ class WebTests(Basis):
         oneclick.INDEX_DATEI.write_text(json.dumps(alt))
         self.assertIn("original", oneclick.finde_loesungen(bytes(self.stage1))[1])
 
-    def bestellen(self, aid, *optionen):
-        return self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": list(optionen)},
-                               follow_redirects=True).text
+    def bestellen(self, aid, *optionen, kontakt=""):
+        """Gibt die Antwort als Text zurueck (Fehlermeldung oder Auftrag)."""
+        r = self.kunde.post(f"/api/auftrag/{aid}/bestellen", json={"optionen": list(optionen), "kontakt": kontakt})
+        return json.dumps(r.json, ensure_ascii=False)
 
     def test_kombination_stage1_startstopp(self):
         A.speichere_config({"telegram_chat_id": "1"})
         aid = self.hochladen(self.golf)
-        self.assertIn('type="checkbox"', self.kunde.get(f"/auftrag/{aid}").text)
         self.bestellen(aid, "stage1", "startstopp")
         a = self.auftrag(aid)
         self.assertEqual((a["status"], a["option"]), ("WARTET", "stage1+startstopp"))
@@ -305,7 +306,7 @@ class WebTests(Basis):
         A.entscheide(aid, True)
         erwartet = bytearray(self.stage1)
         erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(erwartet))
+        self.assertEqual(self.laden(aid).data, bytes(erwartet))
         self.assertIn("Stage 1 + Start/Stopp aus", self.admin().get("/admin").text)
 
     def test_kombination_mit_ueberschneidung_abgelehnt(self):
@@ -335,24 +336,22 @@ class WebTests(Basis):
         fremd = bytearray(mazda)
         fremd[0x20000:0x20400] = bytes(1024)
         aid = self.hochladen(fremd, "mazda_mod.bin")
-        self.assertIn('value="original"', self.kunde.get(f"/auftrag/{aid}").text)
+        self.assertIn("original", self.angebot(aid))
         self.bestellen(aid, "original")
         import time
         time.sleep(0.3)
         self.assertTrue(any("über Softwarenummer" in d["text"] for m, d in self.telegram if m == "sendMessage"))
         self.assertIn("Prüfen", a.get(f"/auftrag/{aid}").text)
         A.entscheide(aid, True)
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(mazda))
+        self.assertEqual(self.laden(aid).data, bytes(mazda))
 
     def test_bmw_nur_stage1(self):
         aid = self.hochladen(self.bmw)
-        seite = self.kunde.get(f"/auftrag/{aid}").text
-        self.assertIn('value="stage1"', seite)
-        self.assertNotIn('value="startstopp"', seite)
+        self.assertEqual(list(self.angebot(aid)), ["stage1"])
 
     def test_nicht_angebotene_option_abgelehnt(self):
         aid = self.hochladen(self.bmw)
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "startstopp"})
+        self.bestellen(aid, "startstopp")
         self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
         self.bestellen(aid)   # nichts gewaehlt
         self.assertEqual(self.auftrag(aid)["status"], "ENTWURF")
@@ -363,15 +362,15 @@ class WebTests(Basis):
 
     def test_ablehnen_mit_grund(self):
         aid = self.hochladen(self.golf)
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "stage1"})
+        self.bestellen(aid, "stage1")
         a = self.admin()
         a.post(f"/admin/auftrag/{aid}/entscheiden", data={"csrf": a.csrf, "aktion": "nein", "grund": "Test-Grund"})
-        self.assertIn("Test-Grund", self.kunde.get(f"/auftrag/{aid}").text)
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").status_code, 403)
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["grund"], "Test-Grund")
+        self.assertEqual(self.laden(aid).status_code, 403)
 
     def test_doppelte_entscheidung_aendert_nichts(self):
         aid = self.hochladen(self.golf)
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "stage1"})
+        self.bestellen(aid, "stage1")
         self.assertEqual(A.entscheide(aid, True, wer="x"), "Freigegeben.")
         self.assertIn("schon", A.entscheide(aid, False, wer="x"))
 
@@ -383,7 +382,17 @@ class WebTests(Basis):
             self.assertEqual(a.get(pfad).status_code, 200, pfad)
 
     def test_csrf(self):
-        self.assertEqual(A.app.test_client().post("/pruefen").status_code, 400)
+        self.assertEqual(A.app.test_client().post("/login", data={"name": "chef", "pw": "Geheim123"}).status_code, 400)
+
+    def test_keine_kunden_webseite_mehr(self):
+        start = self.client().get("/").text
+        self.assertIn("Windows-Programm herunterladen", start)
+        self.assertNotIn('name="datei"', start)
+        c = self.client()
+        self.assertEqual(c.post("/pruefen", data={"csrf": c.csrf}).status_code, 404)
+        aid = self.hochladen(self.golf)
+        self.assertEqual(self.client().get(f"/auftrag/{aid}").status_code, 302)   # nur Admin
+        self.assertEqual(self.admin().get(f"/auftrag/{aid}").status_code, 200)
 
     def test_login_sperre(self):
         c = self.client()
@@ -439,7 +448,7 @@ class WebTests(Basis):
         st1[0x6000:0x6008] = bytes(8)
         self.assertIn("angelegt", self.fahrzeug(a, "Passat B8", neu, stage1=st1))
         aid = self.hochladen(neu)
-        self.assertIn('value="stage1"', self.kunde.get(f"/auftrag/{aid}").text)
+        self.assertIn("stage1", self.angebot(aid))
 
     def test_option_zu_vorhandenem_fahrzeug(self):
         a = self.admin()
@@ -477,16 +486,14 @@ class WebTests(Basis):
         self.assertIn("Drallklappen", self.fahrzeug(a, "Audi_A6", neu, stage1=st1, drallklappen=drall))
         # Kunde sieht beide, waehlt Drallklappen
         aid = self.hochladen(neu)
-        seite = self.kunde.get(f"/auftrag/{aid}").text
-        self.assertIn('value="drallklappen"', seite)
-        self.assertIn(">Drallklappen<", seite)
-        self.kunde.post(f"/auftrag/{aid}/bestellen", data={"csrf": self.kunde.csrf, "option": "drallklappen"})
+        self.assertEqual(self.angebot(aid)["drallklappen"], "Drallklappen")
+        self.bestellen(aid, "drallklappen")
         import time
         time.sleep(0.3)
         texte = [d["text"] for m, d in self.telegram if m == "sendMessage"]
         self.assertTrue(any("Neuer Auftrag: Drallklappen" in t for t in texte))
         A.entscheide(aid, True)
-        self.assertEqual(self.kunde.get(f"/auftrag/{aid}/download").data, bytes(drall))
+        self.assertEqual(self.laden(aid).data, bytes(drall))
         # Benutzte Loesung kann nicht geloescht werden
         self.assertIn("noch im Archiv benutzt", self.loesung(a, "loeschen", key="drallklappen"))
 
@@ -521,10 +528,10 @@ class WebTests(Basis):
         alt = (datetime.now() - timedelta(days=100)).isoformat(timespec="seconds")
         entwurf = self.hochladen(self.golf)
         erledigt = self.hochladen(self.golf)
-        self.kunde.post(f"/auftrag/{erledigt}/bestellen", data={"csrf": self.kunde.csrf, "option": "stage1"})
+        self.bestellen(erledigt, "stage1")
         A.entscheide(erledigt, True)
         wartet = self.hochladen(self.golf)
-        self.kunde.post(f"/auftrag/{wartet}/bestellen", data={"csrf": self.kunde.csrf, "option": "stage1"})
+        self.bestellen(wartet, "stage1")
         for aid in (entwurf, erledigt, wartet):
             a = self.auftrag(aid)
             a["zeit"] = alt
