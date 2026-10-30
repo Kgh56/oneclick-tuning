@@ -1181,7 +1181,11 @@ TEMPLATES = {
 <style>
 :root{--bg:#000;--glas:rgba(255,255,255,.045);--glas2:rgba(255,255,255,.075);--rand:rgba(255,255,255,.09);
 --rand2:rgba(255,255,255,.16);--text:#f5f5f7;--leise:#a1a1a6;--akzent:#ff375f;--akzent2:#ff9f0a;
---ok:#30d158;--warn:#ffd60a;--blau:#0a84ff;--verlauf:linear-gradient(135deg,var(--akzent),var(--akzent2))}
+--ok:#30d158;--warn:#ffd60a;--blau:#0a84ff;--verlauf:linear-gradient(135deg,var(--akzent),var(--akzent2));--breite:1100px}
+@media (min-width:1500px){:root{--breite:1280px}}
+@media (min-width:1900px){:root{--breite:1480px}}
+@media (min-width:2200px){html{zoom:1.3}}
+@media (min-width:3000px){html{zoom:1.6}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark}
 input[type=file]{font-family:inherit;font-size:12.5px;color:var(--leise)}
 input[type=file]::file-selector-button{font:inherit;font-weight:600;color:var(--text);background:rgba(255,255,255,.1);
@@ -1196,15 +1200,15 @@ radial-gradient(700px 600px at 50% 120%,rgba(255,159,10,.07),transparent 60%);ba
 ::selection{background:rgba(255,55,95,.35)}
 a{color:var(--text)}
 header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
-padding:12px max(16px,calc((100% - 1100px)/2));background:rgba(0,0,0,.6);
+padding:12px max(16px,calc((100% - var(--breite))/2));background:rgba(0,0,0,.6);
 -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--rand)}
 .logo{font-weight:700;font-size:19px;letter-spacing:-.02em}
 .logo span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
 nav{display:flex;flex-wrap:wrap;gap:4px 20px}nav a{color:var(--leise);text-decoration:none;font-size:13.5px;transition:color .2s}nav a:hover{color:var(--text)}
-main{max-width:1100px;margin:0 auto;padding:36px 16px}
+main{max-width:calc(var(--breite) + 32px);margin:0 auto;padding:36px 16px}
 .karte{background:var(--glas);border:1px solid var(--rand);border-radius:22px;padding:28px;margin-bottom:22px;
 -webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 20px 60px rgba(0,0,0,.35)}
-h1{font-size:30px;line-height:1.15;font-weight:700;letter-spacing:-.03em;margin:0 0 18px}
+h1{font-size:30px;line-height:1.15;font-weight:700;letter-spacing:-.03em;margin:0 0 18px;overflow-wrap:anywhere}
 h2{font-size:19px;font-weight:600;letter-spacing:-.02em;margin:0 0 14px}
 .hero{text-align:center;padding:34px 0 30px}
 .hero h1{font-size:clamp(38px,7vw,64px);letter-spacing:-.045em;margin:0 0 14px}
@@ -1240,6 +1244,12 @@ border:1.5px solid transparent;box-shadow:0 10px 30px rgba(255,55,95,.25)}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 10px;white-space:nowrap;border-bottom:1px solid var(--rand);font-size:14px}
 th{color:var(--leise);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em}tr:last-child td{border-bottom:0}
 .tabelle{overflow-x:auto}
+tr>th:first-child+td{white-space:normal;overflow-wrap:anywhere}
+/* Listen: lange Dateinamen umbrechen statt die Knoepfe aus dem Bild zu schieben */
+.liste-tab td{white-space:normal}
+.liste-tab td a{overflow-wrap:anywhere;word-break:break-word}
+.liste-tab td:first-child,.liste-tab td:last-child,.liste-tab .status{white-space:nowrap}
+td a{overflow-wrap:anywhere}
 .status{display:inline-block;padding:3px 11px;border-radius:99px;font-size:12.5px;font-weight:600}
 .s-FREIGEGEBEN,.a-AUTOMATISCH{background:rgba(48,209,88,.15);color:var(--ok)}
 .s-ENTWURF{background:rgba(10,132,255,.16);color:#64b5ff}
@@ -1270,9 +1280,30 @@ min-width:0;background:rgba(255,255,255,.03);transition:all .2s}
 label.datei.pflicht{border-color:rgba(255,55,95,.55)}
 label.datei.gewaehlt{border-style:solid;border-color:var(--ok);background:rgba(48,209,88,.08)}
 label.datei input{font-size:12px;color:var(--leise);max-width:100%}
-footer{max-width:1100px;margin:0 auto;padding:10px 16px 40px;font-size:12.5px;color:#6e6e73}
+footer{max-width:calc(var(--breite) + 32px);margin:0 auto;padding:10px 16px 40px;font-size:12.5px;color:#6e6e73}
 footer a{color:#6e6e73;margin-right:18px;text-decoration:none}footer a:hover{color:var(--text)}
 @media (max-width:600px){.karte{padding:20px;border-radius:18px}main{padding:22px 14px}h1{font-size:25px}.hero{padding:16px 0 20px}}
+/* Handy: Menue in einer Zeile (wischbar), Kacheln 2x2, Listen als Karten mit Beschriftung */
+@media (max-width:720px){
+header{flex-direction:column;align-items:stretch;gap:6px;padding:10px 14px}
+header>*{min-width:0;max-width:100%}
+nav{flex-wrap:nowrap;overflow-x:auto;gap:14px;padding-bottom:2px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}
+nav a{white-space:nowrap;font-size:13.5px;padding:4px 0}
+.raster{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.raster .karte{padding:16px;margin:0}.zahl{font-size:32px}
+.liste-tab,.liste-tab tbody,.liste-tab tr,.liste-tab td{display:block;width:100%}
+.liste-tab tr:first-child{display:none}
+.liste-tab tr{border:1px solid var(--rand);border-radius:14px;padding:6px 12px;margin-bottom:10px;background:rgba(255,255,255,.025)}
+.liste-tab td{display:flex;justify-content:space-between;align-items:center;gap:14px;white-space:normal;text-align:right;
+padding:8px 0;border-bottom:1px solid var(--rand);overflow-wrap:anywhere}
+.liste-tab tr td:last-child{border-bottom:0}
+.liste-tab td::before{content:attr(data-label);flex:none;color:var(--leise);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;text-align:left}
+.liste-tab td[data-label=""]::before{display:none}
+.liste-tab td .status,.liste-tab td .btn{flex:none;white-space:nowrap}
+.liste-tab td[data-label=""]{justify-content:flex-end;flex-wrap:wrap}
+.tabelle{overflow:visible}
+table:not(.liste-tab) th{white-space:normal;padding-left:0}
+}
 </style></head><body>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 <nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
@@ -1285,6 +1316,16 @@ footer a{color:#6e6e73;margin-right:18px;text-decoration:none}footer a:hover{col
 {% block inhalt %}{% endblock %}
 </main>
 <footer><a href="{{ url_for('impressum') }}">Impressum</a><a href="{{ url_for('datenschutz') }}">Datenschutz</a></footer>
+<script>
+// Tabellen mit Kopfzeile = Listen: am Handy als Karten, jede Zelle bekommt ihre Spaltenueberschrift
+document.querySelectorAll('table').forEach(function(t){
+  var kopf=t.rows[0]; if(!kopf||kopf.cells.length<2) return;
+  for(var i=0;i<kopf.cells.length;i++) if(kopf.cells[i].tagName!=='TH') return;
+  t.classList.add('liste-tab');
+  for(var r=1;r<t.rows.length;r++) for(var c=0;c<t.rows[r].cells.length;c++)
+    t.rows[r].cells[c].setAttribute('data-label',(kopf.cells[c]||{}).textContent||'');
+});
+</script>
 </body></html>""",
 
 "neustart.html": """{% extends "basis.html" %}{% block inhalt %}
