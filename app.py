@@ -102,10 +102,18 @@ def lade_config() -> dict:
     return json.loads(CONFIG_DATEI.read_text()) if CONFIG_DATEI.exists() else {}
 
 
+def json_speichern(pfad: Path, daten):
+    """Erst komplett in eine Temp-Datei schreiben, dann in einem Schritt austauschen.
+    So liest niemand (z. B. die Statusabfrage) eine halb geschriebene Datei."""
+    tmp = pfad.with_name(f".{pfad.name}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(daten, indent=2, ensure_ascii=False))
+    os.replace(tmp, pfad)
+
+
 def speichere_config(aenderungen: dict):
     cfg = lade_config()
     cfg.update(aenderungen)
-    CONFIG_DATEI.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    json_speichern(CONFIG_DATEI, cfg)
 
 
 def lade_benutzer() -> dict:
@@ -113,7 +121,7 @@ def lade_benutzer() -> dict:
 
 
 def speichere_auftrag(auftrag: dict):
-    (AUFTRAEGE / auftrag["id"] / "auftrag.json").write_text(json.dumps(auftrag, indent=2, ensure_ascii=False))
+    json_speichern(AUFTRAEGE / auftrag["id"] / "auftrag.json", auftrag)
 
 
 def finde_auftrag(aid: str):
@@ -414,8 +422,8 @@ def upload_limit():
 
 @app.before_request
 def csrf_pruefen():
-    if request.path == "/whatsapp/webhook":
-        return  # Meta signiert seine Anfragen selbst (siehe whatsapp_webhook)
+    if request.path == "/whatsapp/webhook" or request.path.startswith("/api/"):
+        return  # Meta signiert selbst; die API nutzt keine Cookies (Zugriff ueber die geheime Auftragsnummer)
     session.setdefault("csrf", secrets.token_hex(16))
     if request.method == "POST" and request.form.get("csrf") != session["csrf"]:
         abort(400)
@@ -467,29 +475,24 @@ def start():
     return render_template("start.html", auftraege=eigene)
 
 
-@app.route("/pruefen", methods=["POST"])
-def pruefen():
-    """Schritt 1: Original hochladen, 100-%-Treffer suchen, verfuegbare Optionen anbieten."""
+class Abgelehnt(Exception):
+    """Fehler mit einer Meldung fuer den Kunden (Webseite: flash, Programm: JSON)."""
+
+
+def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
+    """Schritt 1: Original pruefen, 100-%-Treffer suchen, Entwurf mit den verfuegbaren Loesungen anlegen."""
     if zu_viele("upload", 30, 3600):
-        flash("Zu viele Uploads in kurzer Zeit. Bitte später nochmal versuchen.")
-        return redirect(url_for("start"))
+        raise Abgelehnt("Zu viele Uploads in kurzer Zeit. Bitte später nochmal versuchen.")
     merken("upload")
-    datei = request.files.get("datei")
-    if not datei or not datei.filename:
-        flash("Bitte eine Originaldatei auswählen.")
-        return redirect(url_for("start"))
-    daten = datei.read()
     if len(daten) < 1024:
-        flash("Die Datei ist zu klein für ein ECU-File.")
-        return redirect(url_for("start"))
+        raise Abgelehnt("Die Datei ist zu klein für ein ECU-File.")
 
     info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
     ecu = ", ".join(info["ecu"]) or "?"
     software = ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"
     if not loesungen:
-        flash(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
-              "Melde dich gerne bei uns.")
-        return redirect(url_for("start"))
+        raise Abgelehnt(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
+                        "Melde dich gerne bei uns.")
 
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
@@ -501,7 +504,7 @@ def pruefen():
     auftrag = {
         "id": aid,
         "kunde": "–",
-        "datei": Path(datei.filename).name,
+        "datei": Path(dateiname).name or "datei.bin",
         "option": None,
         "status": "ENTWURF",
         "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
@@ -511,27 +514,23 @@ def pruefen():
         "zeit": datetime.now().isoformat(timespec="seconds"),
     }
     speichere_auftrag(auftrag)
-    session.permanent = True
-    session["auftraege"] = ([aid] + session.get("auftraege", []))[:50]
-    return redirect(url_for("auftrag_ansicht", aid=aid))
+    return auftrag
 
 
-@app.route("/auftrag/<aid>/bestellen", methods=["POST"])
-def bestellen(aid):
-    """Schritt 2: Kunde waehlt eine oder mehrere der angebotenen Loesungen -> wartet auf Freigabe."""
-    gewaehlt = set(request.form.getlist("option"))
+def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
+    """Schritt 2: eine oder mehrere der angebotenen Loesungen -> wartet auf Freigabe."""
     with sperre:
-        auftrag = lade_auftrag(aid)
+        auftrag = finde_auftrag(aid)
+        if auftrag is None:
+            raise Abgelehnt("Auftrag nicht gefunden.")
         if auftrag["status"] != "ENTWURF":
-            return redirect(url_for("auftrag_ansicht", aid=aid))
+            return auftrag   # schon abgeschickt (z. B. Doppelklick)
         angebot = auftrag["angebot"]
         auswahl = [o for o in angebot if o in gewaehlt]   # Reihenfolge wie angeboten
         if not auswahl or len(auswahl) != len(gewaehlt):
-            flash("Bitte eine oder mehrere der angezeigten Lösungen wählen.")
-            return redirect(url_for("auftrag_ansicht", aid=aid))
+            raise Abgelehnt("Bitte eine oder mehrere der angezeigten Lösungen wählen.")
         if oneclick.ORIGINAL in auswahl and len(auswahl) > 1:
-            flash(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
-            return redirect(url_for("auftrag_ansicht", aid=aid))
+            raise Abgelehnt(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
         ordner = AUFTRAEGE / aid
         if len(auswahl) == 1:
             (ordner / f"loesung_{auswahl[0]}.bin").replace(ordner / "ergebnis.bin")
@@ -539,9 +538,8 @@ def bestellen(aid):
             daten = oneclick.kombiniere((ordner / "ori.bin").read_bytes(),
                                         [(ordner / f"loesung_{o}.bin").read_bytes() for o in auswahl])
             if daten is None:
-                flash(f"Die Kombination {option_namen()['+'.join(auswahl)]} ist leider nicht möglich, "
-                      "weil sich die Lösungen gegenseitig überschneiden. Bitte anders wählen.")
-                return redirect(url_for("auftrag_ansicht", aid=aid))
+                raise Abgelehnt(f"Die Kombination {option_namen()['+'.join(auswahl)]} ist leider nicht möglich, "
+                                "weil sich die Lösungen gegenseitig überschneiden. Bitte anders wählen.")
             (ordner / "ergebnis.bin").write_bytes(daten)
         for rest in ordner.glob("loesung_*.bin"):
             rest.unlink()
@@ -549,13 +547,85 @@ def bestellen(aid):
         art = ("softwarenummer" if "softwarenummer" in arten
                else "identisch" if arten == {"identisch"} else "gleiche Stellen")
         auftrag.update(option="+".join(auswahl), status="WARTET",
-                       kunde=request.form.get("kontakt", "").strip()[:100] or "–",
+                       kunde=kontakt.strip()[:100] or "–",
                        quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
                        art=art,
                        zeit=datetime.now().isoformat(timespec="seconds"))
         speichere_auftrag(auftrag)
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
+    return auftrag
+
+
+@app.route("/pruefen", methods=["POST"])
+def pruefen():
+    datei = request.files.get("datei")
+    if not datei or not datei.filename:
+        flash("Bitte eine Originaldatei auswählen.")
+        return redirect(url_for("start"))
+    try:
+        auftrag = entwurf_anlegen(datei.read(), datei.filename)
+    except Abgelehnt as e:
+        flash(str(e))
+        return redirect(url_for("start"))
+    session.permanent = True
+    session["auftraege"] = ([auftrag["id"]] + session.get("auftraege", []))[:50]
+    return redirect(url_for("auftrag_ansicht", aid=auftrag["id"]))
+
+
+@app.route("/auftrag/<aid>/bestellen", methods=["POST"])
+def bestellen(aid):
+    try:
+        auftrag_abschicken(aid, set(request.form.getlist("option")), request.form.get("kontakt", ""))
+    except Abgelehnt as e:
+        flash(str(e))
     return redirect(url_for("auftrag_ansicht", aid=aid))
+
+
+# ---------------------------------------------------------------------------
+# Schnittstelle fuer das Windows-Programm (JSON, ohne Cookies)
+# ---------------------------------------------------------------------------
+
+def api_auftrag(a: dict) -> dict:
+    namen = option_namen()
+    return {
+        "id": a["id"], "datei": a["datei"], "ecu": a["ecu"], "software": a["software"],
+        "zeit": a["zeit"], "status": a["status"], "status_text": STATUS_TEXT[a["status"]],
+        "option": a.get("option"), "option_name": namen[a["option"]] if a.get("option") else None,
+        "angebot": [{"key": o, "name": namen[o]} for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
+        "grund": a.get("grund", ""),
+    }
+
+
+@app.route("/api/info")
+def api_info():
+    return jsonify(firma=lade_config().get("firmenname") or "OneClick Tuning", api=1,
+                   original=oneclick.ORIGINAL)
+
+
+@app.route("/api/pruefen", methods=["POST"])
+def api_pruefen():
+    datei = request.files.get("datei")
+    if not datei or not datei.filename:
+        return jsonify(fehler="Bitte eine Originaldatei auswählen."), 400
+    try:
+        return jsonify(api_auftrag(entwurf_anlegen(datei.read(), datei.filename)))
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
+
+
+@app.route("/api/auftrag/<aid>/bestellen", methods=["POST"])
+def api_bestellen(aid):
+    daten = request.get_json(silent=True) or {}
+    try:
+        auftrag = auftrag_abschicken(aid, set(daten.get("optionen") or []), str(daten.get("kontakt") or ""))
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
+    return jsonify(api_auftrag(auftrag))
+
+
+@app.route("/api/auftrag/<aid>")
+def api_auftrag_status(aid):
+    return jsonify(api_auftrag(lade_auftrag(aid)))
 
 
 @app.route("/auftrag/<aid>")
@@ -569,6 +639,7 @@ def auftrag_status(aid):
 
 
 @app.route("/auftrag/<aid>/download")
+@app.route("/api/auftrag/<aid>/download")
 def download(aid):
     auftrag = lade_auftrag(aid)
     if auftrag["status"] != "FREIGEGEBEN" and not (session.get("admin") and auftrag["status"] != "ENTWURF"):
@@ -990,7 +1061,7 @@ def einstellungen():
                 flash("Die beiden neuen Passwörter sind nicht gleich.")
             else:
                 ich["pw"] = generate_password_hash(neu)
-                BENUTZER_DATEI.write_text(json.dumps(benutzer, indent=2))
+                json_speichern(BENUTZER_DATEI, benutzer)
                 flash("Passwort geändert.")
         return redirect(url_for("einstellungen"))
     try:
@@ -1450,7 +1521,7 @@ def admin_anlegen(name: str):
         sys.exit("Passwort muss mindestens 8 Zeichen haben.")
     benutzer = lade_benutzer()
     benutzer[name] = {"pw": generate_password_hash(pw), "rolle": "admin"}
-    BENUTZER_DATEI.write_text(json.dumps(benutzer, indent=2))
+    json_speichern(BENUTZER_DATEI, benutzer)
     print(f"Admin '{name}' gespeichert.")
 
 

@@ -535,6 +535,61 @@ class WebTests(Basis):
         self.assertTrue((A.AUFTRAEGE / wartet).exists())   # wartende nie loeschen
 
 
+class ApiTests(Basis):
+    """Schnittstelle fuer das Windows-Programm."""
+
+    def setUp(self):
+        super().setUp()
+        self.c = A.app.test_client()   # ohne Cookies / CSRF, wie das Programm
+
+    def pruefen(self, daten, name="kunde.bin"):
+        return self.c.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(daten)), name)},
+                           content_type="multipart/form-data")
+
+    def test_info(self):
+        j = self.c.get("/api/info").json
+        self.assertEqual(j["firma"], "OneClick Tuning")
+        self.assertEqual(j["original"], "original")
+
+    def test_ablauf(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        r = self.pruefen(self.golf)
+        self.assertEqual(r.status_code, 200)
+        j = r.json
+        self.assertEqual(j["status"], "ENTWURF")
+        self.assertEqual([o["key"] for o in j["angebot"]], ["stage1", "startstopp"])
+        self.assertEqual(j["ecu"], "EDC17C46")
+        aid = j["id"]
+        self.assertEqual(self.c.get(f"/api/auftrag/{aid}/download").status_code, 403)
+        r = self.c.post(f"/api/auftrag/{aid}/bestellen", json={"optionen": ["stage1", "startstopp"], "kontakt": "Werkstatt X"})
+        self.assertEqual(r.json["status"], "WARTET")
+        self.assertEqual(r.json["option_name"], "Stage 1 + Start/Stopp aus")
+        self.assertEqual(self.c.get(f"/api/auftrag/{aid}/download").status_code, 403)
+        A.entscheide(aid, True)
+        self.assertEqual(self.c.get(f"/api/auftrag/{aid}").json["status"], "FREIGEGEBEN")
+        d = self.c.get(f"/api/auftrag/{aid}/download")
+        self.assertEqual(d.status_code, 200)
+        erwartet = bytearray(self.stage1)
+        erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
+        self.assertEqual(d.data, bytes(erwartet))
+
+    def test_fehler(self):
+        r = self.pruefen(zufall(GROESSE, 8))
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("keine Lösung", r.json["fehler"])
+        aid = self.pruefen(self.golf).json["id"]
+        r = self.c.post(f"/api/auftrag/{aid}/bestellen", json={"optionen": ["vmax"]})
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(self.c.get("/api/auftrag/gibtsnicht").status_code, 404)
+
+    def test_abgelehnt_mit_grund(self):
+        aid = self.pruefen(self.bmw).json["id"]
+        self.c.post(f"/api/auftrag/{aid}/bestellen", json={"optionen": ["stage1"]})
+        A.entscheide(aid, False, grund="Software unbekannt")
+        j = self.c.get(f"/api/auftrag/{aid}").json
+        self.assertEqual((j["status"], j["grund"]), ("ABGELEHNT", "Software unbekannt"))
+
+
 class UpdateTests(unittest.TestCase):
     """Update-Knopf mit echten Git-Repositories in einem temporaeren Ordner."""
 

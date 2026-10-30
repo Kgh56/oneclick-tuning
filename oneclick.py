@@ -294,7 +294,9 @@ def option_anlegen(name: str) -> str:
         raise ValueError(f"„{name}“ gibt es schon oder der Name ist nicht erlaubt.")
     eigene = eigene_optionen()
     eigene[key] = name
-    OPTIONEN_DATEI.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+    tmp = OPTIONEN_DATEI.with_suffix(".tmp")
+    tmp.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+    tmp.replace(OPTIONEN_DATEI)
     return key
 
 
@@ -307,7 +309,9 @@ def option_loeschen(key: str):
         raise ValueError(f"„{eigene[key]}“ wird noch im Archiv benutzt ({', '.join(benutzt[:5])}). "
                          "Erst dort die Fahrzeuge löschen.")
     del eigene[key]
-    OPTIONEN_DATEI.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+    tmp = OPTIONEN_DATEI.with_suffix(".tmp")
+    tmp.write_text(json.dumps(eigene, indent=2, ensure_ascii=False))
+    tmp.replace(OPTIONEN_DATEI)
 
 
 def ist_ecu_datei(name: str) -> bool:
