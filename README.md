@@ -165,6 +165,8 @@ Windows 10/11 enthalten ist).
   `https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe`
 - **Bauen:** automatisch bei jeder Änderung im Ordner `kunde/` (GitHub Actions auf Windows). Nach dem Bauen wird
   die .exe zur Probe gestartet (Selbsttest); nur wenn Oberfläche und Verbindung laufen, wird sie veröffentlicht.
+- **Fenster:** startet maximiert; **F11** schaltet echtes Vollbild ein/aus. Auf großen Bildschirmen mit Begrüßung,
+  Kennzahlen, „So funktioniert's“, animiertem Netzwerk-Hintergrund und Lichtschein, der der Maus folgt.
 - **Ablauf im Programm:** Datei hineinziehen oder auswählen → Analyse → verfügbare Lösungen wählen → Auftrag senden →
   das Programm fragt den Status selbst ab und meldet die Freigabe (mit Ton und Konfetti) → Herunterladen.
 - **Auto-Update:** Beim Öffnen prüft das Programm, ob es eine neuere Version gibt (Datei `version.json` neben der .exe

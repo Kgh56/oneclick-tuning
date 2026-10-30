@@ -313,6 +313,11 @@ class Bruecke:
         finally:
             os._exit(0)
 
+    def vollbild(self) -> dict:
+        if self._fenster:
+            self._fenster.toggle_fullscreen()
+        return {}
+
     def entfernen(self, aid: str) -> dict:
         self._speicher.daten["auftraege"] = [x for x in self._speicher.daten["auftraege"] if x["id"] != aid]
         self._speicher.speichern()
@@ -349,7 +354,8 @@ def main():
     import webview
     bruecke = Bruecke()
     fenster = webview.create_window("OneClick Tuning", url=ui_datei().as_uri(), js_api=bruecke,
-                                    width=1120, height=780, min_size=(820, 620), background_color="#000000")
+                                    width=1280, height=820, min_size=(820, 620), background_color="#000000",
+                                    maximized=True)
     bruecke._fenster = fenster
     test = os.environ.get("ONECLICK_SELBSTTEST")
     if test:

@@ -48,7 +48,7 @@ input{user-select:text}
 
 /* ---------- Grundlayout ---------- */
 .app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}
-header{display:flex;align-items:center;justify-content:space-between;padding:18px 28px 6px}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 32px 6px}
 .marke{font-size:21px;font-weight:700;letter-spacing:-.03em}
 .marke .glanz{background:linear-gradient(90deg,var(--a1),var(--a2),#fff,var(--a2),var(--a1));background-size:300% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:glanz 7s linear infinite}
@@ -62,10 +62,92 @@ header{display:flex;align-items:center;justify-content:space-between;padding:18p
 .rund{width:36px;height:36px;border-radius:50%;border:1px solid var(--rand);background:var(--glas);display:grid;place-items:center;cursor:pointer;
   transition:transform .3s var(--feder),background .2s}
 .rund:hover{background:var(--glas2);transform:rotate(60deg)}
-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,1fr);gap:22px;padding:14px 28px 26px}
-@media (max-width:900px){main{grid-template-columns:1fr;overflow:auto}}
+#netz{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.55}
 
-.karte{position:relative;background:var(--glas);border:1px solid var(--rand);border-radius:26px;padding:28px;
+/* ---------- Kopfbereich mit Begruessung + Kennzahlen ---------- */
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:10px 32px 4px;animation:einblenden .8s .05s var(--feder) both}
+.gruss{font-size:14px;color:var(--leise);display:flex;align-items:center;gap:8px}
+.gruss i{width:6px;height:6px;border-radius:50%;background:var(--verlauf);box-shadow:0 0 12px var(--a1)}
+.hero h1{font-size:clamp(28px,3.1vw,46px);letter-spacing:-.045em;margin-top:6px}
+.hero h1 span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stats{display:flex;gap:14px}
+.stat{position:relative;min-width:168px;padding:16px 18px;border-radius:20px;background:var(--glas);border:1px solid var(--rand);
+  backdrop-filter:blur(24px);overflow:hidden;animation:einblenden .8s var(--feder) both}
+.stat:nth-child(2){animation-delay:.08s}.stat:nth-child(3){animation-delay:.16s}
+.stat .s-kopf{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--leise)}
+.stat .s-icon{width:26px;height:26px;border-radius:9px;display:grid;place-items:center}
+.stat .s-icon svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.stat b{display:block;font-size:34px;font-weight:700;letter-spacing:-.04em;line-height:1.1;margin-top:8px}
+.stat::after{content:"";position:absolute;right:-30px;bottom:-30px;width:110px;height:110px;border-radius:50%;filter:blur(30px);opacity:.35}
+.stat.rot .s-icon{background:var(--verlauf)}.stat.rot::after{background:var(--a1)}
+.stat.gelb .s-icon{background:linear-gradient(135deg,#ffd60a,#ff9f0a)}.stat.gelb::after{background:var(--warn)}
+.stat.gruen .s-icon{background:linear-gradient(135deg,#30d158,#0fb5a3)}.stat.gruen::after{background:var(--ok)}
+.stat.gelb.aktiv b{color:var(--warn);text-shadow:0 0 22px rgba(255,214,10,.45)}
+
+/* ---------- Hauptbereich ---------- */
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(360px,1fr);gap:22px;padding:18px 32px 12px}
+.links{display:flex;flex-direction:column;gap:18px;min-height:0}
+.links>.karte{flex:1}
+
+/* Schritte "So funktioniert's" */
+.schritte{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;animation:einblenden .8s .25s var(--feder) both}
+.schritte::before{content:"";position:absolute;left:12%;right:12%;top:31px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--a1),var(--a2),var(--blau),transparent);background-size:200% 100%;animation:fluss 4s linear infinite;opacity:.6}
+@keyframes fluss{to{background-position:-200% 0}}
+.schritt-karte{position:relative;padding:16px 16px 14px;border-radius:18px;background:rgba(14,14,16,.75);border:1px solid var(--rand);backdrop-filter:blur(20px);
+  transition:transform .3s var(--feder),border-color .3s}
+.schritt-karte:hover{transform:translateY(-3px);border-color:var(--rand2)}
+.schritt-karte .nr{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;margin-bottom:10px;background:var(--verlauf);
+  box-shadow:0 8px 22px rgba(255,55,95,.35)}
+.schritt-karte .nr svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.schritt-karte:nth-child(2) .nr{background:linear-gradient(135deg,#ff9f0a,#ffd60a);box-shadow:0 8px 22px rgba(255,159,10,.35)}
+.schritt-karte:nth-child(3) .nr{background:linear-gradient(135deg,#30d158,#0fb5a3);box-shadow:0 8px 22px rgba(48,209,88,.35)}
+.schritt-karte b{display:block;font-size:14px}
+.schritt-karte span{font-size:12.5px;color:var(--leise)}
+
+/* Lichtschein, der der Maus folgt (Karten + Rand) */
+.spot{--mx:-500px;--my:-500px}
+.spot::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
+  background:radial-gradient(420px circle at var(--mx) var(--my),rgba(255,110,140,.7),rgba(255,159,10,.25) 30%,transparent 55%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.spot::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:radial-gradient(650px circle at var(--mx) var(--my),rgba(255,255,255,.045),transparent 45%)}
+
+/* Auftraege: Filter + Suche */
+.reiter{position:relative;display:flex;gap:2px;margin-top:14px;padding:4px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--rand)}
+.reiter button{position:relative;z-index:1;flex:1;border:0;background:none;padding:8px 6px;border-radius:10px;font-size:12.5px;font-weight:600;color:var(--leise);
+  cursor:pointer;transition:color .25s;white-space:nowrap}
+.reiter button.an{color:var(--text)}
+.reiter button small{opacity:.6;font-weight:500;margin-left:3px}
+.reiter .schieber{position:absolute;z-index:0;top:4px;bottom:4px;border-radius:10px;background:rgba(255,255,255,.1);
+  box-shadow:0 1px 0 rgba(255,255,255,.08) inset;transition:left .4s var(--feder),width .4s var(--feder)}
+.suche{position:relative;margin-top:10px}
+.suche svg{position:absolute;left:13px;top:50%;width:16px;height:16px;transform:translateY(-50%);fill:none;stroke:var(--dunkel);stroke-width:2;stroke-linecap:round}
+.suche input{width:100%;padding:10px 14px 10px 38px;border-radius:12px;border:1px solid var(--rand);background:rgba(255,255,255,.04);outline:none;font-size:13.5px;
+  transition:border-color .2s,box-shadow .2s}
+.suche input:focus{border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.2)}
+.suche input::placeholder{color:var(--dunkel)}
+
+/* Fusszeile */
+.fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 32px 14px;font-size:12px;color:var(--dunkel)}
+.fuss span{display:inline-flex;align-items:center;gap:6px}
+.fuss kbd{font:inherit;font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--rand2);color:var(--leise)}
+
+/* ECU-Grafik im Upload-Feld */
+.ecu{height:clamp(100px,22vh,340px);width:auto;max-width:88%;margin:0 auto 10px;display:block;overflow:visible}
+.ecu .bahn{fill:none;stroke:rgba(255,255,255,.1);stroke-width:2;stroke-linecap:round}
+.ecu .puls{fill:none;stroke:url(#pulsfarbe);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:14 260;animation:impuls 2.8s linear infinite;filter:drop-shadow(0 0 4px #ff375f)}
+.ecu .puls:nth-of-type(2n){animation-duration:3.4s;animation-delay:-1.2s}
+.ecu .puls:nth-of-type(3n){animation-duration:2.3s;animation-delay:-.6s}
+@keyframes impuls{from{stroke-dashoffset:274}to{stroke-dashoffset:0}}
+.ecu .knoten{fill:#141416;stroke:rgba(255,255,255,.25);stroke-width:1.5}
+.ecu .pin{fill:rgba(255,255,255,.28)}
+.ecu .chip{fill:#121214;stroke:url(#chiprand);stroke-width:2}
+.ecu .kern{animation:schweben2 3.2s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+@keyframes schweben2{50%{transform:translateY(-4px)}}
+.zone.ziehen .ecu .puls{animation-duration:.9s}
+
+.karte{position:relative;isolation:isolate;background:var(--glas);border:1px solid var(--rand);border-radius:26px;padding:28px;
   backdrop-filter:blur(28px) saturate(150%);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 30px 80px rgba(0,0,0,.45);
   min-height:0;display:flex;flex-direction:column;animation:einblenden .8s var(--feder) both}
 .karte:nth-child(2){animation-delay:.12s}
@@ -120,8 +202,8 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 20px}
 .chip{padding:5px 12px;border-radius:99px;background:var(--glas2);border:1px solid var(--rand);font-size:12.5px;color:var(--leise)}
 .chip b{color:var(--text);font-weight:600}
-.loesungen{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;overflow:auto;padding:12px 14px 26px;margin:0 -14px -14px}
-.loesung{position:relative;border-radius:18px;padding:18px 16px;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid var(--rand);
+.loesungen{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(180px,15vw,260px),1fr));gap:12px;overflow:auto;padding:12px 14px 26px;margin:0 -14px -14px}
+.loesung{position:relative;border-radius:18px;padding:clamp(18px,1.6vw,26px) clamp(16px,1.4vw,22px);font-size:clamp(14.5px,.95vw,17px);cursor:pointer;background:rgba(255,255,255,.04);border:1px solid var(--rand);
   display:flex;align-items:center;gap:12px;font-weight:600;transition:transform .3s var(--feder),border-color .3s,background .3s,box-shadow .3s;
   opacity:0;transform:translateY(16px) scale(.96);animation:karte-rein .6s var(--feder) forwards}
 @keyframes karte-rein{to{opacity:1;transform:none}}
@@ -181,6 +263,7 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .a-datei{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .a-info{font-size:12.5px;color:var(--leise);margin-top:2px}
 .a-fuss{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px}
+.aktionen{display:flex;align-items:center;gap:6px}
 .pille{flex:none;display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:600}
 .pille.WARTET{background:rgba(255,214,10,.12);color:var(--warn)}
 .pille.WARTET i{width:7px;height:7px;border-radius:50%;background:var(--warn);animation:blinken 1.4s ease-in-out infinite}
@@ -207,11 +290,16 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 #dialog.offen .karte{transform:none}
 #konfetti{position:fixed;inset:0;z-index:60;pointer-events:none}
 
+/* Kleine Fenster: weniger Deko, damit alles passt (am Ende, damit diese Regeln gewinnen) */
+@media (max-width:980px){main{grid-template-columns:1fr;overflow:auto}.stats{display:none}}
+@media (max-height:860px){.schritte{display:none}}
+@media (max-height:700px){.hero{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
 <div class="aurora"><i></i><i></i><i></i></div>
+<canvas id="netz"></canvas>
 <div class="raster"></div>
 <div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
 <div id="update"><div>
@@ -234,9 +322,22 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
     </div>
   </header>
 
+  <section class="hero">
+    <div>
+      <div class="gruss"><i></i><span id="gruss">Willkommen</span></div>
+      <h1>Bereit für dein <span>nächstes File?</span></h1>
+    </div>
+    <div class="stats">
+      <div class="stat rot"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span>Aufträge</div><b id="stat-gesamt">0</b></div>
+      <div class="stat gelb" id="stat-wartet-karte"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>Warten auf Freigabe</div><b id="stat-wartet">0</b></div>
+      <div class="stat gruen"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Freigegeben</div><b id="stat-frei">0</b></div>
+    </div>
+  </section>
+
   <main>
+    <div class="links">
     <!-- Links: Ablauf -->
-    <section class="karte">
+    <section class="karte spot">
       <div class="buehne">
         <div class="ansicht aktiv" id="v-upload">
           <h1>Original hochladen</h1>
@@ -244,7 +345,35 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
           <label class="zone" id="zone">
             <input type="file" id="datei" accept=".bin,.ori,.org,.mod,*">
             <div>
-              <div class="hoch"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+              <svg class="ecu" viewBox="0 0 380 200" aria-hidden="true">
+                <defs>
+                  <linearGradient id="pulsfarbe" x1="0" x2="1"><stop offset="0" stop-color="#ff9f0a"/><stop offset="1" stop-color="#ff375f"/></linearGradient>
+                  <linearGradient id="chiprand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff375f"/><stop offset="1" stop-color="#ff9f0a"/></linearGradient>
+                  <linearGradient id="kernfarbe" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff375f"/><stop offset="1" stop-color="#ff9f0a"/></linearGradient>
+                <g id="bahnen">
+                  <path d="M10 40 H90 Q100 40 100 50 V78 H140"/><path d="M10 100 H140"/><path d="M10 160 H90 Q100 160 100 150 V122 H140"/>
+                  <path d="M370 40 H290 Q280 40 280 50 V78 H240"/><path d="M370 100 H240"/><path d="M370 160 H290 Q280 160 280 150 V122 H240"/>
+                  <path d="M170 0 V40"/><path d="M210 0 V40"/><path d="M170 200 V160"/><path d="M210 200 V160"/>
+                </g>
+                </defs>
+                <use href="#bahnen" class="bahn"/>
+                <path class="puls" d="M10 40 H90 Q100 40 100 50 V78 H140"/><path class="puls" d="M10 100 H140"/><path class="puls" d="M10 160 H90 Q100 160 100 150 V122 H140"/>
+                <path class="puls" d="M370 40 H290 Q280 40 280 50 V78 H240"/><path class="puls" d="M370 100 H240"/><path class="puls" d="M370 160 H290 Q280 160 280 150 V122 H240"/>
+                <path class="puls" d="M170 0 V40"/><path class="puls" d="M210 200 V160"/>
+                <circle class="knoten" cx="10" cy="40" r="4"/><circle class="knoten" cx="10" cy="100" r="4"/><circle class="knoten" cx="10" cy="160" r="4"/>
+                <circle class="knoten" cx="370" cy="40" r="4"/><circle class="knoten" cx="370" cy="100" r="4"/><circle class="knoten" cx="370" cy="160" r="4"/>
+                <g class="pins">
+                  <rect class="pin" x="132" y="72" width="10" height="5" rx="1.5"/><rect class="pin" x="132" y="97" width="10" height="5" rx="1.5"/><rect class="pin" x="132" y="122" width="10" height="5" rx="1.5"/>
+                  <rect class="pin" x="238" y="72" width="10" height="5" rx="1.5"/><rect class="pin" x="238" y="97" width="10" height="5" rx="1.5"/><rect class="pin" x="238" y="122" width="10" height="5" rx="1.5"/>
+                  <rect class="pin" x="167" y="38" width="5" height="10" rx="1.5"/><rect class="pin" x="207" y="38" width="5" height="10" rx="1.5"/>
+                  <rect class="pin" x="167" y="152" width="5" height="10" rx="1.5"/><rect class="pin" x="207" y="152" width="5" height="10" rx="1.5"/>
+                </g>
+                <rect class="chip" x="140" y="46" width="100" height="108" rx="18"/>
+                <g class="kern">
+                  <rect x="162" y="72" width="56" height="56" rx="16" fill="url(#kernfarbe)" style="filter:drop-shadow(0 8px 20px rgba(255,55,95,.55))"/>
+                  <path d="M190 112 V88 M180 97 l10 -10 10 10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                </g>
+              </svg>
               <b>Datei hierher ziehen</b>
               <span class="leise">oder klicken zum Auswählen · .bin / .ori · max. 16 MB</span>
             </div>
@@ -291,16 +420,34 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
         </div>
       </div>
     </section>
+    <div class="schritte">
+      <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg></div><b>1 · Original hochladen</b><span>Wir erkennen Steuergerät und Software automatisch.</span></div>
+      <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><path d="M16 16l2 2 4-4"/></svg></div><b>2 · Lösungen wählen</b><span>Eine oder mehrere – alles in einem File.</span></div>
+      <div class="schritt-karte"><div class="nr"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 15.5v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5"/></svg></div><b>3 · Herunterladen</b><span>Nach unserer Freigabe meldet sich das Programm.</span></div>
+    </div>
+    </div>
 
     <!-- Rechts: Meine Auftraege -->
-    <section class="karte">
+    <section class="karte spot">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h2>Meine Aufträge</h2>
         <span class="leise" style="font-size:12.5px" id="anzahl"></span>
       </div>
+      <div class="reiter" id="reiter">
+        <span class="schieber" id="schieber"></span>
+        <button data-filter="alle" class="an">Alle<small id="z-alle"></small></button>
+        <button data-filter="WARTET">Wartend<small id="z-WARTET"></small></button>
+        <button data-filter="FREIGEGEBEN">Fertig<small id="z-FREIGEGEBEN"></small></button>
+        <button data-filter="ABGELEHNT">Abgelehnt<small id="z-ABGELEHNT"></small></button>
+      </div>
+      <div class="suche"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="suche" placeholder="Datei oder Lösung suchen …"></div>
       <div class="liste" id="liste"></div>
     </section>
   </main>
+  <footer class="fuss">
+    <span id="fuss-version">Version –</span>
+    <span>Updates werden automatisch installiert · <kbd>F11</kbd> Vollbild</span>
+  </footer>
 </div>
 
 <div id="dialog">
@@ -320,7 +467,85 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 "use strict";
 const $ = s => document.querySelector(s);
 const api = () => window.pywebview.api;
-let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set()};
+let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: ""};
+const ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- Begruessung ---------- */
+(function () {
+  const h = new Date().getHours();
+  $("#gruss").textContent = h < 5 ? "Gute Nacht" : h < 11 ? "Guten Morgen" : h < 18 ? "Guten Tag" : "Guten Abend";
+})();
+
+/* ---------- Netzwerk im Hintergrund ---------- */
+(function netz() {
+  const cv = $("#netz"), ctx = cv.getContext("2d");
+  let punkte = [], maus = {x: -9999, y: -9999}, w, h;
+  function groesse() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    w = innerWidth; h = innerHeight; cv.width = w * dpr; cv.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const anzahl = Math.round(Math.min(110, w * h / 16000));
+    punkte = Array.from({length: anzahl}, () => ({x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35, r: Math.random() * 1.6 + .6}));
+  }
+  addEventListener("resize", groesse); groesse();
+  addEventListener("mousemove", e => { maus.x = e.clientX; maus.y = e.clientY; });
+  function bild() {
+    ctx.clearRect(0, 0, w, h);
+    for (const p of punkte) {
+      if (!ruhig) { p.x += p.vx; p.y += p.vy; }
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+      const dx = p.x - maus.x, dy = p.y - maus.y, d = Math.hypot(dx, dy);
+      if (d < 140 && d > 0) { p.x += dx / d * .8; p.y += dy / d * .8; }   // weicht der Maus aus
+    }
+    for (let i = 0; i < punkte.length; i++) {
+      const a = punkte[i];
+      for (let j = i + 1; j < punkte.length; j++) {
+        const b = punkte[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d < 130) { ctx.strokeStyle = `rgba(255,120,140,${(1 - d / 130) * .22})`; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      }
+      const nah = Math.hypot(a.x - maus.x, a.y - maus.y) < 180;
+      ctx.fillStyle = nah ? "rgba(255,159,10,.9)" : "rgba(255,255,255,.45)";
+      ctx.beginPath(); ctx.arc(a.x, a.y, nah ? a.r + 1 : a.r, 0, 7); ctx.fill();
+    }
+    if (!document.hidden) requestAnimationFrame(bild); else setTimeout(() => requestAnimationFrame(bild), 500);
+  }
+  requestAnimationFrame(bild);
+})();
+
+/* ---------- Lichtschein folgt der Maus ---------- */
+document.addEventListener("mousemove", e => {
+  document.querySelectorAll(".spot").forEach(k => {
+    const r = k.getBoundingClientRect();
+    k.style.setProperty("--mx", (e.clientX - r.left) + "px");
+    k.style.setProperty("--my", (e.clientY - r.top) + "px");
+  });
+});
+
+/* ---------- Kennzahlen zaehlen hoch ---------- */
+function zaehlen(el, ziel) {
+  const start = Number(el.textContent) || 0;
+  if (start === ziel || ruhig) { el.textContent = ziel; return; }
+  const t0 = performance.now(), dauer = 700;
+  (function schritt(t) {
+    const f = Math.min(1, (t - t0) / dauer), e = 1 - Math.pow(1 - f, 3);
+    el.textContent = Math.round(start + (ziel - start) * e);
+    if (f < 1) requestAnimationFrame(schritt);
+  })(t0);
+}
+
+/* ---------- Filter-Reiter ---------- */
+function schieberSetzen() {
+  const an = document.querySelector("#reiter button.an"), sch = $("#schieber");
+  if (!an) return;
+  sch.style.left = an.offsetLeft + "px"; sch.style.width = an.offsetWidth + "px";
+}
+document.querySelectorAll("#reiter button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#reiter button").forEach(x => x.classList.toggle("an", x === b));
+  zustand.filter = b.dataset.filter; schieberSetzen(); listeMalen();
+}));
+addEventListener("resize", schieberSetzen);
 
 /* ---------- Intro ---------- */
 function intro(text) {
@@ -512,10 +737,18 @@ function datum(iso) {
 }
 function listeMalen(hervorheben) {
   const l = $("#liste"); l.innerHTML = "";
-  const auftraege = zustand.auftraege;
-  $("#anzahl").textContent = auftraege.length ? auftraege.length + (auftraege.length === 1 ? " Auftrag" : " Aufträge") : "";
+  const alle = zustand.auftraege, zahl = st => alle.filter(a => a.status === st).length;
+  zaehlen($("#stat-gesamt"), alle.length); zaehlen($("#stat-wartet"), zahl("WARTET")); zaehlen($("#stat-frei"), zahl("FREIGEGEBEN"));
+  $("#stat-wartet-karte").classList.toggle("aktiv", zahl("WARTET") > 0);
+  $("#z-alle").textContent = alle.length || "";
+  ["WARTET", "FREIGEGEBEN", "ABGELEHNT"].forEach(st => $("#z-" + st).textContent = zahl(st) || "");
+  $("#anzahl").textContent = "";
+  const q = zustand.suche.trim().toLowerCase();
+  const auftraege = alle.filter(a => (zustand.filter === "alle" || a.status === zustand.filter) &&
+    (!q || (a.datei + " " + (a.option_name || "")).toLowerCase().includes(q)));
   if (!auftraege.length) {
-    l.innerHTML = `<div class="leer" style="height:100%"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><div>Noch keine Aufträge</div></div></div>`;
+    const text = alle.length ? "Keine passenden Aufträge" : "Noch keine Aufträge";
+    l.innerHTML = `<div class="leer" style="height:100%"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><div>${text}</div></div></div>`;
     return;
   }
   auftraege.forEach((a, i) => {
@@ -566,6 +799,11 @@ async function aktualisieren() {
 }
 
 /* ---------- Ereignisse ---------- */
+$("#suche").addEventListener("input", e => { zustand.suche = e.target.value; listeMalen(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "F11") { e.preventDefault(); if (api().vollbild) api().vollbild(); }
+  if (e.key === "Escape") $("#dialog").classList.remove("offen");
+});
 const zone = $("#zone");
 $("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.target.value = ""; });
 ["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (aktuelle === "v-upload") zone.classList.add("ziehen"); }));
@@ -592,6 +830,8 @@ function starten(d, mitIntro) {
   $("#kontakt").value = d.kontakt || "";
   $("#server-feld").value = d.server || "";
   $("#version").textContent = "Version " + (d.version || "");
+  $("#fuss-version").textContent = "Version " + (d.version || "–") + " · " + (d.server || "").replace(/^https?:\/\//, "");
+  requestAnimationFrame(schieberSetzen);
   if (d.firma) firma(d.firma);
   verbindung(!d.verbindung, d.verbindung ? "Offline" : "Verbunden");
   if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
