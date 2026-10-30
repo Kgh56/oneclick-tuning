@@ -167,6 +167,9 @@ Windows 10/11 enthalten ist).
   die .exe zur Probe gestartet (Selbsttest); nur wenn Oberfläche und Verbindung laufen, wird sie veröffentlicht.
 - **Ablauf im Programm:** Datei hineinziehen oder auswählen → Analyse → verfügbare Lösungen wählen → Auftrag senden →
   das Programm fragt den Status selbst ab und meldet die Freigabe (mit Ton und Konfetti) → Herunterladen.
+- **Auto-Update:** Beim Öffnen prüft das Programm, ob es eine neuere Version gibt (Datei `version.json` neben der .exe
+  auf GitHub, mit fortlaufender Build-Nummer und SHA-256-Prüfsumme). Wenn ja: herunterladen, Prüfsumme prüfen,
+  laufende .exe austauschen, neu starten. Klappt das nicht (z. B. keine Schreibrechte), läuft die alte Version weiter.
 - **Server-Adresse** ist fest eingestellt und kann im Programm über das Zahnrad geändert werden.
 - Das Programm ist **nicht signiert**: Windows zeigt beim ersten Start „Der Computer wurde durch Windows geschützt“
   → „Weitere Informationen“ → „Trotzdem ausführen“. Ohne Warnung geht es nur mit einem Code-Signatur-Zertifikat (kostenpflichtig).

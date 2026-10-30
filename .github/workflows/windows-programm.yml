@@ -24,8 +24,12 @@ jobs:
       - name: Pakete installieren
         run: pip install pyinstaller==6.11.1 "pywebview>=5,<6"
 
+      - name: Versionsnummer festlegen (fortlaufend)
+        shell: bash
+        run: echo "${{ github.run_number }}" > kunde/version.txt
+
       - name: .exe bauen
-        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning --add-data "kunde/ui.html;." kunde/oneclick_kunde.py
+        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning --add-data "kunde/ui.html;." --add-data "kunde/version.txt;." kunde/oneclick_kunde.py
 
       - name: Selbsttest (fertige .exe starten, Oberfläche und Brücke prüfen)
         shell: bash
@@ -36,6 +40,12 @@ jobs:
           grep -q '"ui":true' selbsttest.json
           grep -q '"api":true' selbsttest.json
 
+      - name: Versionsdatei für das Auto-Update erzeugen
+        shell: bash
+        run: |
+          python -c "import hashlib, json, os; d = open('dist/OneClick-Tuning.exe', 'rb').read(); json.dump({'version': int(open('kunde/version.txt').read()), 'sha256': hashlib.sha256(d).hexdigest(), 'groesse': len(d)}, open('dist/version.json', 'w'))"
+          cat dist/version.json
+
       - name: Als Download bereitstellen
         shell: bash
         env:
@@ -43,8 +53,10 @@ jobs:
         run: |
           gh release view programm >/dev/null 2>&1 || \
             gh release create programm --title "Windows-Programm" \
-              --notes "Programm für Kunden: OneClick-Tuning.exe herunterladen und starten."
+              --notes "Programm für Kunden: OneClick-Tuning.exe herunterladen und starten. Updates installiert das Programm danach selbst."
+          # Erst die .exe, dann die Versionsdatei: Programme sehen die neue Version erst, wenn die .exe schon da ist
           gh release upload programm dist/OneClick-Tuning.exe --clobber
+          gh release upload programm dist/version.json --clobber
 
       - uses: actions/upload-artifact@v4
         with:

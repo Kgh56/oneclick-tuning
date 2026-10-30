@@ -37,6 +37,13 @@ input{user-select:text}
 #intro .logo-gross span{display:inline-block;opacity:0;transform:translateY(24px) scale(.96);filter:blur(8px);animation:buchstabe .9s var(--feder) forwards}
 #intro .linie{width:0;height:2px;margin:18px auto 0;background:var(--verlauf);border-radius:2px;box-shadow:0 0 18px #ff375f;animation:linie 1.1s .5s var(--feder) forwards}
 @keyframes buchstabe{to{opacity:1;transform:none;filter:none}}
+#update{position:fixed;inset:0;z-index:55;display:grid;place-items:center;text-align:center;background:rgba(0,0,0,.82);backdrop-filter:blur(18px);
+  opacity:0;visibility:hidden;transition:opacity .5s var(--feder),visibility .5s}
+#update.offen{opacity:1;visibility:visible}
+#update .ringe{width:120px;height:120px;margin:0 auto 26px}
+#update .ringe b{inset:38px}
+#update h1{font-size:26px}
+#update .balken{width:300px}
 @keyframes linie{to{width:180px}}
 
 /* ---------- Grundlayout ---------- */
@@ -140,6 +147,11 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .btn.grau{background:var(--glas2);border:1px solid var(--rand2);box-shadow:none}.btn.grau:hover{background:rgba(255,255,255,.13)}
 .btn.gruen{background:linear-gradient(135deg,#30d158,#0fb5a3);box-shadow:0 8px 26px rgba(48,209,88,.35)}
 .btn.klein{padding:8px 16px;font-size:13px}
+.btn.mit-symbol{display:inline-flex;align-items:center;gap:8px}
+.symbol{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.btn:hover .symbol .pfeil{animation:wippen .9s var(--feder) infinite}
+@keyframes wippen{50%{transform:translateY(3px)}}
+.btn.laedt .symbol .pfeil{animation:wippen .6s ease-in-out infinite}
 .welle{position:absolute;border-radius:50%;background:rgba(255,255,255,.45);transform:scale(0);animation:welle .6s ease-out forwards;pointer-events:none}
 @keyframes welle{to{transform:scale(4);opacity:0}}
 .hinweis{font-size:12.5px;color:var(--dunkel);margin-top:12px}
@@ -202,6 +214,12 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 <div class="aurora"><i></i><i></i><i></i></div>
 <div class="raster"></div>
 <div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
+<div id="update"><div>
+  <div class="ringe"><i></i><i></i><i></i><b></b></div>
+  <h1 id="update-titel">Neue Version wird installiert …</h1>
+  <p class="leise" style="margin-top:8px" id="update-text">Einen Moment, das Programm startet gleich neu.</p>
+  <div class="balken"><i></i></div>
+</div></div>
 <canvas id="konfetti"></canvas>
 <div id="toasts"></div>
 
@@ -411,7 +429,8 @@ function dateiLesen(datei) {
 async function pruefen(datei) {
   if (!datei) return;
   if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
-  $("#analyse-datei").textContent = "📄 " + datei.name;
+  $("#analyse-datei").innerHTML = SYMBOL_DATEI + "<span></span>";
+  $("#analyse-datei span").textContent = datei.name;
   zeige("v-analyse"); schrittAnimation();
   const beginn = Date.now();
   let erg;
@@ -431,6 +450,8 @@ function fehler(titel, text) {
 }
 
 /* ---------- Auswahl ---------- */
+const SYMBOL_DOWNLOAD = '<svg class="symbol" viewBox="0 0 24 24"><g class="pfeil"><path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/></g><path d="M4.5 15.5v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5"/></svg>';
+const SYMBOL_DATEI = '<svg class="symbol" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
 const HAKEN = '<span class="haken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>';
 function auswahlZeigen(a) {
   zustand.entwurf = a;
@@ -511,7 +532,7 @@ function listeMalen(hervorheben) {
     if (a.status === "ABGELEHNT") unten.textContent = a.grund ? "Grund: " + a.grund : "Bei Fragen melde dich gerne bei uns.";
     else if (a.status === "WARTET") unten.textContent = "Wird gerade von uns geprüft …";
     if (a.status === "FREIGEGEBEN") {
-      const b = document.createElement("button"); b.className = "btn gruen klein"; b.textContent = "⬇  Herunterladen";
+      const b = document.createElement("button"); b.className = "btn gruen klein mit-symbol"; b.innerHTML = SYMBOL_DOWNLOAD + "<span>Herunterladen</span>";
       b.addEventListener("click", () => herunterladen(a, b)); aktionen.appendChild(b);
     }
     const x = document.createElement("button"); x.className = "link"; x.textContent = "Entfernen"; x.title = "Aus der Liste entfernen";
@@ -524,9 +545,10 @@ function listeMalen(hervorheben) {
   });
 }
 async function herunterladen(a, b) {
-  b.disabled = true; b.textContent = "Wird geladen …";
+  const text = b.querySelector("span");
+  b.disabled = true; b.classList.add("laedt"); text.textContent = "Wird geladen …";
   const erg = await api().herunterladen(a.id);
-  b.disabled = false; b.textContent = "⬇  Herunterladen";
+  b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen";
   if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 7000);
   else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 7000);
 }
@@ -575,15 +597,32 @@ function starten(d, mitIntro) {
   if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
   listeMalen();
 }
+async function updaten(info) {
+  $("#update-titel").textContent = `Version ${info.version} wird installiert …`;
+  $("#update").classList.add("offen");
+  $("#intro").classList.add("weg");
+  const erg = await api().update_installieren();
+  if (erg.ok) {
+    $("#update-titel").textContent = "Fertig – startet neu …";
+    $("#update-text").textContent = "Gleich geht es mit der neuen Version weiter.";
+    return true;
+  }
+  $("#update").classList.remove("offen");
+  toast("fehler", "Update nicht installiert", erg.fehler || "", 9000);
+  return false;
+}
 async function init() {
   const beginn = Date.now();
+  const updateSuche = api().update_pruefen().catch(() => ({neu: false}));
   const d = await api().start();
   if (d.firma) intro(d.firma);
   starten(d, true);
+  const info = await updateSuche;
+  if (info.neu && await updaten(info)) return;   // Programm startet gleich neu
   setTimeout(() => {
     $("#intro").classList.add("weg");
     if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
-  }, Math.max(1500, 2100 - (Date.now() - beginn)));
+  }, Math.max(300, 2100 - (Date.now() - beginn)));
   setInterval(aktualisieren, 8000);
   setTimeout(aktualisieren, 2500);
 }

@@ -668,6 +668,82 @@ class ProgrammTests(Basis):
         self.assertNotIn("verbindung", d)
 
 
+class ProgrammUpdateTests(unittest.TestCase):
+    """Auto-Update des Windows-Programms (ohne echtes Windows: Dateien in einem Testordner)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["APPDATA"] = str(Path(self.tmp.name) / "appdata")
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kunde"))
+        import oneclick_kunde as K
+        self.K = K
+        self.exe = Path(self.tmp.name) / "OneClick-Tuning.exe"
+        self.exe.write_bytes(b"ALTE VERSION")
+        self.neu = random.Random(1).randbytes(2 * 1024 * 1024)
+        import hashlib
+        self.info = {"version": 7, "sha256": hashlib.sha256(self.neu).hexdigest(), "groesse": len(self.neu)}
+        self.abrufe = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def holen(self, url, timeout=0):
+        self.abrufe.append(url.rsplit("/", 1)[1])
+        return json.dumps(self.info).encode() if url.endswith("version.json") else self.neu
+
+    def updater(self, eigene=5):
+        return self.K.Updater("https://beispiel.test/programm", self.exe, self.holen, eigene)
+
+    def test_neue_version_wird_erkannt(self):
+        self.assertEqual(self.updater(5).pruefen()["version"], 7)
+        self.assertIsNone(self.updater(7).pruefen())
+        self.assertIsNone(self.updater(9).pruefen())
+
+    def test_installieren_tauscht_exe(self):
+        u = self.updater()
+        u.installieren(u.pruefen())
+        self.assertEqual(self.exe.read_bytes(), self.neu)
+        self.assertEqual(u.alte_exe.read_bytes(), b"ALTE VERSION")
+        u.aufraeumen()
+        self.assertFalse(u.alte_exe.exists())
+
+    def test_beschaedigter_download_wird_nicht_installiert(self):
+        self.info["sha256"] = "0" * 64
+        u = self.updater()
+        with self.assertRaises(RuntimeError):
+            u.installieren(u.pruefen())
+        self.assertEqual(self.exe.read_bytes(), b"ALTE VERSION")
+
+    def test_schreibfehler_stellt_alte_version_wieder_her(self):
+        from unittest import mock
+        u = self.updater()
+        info = u.pruefen()
+        with mock.patch.object(Path, "write_bytes", side_effect=PermissionError("schreibgeschuetzt")):
+            with self.assertRaises(PermissionError):
+                u.installieren(info)
+        self.assertEqual(self.exe.read_bytes(), b"ALTE VERSION")
+        self.assertFalse(u.alte_exe.exists())
+
+    def test_bruecke(self):
+        from unittest import mock
+        b = self.K.Bruecke(updater=self.updater())
+        b._beenden = lambda: None
+        d = b.update_pruefen()
+        self.assertEqual((d["neu"], d["version"]), (True, "2.7"))
+        with mock.patch.object(self.K.Updater, "neu_starten") as start:
+            self.assertEqual(b.update_installieren(), {"ok": True})
+            start.assert_called_once()
+        self.assertEqual(self.exe.read_bytes(), self.neu)
+        # ohne Updater (Entwicklung / Selbsttest): nie updaten
+        self.assertEqual(self.K.Bruecke().update_pruefen(), {"neu": False})
+
+    def test_offline_kein_absturz(self):
+        def offline(url, timeout=0):
+            raise OSError("kein Internet")
+        b = self.K.Bruecke(updater=self.K.Updater("https://x", self.exe, offline, 1))
+        self.assertFalse(b.update_pruefen()["neu"])
+
+
 class UpdateTests(unittest.TestCase):
     """Update-Knopf mit echten Git-Repositories in einem temporaeren Ordner."""
 

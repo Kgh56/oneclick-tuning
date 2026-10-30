@@ -6,23 +6,48 @@ Oberflaeche: kunde/ui.html (HTML/CSS/JS) in einem eigenen Fenster ueber pywebvie
 (unter Windows: Microsoft Edge WebView2, in Windows 10/11 enthalten).
 Diese Datei: Verbindung zum Server (/api/...) und die Bruecke, die die Oberflaeche aufruft.
 
-Bauen (unter Windows):
+Bauen (unter Windows, macht GitHub automatisch, siehe .github/workflows/windows-programm.yml):
     pip install pywebview pyinstaller
-    pyinstaller --onefile --windowed --name OneClick-Tuning --add-data "kunde/ui.html;." kunde/oneclick_kunde.py
+    pyinstaller --onefile --windowed --name OneClick-Tuning --add-data "kunde/ui.html;." \
+                --add-data "kunde/version.txt;." kunde/oneclick_kunde.py
+
+Auto-Update: Beim Start wird version.json neben der .exe auf GitHub abgefragt. Ist die Build-Nummer
+groesser als die eigene, wird die neue .exe geladen, per SHA-256 geprueft, gegen die laufende
+getauscht (Windows erlaubt das Umbenennen einer laufenden .exe) und neu gestartet.
 """
 
 import base64
+import hashlib
 import json
 import os
+import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
 
 STANDARD_SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping.de")
-VERSION = "2.0"
+UPDATE_URL = os.environ.get("ONECLICK_UPDATE_URL", "https://github.com/Kgh56/oneclick-tuning/releases/download/programm")
 MAX_GROESSE = 16 * 1024 * 1024
+
+
+def paket_ordner() -> Path:
+    # In der .exe liegen ui.html/version.txt im entpackten Ordner (sys._MEIPASS), sonst neben dieser Datei
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+
+
+def build_nummer() -> int:
+    """Fortlaufende Build-Nummer (schreibt GitHub beim Bauen in version.txt); 0 = Entwicklungsstand."""
+    try:
+        return int((paket_ordner() / "version.txt").read_text().strip())
+    except (OSError, ValueError):
+        return 0
+
+
+VERSION = f"2.{build_nummer()}"
 
 
 def datenordner() -> Path:
@@ -33,9 +58,61 @@ def datenordner() -> Path:
 
 
 def ui_datei() -> Path:
-    # In der .exe liegt ui.html im entpackten Ordner (sys._MEIPASS), sonst neben dieser Datei
-    basis = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    return basis / "ui.html"
+    return paket_ordner() / "ui.html"
+
+
+# ---------------------------------------------------------------------------
+# Auto-Update
+# ---------------------------------------------------------------------------
+
+def herunterladen_url(url: str, timeout: int = 120) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": f"OneClick-Programm/{VERSION}"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+class Updater:
+    def __init__(self, basis_url: str = UPDATE_URL, exe: Path = None, holen=herunterladen_url, eigene: int = None):
+        self.basis_url = basis_url.rstrip("/")
+        self.exe = Path(exe or sys.executable)
+        self.holen = holen
+        self.eigene = build_nummer() if eigene is None else eigene
+
+    @property
+    def alte_exe(self) -> Path:
+        return self.exe.with_name(self.exe.stem + ".alt.exe")
+
+    def pruefen(self):
+        """Infos zur neuen Version ({"version", "sha256", "groesse"}) oder None, wenn aktuell."""
+        info = json.loads(self.holen(f"{self.basis_url}/version.json", 20))
+        return info if int(info["version"]) > self.eigene else None
+
+    def installieren(self, info: dict) -> Path:
+        daten = self.holen(f"{self.basis_url}/OneClick-Tuning.exe", 300)
+        if hashlib.sha256(daten).hexdigest() != info["sha256"] or len(daten) < 1024 * 1024:
+            raise RuntimeError("Der Download ist beschädigt. Bitte später nochmal versuchen.")
+        # Laufende .exe beiseite schieben (Umbenennen geht unter Windows), neue an ihren Platz schreiben
+        self.alte_exe.unlink(missing_ok=True)
+        self.exe.rename(self.alte_exe)
+        try:
+            self.exe.write_bytes(daten)
+        except OSError:
+            self.alte_exe.rename(self.exe)   # zurueck, alte Version laeuft weiter
+            raise
+        return self.exe
+
+    def aufraeumen(self):
+        """Beim naechsten Start die beiseite geschobene alte Version loeschen."""
+        try:
+            self.alte_exe.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def neu_starten(self):
+        # Eigene Umgebung zuruecksetzen, damit die neue .exe sauber als eigenes Programm startet
+        umgebung = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), env=umgebung, close_fds=True, creationflags=flags)
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +206,16 @@ class Speicher:
 # ---------------------------------------------------------------------------
 
 class Bruecke:
-    def __init__(self, speicher: Speicher = None):
+    def __init__(self, speicher: Speicher = None, updater: Updater = None):
         self._speicher = speicher or Speicher()
         self._api = Api(self._speicher.daten["server"])
         self._fenster = None   # wird nach dem Erstellen des Fensters gesetzt
+        # Auto-Update nur in der fertigen .exe (nicht beim Entwickeln und nicht im Selbsttest)
+        aktiv = getattr(sys, "frozen", False) and not os.environ.get("ONECLICK_SELBSTTEST")
+        self._updater = updater or (Updater() if aktiv else None)
+        self._update_info = None
+        if self._updater:
+            self._updater.aufraeumen()
 
     def start(self) -> dict:
         d = self._speicher.daten
@@ -198,6 +281,38 @@ class Bruecke:
             return {"fehler": str(e)}
         return {"pfad": str(ziel)}
 
+    def update_pruefen(self) -> dict:
+        if not self._updater:
+            return {"neu": False}
+        try:
+            self._update_info = self._updater.pruefen()
+        except Exception as e:   # kein Internet, GitHub nicht erreichbar ... -> einfach weiter
+            return {"neu": False, "fehler": str(e)}
+        if not self._update_info:
+            return {"neu": False}
+        return {"neu": True, "version": f"2.{self._update_info['version']}", "aktuell": VERSION}
+
+    def update_installieren(self) -> dict:
+        if not (self._updater and self._update_info):
+            return {"fehler": "Kein Update vorhanden."}
+        try:
+            self._updater.installieren(self._update_info)
+            self._updater.neu_starten()
+        except PermissionError:
+            return {"fehler": "Keine Schreibrechte im Programm-Ordner. Bitte die neue Version von unserer Seite herunterladen."}
+        except Exception as e:
+            return {"fehler": f"Update fehlgeschlagen: {e}"}
+        threading.Thread(target=self._beenden, daemon=True).start()
+        return {"ok": True}
+
+    def _beenden(self):
+        time.sleep(1.2)   # Oberflaeche zeigt kurz "Startet neu"
+        try:
+            if self._fenster:
+                self._fenster.destroy()
+        finally:
+            os._exit(0)
+
     def entfernen(self, aid: str) -> dict:
         self._speicher.daten["auftraege"] = [x for x in self._speicher.daten["auftraege"] if x["id"] != aid]
         self._speicher.speichern()
@@ -218,7 +333,6 @@ class Bruecke:
 def selbsttest(fenster, ergebnis_datei: str):
     """Fuer den automatischen Test beim Bauen: Fenster oeffnen, pruefen ob Oberflaeche und
     Bruecke laufen, Ergebnis in eine Datei schreiben, Fenster schliessen."""
-    import time
     geladen = fenster.events.loaded.wait(90)
     time.sleep(4)
     try:
