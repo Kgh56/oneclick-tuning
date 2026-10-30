@@ -227,21 +227,35 @@ class Api:
 
 class Speicher:
     def __init__(self):
+        # Die Oberflaeche ruft Funktionen parallel auf (z. B. Status-Abfrage waehrend dem Bestellen)
+        self.sperre = threading.RLock()
         self.datei = datenordner() / "daten.json"
         try:
             self.daten = json.loads(self.datei.read_text(encoding="utf-8"))
         except Exception:
             self.daten = {}
-        self.daten.setdefault("server", STANDARD_SERVER)
-        self.daten.setdefault("kontakt", "")
-        self.daten.setdefault("auftraege", [])
+        # Kaputte Datei darf den Programmstart nie verhindern
+        if not isinstance(self.daten, dict):
+            self.daten = {}
+        if not isinstance(self.daten.get("server"), str) or not self.daten["server"].startswith(("http://", "https://")):
+            self.daten["server"] = STANDARD_SERVER
+        if not isinstance(self.daten.get("kontakt"), str):
+            self.daten["kontakt"] = ""
+        auftraege = self.daten.get("auftraege")
+        self.daten["auftraege"] = [a for a in auftraege if isinstance(a, dict) and isinstance(a.get("id"), str)] \
+            if isinstance(auftraege, list) else []
 
     def speichern(self):
-        tmp = self.datei.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.daten, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.datei)
+        with self.sperre:
+            tmp = self.datei.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.daten, indent=2, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, self.datei)
 
     def auftrag_merken(self, a: dict):
+        with self.sperre:
+            self._merken(a)
+
+    def _merken(self, a: dict):
         liste = [x for x in self.daten["auftraege"] if x["id"] != a["id"]]
         alt = next((x for x in self.daten["auftraege"] if x["id"] == a["id"]), {})
         eintrag = {**alt, **{k: a.get(k) for k in ("id", "datei", "zeit", "status", "status_text",
@@ -413,8 +427,9 @@ class Bruecke:
 
     @sicher
     def entfernen(self, aid: str) -> dict:
-        self._speicher.daten["auftraege"] = [x for x in self._speicher.daten["auftraege"] if x["id"] != aid]
-        self._speicher.speichern()
+        with self._speicher.sperre:
+            self._speicher.daten["auftraege"] = [x for x in self._speicher.daten["auftraege"] if x["id"] != aid]
+            self._speicher.speichern()
         return {"auftraege": self._speicher.daten["auftraege"]}
 
     @sicher

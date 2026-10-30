@@ -125,7 +125,7 @@ def speichere_auftrag(auftrag: dict):
 
 
 def finde_auftrag(aid: str):
-    if not aid.isalnum():
+    if not re.fullmatch(r"[0-9a-f]{32}", aid):   # Auftragsnummern sind immer uuid4().hex
         return None
     pfad = AUFTRAEGE / aid / "auftrag.json"
     return json.loads(pfad.read_text()) if pfad.exists() else None
@@ -141,8 +141,13 @@ def lade_auftrag(aid: str) -> dict:
 def alle_auftraege() -> list:
     if not AUFTRAEGE.exists():
         return []
-    liste = [json.loads(p.read_text()) for p in AUFTRAEGE.glob("*/auftrag.json")]
-    return sorted(liste, key=lambda a: a["zeit"], reverse=True)
+    liste = []
+    for p in AUFTRAEGE.glob("*/auftrag.json"):
+        try:
+            liste.append(json.loads(p.read_text()))
+        except (OSError, ValueError):   # gerade geloescht/kaputt: diese eine Datei ueberspringen
+            continue
+    return sorted(liste, key=lambda a: a.get("zeit", ""), reverse=True)
 
 
 def hat_file(aid: str) -> bool:
@@ -242,36 +247,46 @@ def telegram_aktualisieren(auftrag: dict):
 
 
 def telegram_schleife():
-    """Wartet auf Knopfdruecke in Telegram (Long Polling, kein oeffentlicher Server noetig)."""
-    offset = None
+    """Wartet auf Knopfdruecke in Telegram (Long Polling, kein oeffentlicher Server noetig).
+    Darf nie aufhoeren: jeder Fehler wird gemeldet, danach geht es weiter."""
+    offset = [None]
     while True:
-        cfg = lade_config()
-        antwort = telegram_api("getUpdates", {"timeout": 30, "offset": offset,
-                                              "allowed_updates": ["callback_query", "message"]}, timeout=40)
-        if not antwort or not antwort.get("ok"):
+        try:
+            telegram_runde(offset)
+        except Exception as e:
+            print(f"Telegram-Schleife: {e!r}", file=sys.stderr)
             time.sleep(5)
+
+
+def telegram_runde(offset: list):
+    """Ein Abruf bei Telegram und alle Knopfdruecke darin verarbeiten."""
+    cfg = lade_config()
+    antwort = telegram_api("getUpdates", {"timeout": 30, "offset": offset[0],
+                                          "allowed_updates": ["callback_query", "message"]}, timeout=40)
+    if not antwort or not antwort.get("ok"):
+        time.sleep(5)
+        return
+    for update in antwort["result"]:
+        offset[0] = update["update_id"] + 1   # vorher setzen: ein kaputtes Update wird nicht endlos wiederholt
+        nachricht = update.get("message")
+        if nachricht:
+            chat = nachricht.get("chat", {})
+            telegram_chats[str(chat.get("id"))] = chat.get("title") or chat.get("first_name") or "?"
+            if not cfg.get("telegram_chat_id"):
+                telegram_api("sendMessage", {"chat_id": chat.get("id"),
+                                             "text": "Hallo! Im Admin-Bereich unter Einstellungen kannst du diesen Chat jetzt übernehmen."})
             continue
-        for update in antwort["result"]:
-            offset = update["update_id"] + 1
-            nachricht = update.get("message")
-            if nachricht:
-                chat = nachricht.get("chat", {})
-                telegram_chats[str(chat.get("id"))] = chat.get("title") or chat.get("first_name") or "?"
-                if not cfg.get("telegram_chat_id"):
-                    telegram_api("sendMessage", {"chat_id": chat.get("id"),
-                                                 "text": "Hallo! Im Admin-Bereich unter Einstellungen kannst du diesen Chat jetzt übernehmen."})
-                continue
-            cb = update.get("callback_query")
-            if not cb:
-                continue
-            # Nur Knopfdruecke aus dem eingestellten Chat zaehlen
-            if str(cb.get("message", {}).get("chat", {}).get("id")) != str(cfg.get("telegram_chat_id")):
-                telegram_api("answerCallbackQuery", {"callback_query_id": cb["id"], "text": "Nicht erlaubt."})
-                continue
-            aktion, _, aid = cb.get("data", "").partition(":")
-            wer = "Telegram: " + cb.get("from", {}).get("first_name", "?")
-            text = entscheide(aid, aktion == "ok", wer=wer) if aktion in ("ok", "nein") else "Unbekannt."
-            telegram_api("answerCallbackQuery", {"callback_query_id": cb["id"], "text": text})
+        cb = update.get("callback_query")
+        if not cb:
+            continue
+        # Nur Knopfdruecke aus dem eingestellten Chat zaehlen
+        if str(cb.get("message", {}).get("chat", {}).get("id")) != str(cfg.get("telegram_chat_id")):
+            telegram_api("answerCallbackQuery", {"callback_query_id": cb["id"], "text": "Nicht erlaubt."})
+            continue
+        aktion, _, aid = cb.get("data", "").partition(":")
+        wer = "Telegram: " + cb.get("from", {}).get("first_name", "?")
+        text = entscheide(aid, aktion == "ok", wer=wer) if aktion in ("ok", "nein") else "Unbekannt."
+        telegram_api("answerCallbackQuery", {"callback_query_id": cb["id"], "text": text})
 
 
 # ---------------------------------------------------------------------------
@@ -663,7 +678,10 @@ def admin_wartend():
 def admin_entscheiden(aid):
     freigeben = request.form.get("aktion") == "ok"
     flash(entscheide(aid, freigeben, request.form.get("grund", ""), wer=session["benutzer"]))
-    return redirect(request.form.get("zurueck") or url_for("auftrag_ansicht", aid=aid))
+    zurueck = request.form.get("zurueck", "")
+    if not (zurueck.startswith("/") and not zurueck.startswith("//")):   # nur Seiten dieses Servers
+        zurueck = url_for("auftrag_ansicht", aid=aid)
+    return redirect(zurueck)
 
 
 @app.route("/admin/auftrag/<aid>/fertig", methods=["POST"])

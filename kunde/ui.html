@@ -279,7 +279,7 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 
 /* ---------- Toasts / Dialog / Konfetti ---------- */
 #toasts{position:fixed;top:18px;right:18px;z-index:40;display:flex;flex-direction:column;gap:10px;width:340px}
-.toast{padding:14px 16px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(24px);border:1px solid var(--rand2);
+.toast{overflow-wrap:anywhere;padding:14px 16px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(24px);border:1px solid var(--rand2);
   box-shadow:0 20px 50px rgba(0,0,0,.5);animation:toast-rein .5s var(--feder) both;display:flex;gap:12px;align-items:flex-start}
 .toast.weg{animation:toast-raus .4s var(--feder) forwards}
 .toast .t-aktion{margin-top:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--rand2);background:rgba(255,255,255,.08);color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
@@ -751,9 +751,9 @@ async function senden() {
   const b = $("#senden"); b.disabled = true; b.textContent = "Wird gesendet …";
   const reihenfolge = zustand.entwurf.angebot.map(o => o.key).filter(k => zustand.auswahl.has(k));
   const erg = await rufe("bestellen", zustand.entwurf.id, reihenfolge, $("#kontakt").value);
-  if (erg.fehler) {
+  if (erg.fehler || !erg.auftrag) {
     b.disabled = false; b.textContent = "Auftrag senden";
-    toast("fehler", "Nicht gesendet", erg.fehler, 7000);
+    toast("fehler", "Nicht gesendet", erg.fehler || "Unerwartete Antwort. Bitte nochmal versuchen.", 7000);
     return;
   }
   zustand.auftraege = erg.auftraege;
@@ -821,7 +821,10 @@ async function herunterladen(a, b) {
   else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 10000,
                            {text: "Im Ordner zeigen", klick: () => rufe("ordner_zeigen", erg.pfad)});
 }
+let aktualisiertGerade = false;
 async function aktualisieren() {
+  if (aktualisiertGerade) return;   // vorige Abfrage laeuft noch (langsames Internet)
+  aktualisiertGerade = true;
   try {
     const erg = await rufe("aktualisieren");
     if (erg.fehler) return;
@@ -832,7 +835,8 @@ async function aktualisieren() {
       if (a.status === "FREIGEGEBEN") { toast("ok", "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 8000); konfetti(); ton(true); }
       else if (a.status === "ABGELEHNT") { toast("fehler", "Abgelehnt", `${a.datei}${a.grund ? " – " + a.grund : ""}`, 9000); ton(false); }
     });
-  } catch (e) {}
+  } catch (e) {
+  } finally { aktualisiertGerade = false; }
 }
 
 /* ---------- Ereignisse ---------- */
