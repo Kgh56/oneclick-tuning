@@ -761,8 +761,96 @@ def flache_gruppe(name: str) -> str:
     return re.sub(r"[\s_.-]+", "_", stamm).strip("_") or "datei"
 
 
+def sha(daten: bytes) -> str:
+    return hashlib.sha256(daten).hexdigest()
+
+
+def archiv_kennt() -> tuple:
+    """Fingerabdruecke im Archiv: ({sha Original: Name}, {sha Tuning-File: (Name, Option)})."""
+    oris, mods = {}, {}
+    for e in oneclick.lade_index()["eintraege"]:
+        oris.setdefault(e.get("ori_sha256"), e["name"])
+        for opt, o in e["optionen"].items():
+            mods.setdefault(o["sha256"], (e["name"], opt))
+    oris.pop(None, None)
+    return oris, mods
+
+
+def ordner_vereinheitlichen(ziel: Path) -> dict:
+    """Dateien eines Archiv-Ordners eindeutig benennen (ori.bin, stage1.bin ...) -> {Option: Pfad}."""
+    ori_name, vorhanden = oneclick.klassifiziere([p.name for p in ziel.iterdir() if p.is_file()])
+    if ori_name and ori_name != "ori.bin":
+        (ziel / ori_name).rename(ziel / "ori.bin")
+    for opt, n in vorhanden.items():
+        if n != f"{opt}.bin":
+            (ziel / n).rename(ziel / f"{opt}.bin")
+    return {opt: ziel / f"{opt}.bin" for opt in vorhanden}
+
+
+def archiv_speichern(name: str, ori: bytes, mods: dict, ersetzen: bool = True) -> dict:
+    """Fahrzeug anlegen oder ergaenzen und dabei Doppelte erkennen (Aufrufer haelt index_sperre).
+    Ist das Original schon im Archiv (auch unter anderem Namen), wird dort ergaenzt statt doppelt angelegt.
+    -> {"name", "neu", "vorhanden_als", "gespeichert", "ersetzt", "gleich", "anderswo", "konflikt"}"""
+    oris, mod_shas = archiv_kennt()
+    erg = {"name": name, "neu": False, "vorhanden_als": None, "gespeichert": [], "ersetzt": [],
+           "gleich": [], "anderswo": {}, "konflikt": []}
+    bekannt = oris.get(sha(ori))
+    if bekannt:
+        erg["vorhanden_als"] = bekannt if bekannt != name else None
+        name = erg["name"] = bekannt
+    ziel = oneclick.ARCHIV / name
+    if ziel.exists() and not bekannt:
+        ori_name, _ = oneclick.klassifiziere([p.name for p in ziel.iterdir() if p.is_file()])
+        if ori_name:
+            raise Abgelehnt(f"„{name}“ gibt es schon mit einem anderen Original. Bitte einen anderen Namen wählen.")
+    vorhanden = ordner_vereinheitlichen(ziel) if ziel.exists() else {}
+    for opt, d in mods.items():
+        if opt in vorhanden and vorhanden[opt].read_bytes() == d:
+            erg["gleich"].append(opt)
+        elif sha(d) in mod_shas and mod_shas[sha(d)][0] != name:
+            erg["anderswo"][opt] = mod_shas[sha(d)]   # gleiches Tuning-File bei anderem Original: Verwechslung?
+        elif opt in vorhanden and not ersetzen:
+            erg["konflikt"].append(opt)
+        else:
+            (erg["ersetzt"] if opt in vorhanden else erg["gespeichert"]).append(opt)
+    if not ziel.exists():
+        ziel.mkdir(parents=True)
+        erg["neu"] = True
+    if not (ziel / "ori.bin").exists():
+        (ziel / "ori.bin").write_bytes(ori)
+    for opt in erg["gespeichert"] + erg["ersetzt"]:
+        (ziel / f"{opt}.bin").write_bytes(mods[opt])
+    oneclick.baue_index()
+    return erg
+
+
+def archiv_meldungen(erg: dict, quelle: str = "") -> list:
+    namen = option_namen()
+    liste = lambda opts: ", ".join(namen[o] for o in opts)
+    vor = f"{quelle}: " if quelle else ""
+    m = []
+    if erg["vorhanden_als"]:
+        m.append(f"{vor}Dieses Original ist schon im Archiv als „{erg['vorhanden_als']}“ – kein doppeltes Fahrzeug angelegt.")
+    if erg["gespeichert"]:
+        m.append(f"„{erg['name']}“ {'angelegt mit' if erg['neu'] else 'ergänzt:'} {liste(erg['gespeichert'])}.")
+    elif erg["neu"]:
+        m.append(f"„{erg['name']}“ als reines Original angelegt (für Rückrüsten über die Softwarenummer).")
+    if erg["ersetzt"]:
+        m.append(f"„{erg['name']}“: {liste(erg['ersetzt'])} durch die neue Datei ersetzt.")
+    if erg["gleich"]:
+        m.append(f"„{erg['name']}“: {liste(erg['gleich'])} schon genau so vorhanden – übersprungen.")
+    for opt, (n, o) in erg["anderswo"].items():
+        m.append(f"Nicht gespeichert – {namen[opt]}: genau dieses File liegt schon bei „{n}“ ({namen[o]}). "
+                 "Falsches Original ausgewählt?")
+    if erg["konflikt"]:
+        m.append(f"„{erg['name']}“: {liste(erg['konflikt'])} gibt es schon mit anderem Inhalt – nicht überschrieben.")
+    if not m:
+        m.append(f"„{erg['name']}“: alles schon vorhanden, nichts geändert.")
+    return m
+
+
 def importiere_zip(stream) -> list:
-    meldungen, ok = [], 0
+    meldungen, ok, ergaenzt, doppelt = [], 0, 0, 0
     with zipfile.ZipFile(stream) as z:
         gruppen = {}
         for info in z.infolist():
@@ -788,23 +876,41 @@ def importiere_zip(stream) -> list:
                 meldungen.append(f"Übersprungen: {schluessel} (Dateigrößen passen nicht zusammen)")
                 continue
             basis = sicherer_name(PurePosixPath(schluessel).name)
-            ziel, nr = oneclick.ARCHIV / basis, 2
-            while ziel.exists():
-                ziel, nr = oneclick.ARCHIV / f"{basis}_{nr}", nr + 1
-            ziel.mkdir(parents=True)
-            (ziel / "ori.bin").write_bytes(ori)
-            for opt, d in passend.items():
-                (ziel / f"{opt}.bin").write_bytes(d)
-            ok += 1
+            with index_sperre:
+                if sha(ori) not in archiv_kennt()[0]:   # gleicher Name, anderes Original -> neuer Name
+                    name, nr = basis, 2
+                    while (oneclick.ARCHIV / name).exists():
+                        name, nr = f"{basis}_{nr}", nr + 1
+                else:
+                    name = basis
+                erg = archiv_speichern(name, ori, passend, ersetzen=False)
+            if erg["neu"]:
+                ok += 1
+            elif erg["gespeichert"]:
+                ergaenzt += 1
+            else:
+                doppelt += 1
+            if not erg["neu"] or erg["anderswo"]:
+                meldungen += [x for x in archiv_meldungen(erg, schluessel) if "nichts geändert" not in x]
     with index_sperre:
         oneclick.baue_index()
-    return [f"{ok} Fahrzeug(e) ins Archiv übernommen."] + meldungen
+    zeile = f"{ok} Fahrzeug(e) neu ins Archiv übernommen."
+    if ergaenzt:
+        zeile += f" {ergaenzt} vorhandene(s) ergänzt."
+    if doppelt:
+        zeile += f" {doppelt} waren schon komplett im Archiv und wurden übersprungen."
+    return [zeile] + meldungen
 
 
 @app.route("/admin/archiv")
 @admin_noetig
 def admin_archiv():
-    return render_template("archiv.html", eintraege=oneclick.lade_index()["eintraege"],
+    eintraege = oneclick.lade_index()["eintraege"]
+    zaehler = {}
+    for e in eintraege:
+        zaehler.setdefault(e.get("ori_sha256"), []).append(e["name"])
+    doppelt = {n: [x for x in namen if x != n] for namen in zaehler.values() if len(namen) > 1 for n in namen}
+    return render_template("archiv.html", eintraege=eintraege, doppelt=doppelt,
                            eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen())
 
 
@@ -849,35 +955,34 @@ def archiv_neu():
             flash(f"Nicht gespeichert – {f}")
         return redirect(url_for("admin_archiv"))
 
-    name = sicherer_name(eingabe)
-    ziel = oneclick.ARCHIV / name
-    with index_sperre:
-        if ziel.exists():
-            ori_name, vorhanden = oneclick.klassifiziere([p.name for p in ziel.iterdir() if p.is_file()])
-            if ori_name and (ziel / ori_name).read_bytes() != ori:
-                flash(f"„{name}“ gibt es schon mit einem anderen Original. Bitte einen anderen Namen wählen.")
-                return redirect(url_for("admin_archiv"))
-            # Vorhandene Dateien eindeutig benennen, damit nichts verwechselt wird
-            if ori_name and ori_name != "ori.bin":
-                (ziel / ori_name).rename(ziel / "ori.bin")
-            for opt, n in vorhanden.items():
-                if n != f"{opt}.bin":
-                    (ziel / n).rename(ziel / f"{opt}.bin")
-            neu = False
-        else:
-            ziel.mkdir(parents=True)
-            neu = True
-        (ziel / "ori.bin").write_bytes(ori)
-        for opt, d in mods.items():
-            (ziel / f"{opt}.bin").write_bytes(d)
-        oneclick.baue_index()
-    liste = ", ".join(namen[o] for o in mods)
-    if not mods:
-        flash(f"„{name}“ als reines Original angelegt (für Rückrüsten über die Softwarenummer)." if neu
-              else f"„{name}“: Original ist schon vorhanden, nichts geändert.")
-    else:
-        flash(f"„{name}“ angelegt mit {liste}." if neu else f"„{name}“ ergänzt: {liste}.")
+    try:
+        with index_sperre:
+            erg = archiv_speichern(sicherer_name(eingabe), ori, mods)
+    except Abgelehnt as e:
+        flash(str(e))
+        return redirect(url_for("admin_archiv"))
+    for m in archiv_meldungen(erg):
+        flash(m)
     return redirect(url_for("admin_archiv"))
+
+
+@app.route("/admin/archiv/kennt", methods=["POST"])
+@admin_noetig
+def archiv_kennt_api():
+    """Fuer den Hinweis direkt nach der Dateiauswahl: sind diese Files schon im Archiv?"""
+    oris, mods = archiv_kennt()
+    namen = option_namen()
+    eintraege = {e["name"]: e for e in oneclick.lade_index()["eintraege"]}
+    antwort = {"ori": None, "mods": {}}
+    name = oris.get(request.form.get("ori", ""))
+    if name:
+        antwort["ori"] = {"name": name, "optionen": [namen[o] for o in oneclick.optionen()
+                                                     if o in eintraege[name]["optionen"]]}
+    for s in request.form.get("mods", "").split(",")[:50]:
+        if s in mods:
+            n, o = mods[s]
+            antwort["mods"][s] = {"name": n, "option": namen[o]}
+    return jsonify(antwort)
 
 
 @app.route("/admin/archiv/import", methods=["POST"])
@@ -1313,6 +1418,7 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 <label class="datei pflicht"><span>Original *</span><input type="file" name="ori"></label>
 {% for key, titel in archiv_optionen.items() %}<label class="datei"><span>{{ titel }}</span><input type="file" name="{{ key }}"></label>{% endfor %}
 </div>
+<div id="kennt" class="hinweis" style="display:none;padding:12px 14px;border-radius:12px;border:1px solid;line-height:1.6;border-color:rgba(255,159,10,.5);background:rgba(255,159,10,.08);color:#ffd28a"></div>
 <button class="btn" id="nlos">Speichern</button>
 <div class="hinweis">Original und die vorhandenen Tuning-Files auswählen, die übrigen Felder leer lassen. Alle Files müssen gleich groß sein (gleiche Leseart).
 Nur ein Original ohne Tuning-File geht auch: Dann bekommen Kunden mit einem fremden Tuning-File derselben Software „Original (Rückrüsten)“ angeboten.</div>
@@ -1350,8 +1456,11 @@ Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Go
 Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.</div></div>
 
 <div class="karte"><h2>{{ eintraege|length }} Einträge</h2>
+{% if doppelt %}<p class="leise">Mit „doppelt“ markierte Einträge haben dasselbe Original. Am besten die Lösungen in einem Eintrag sammeln
+(dort hochladen) und den anderen löschen.</p>{% endif %}
 {% if eintraege %}<div class="tabelle"><table><tr><th>Name</th><th>ECU</th><th>Software</th><th>Optionen</th><th>Größe</th><th></th></tr>
-{% for e in eintraege %}<tr><td>{{ e.name }}</td><td>{{ e.ecu|join(', ') or '?' }}</td>
+{% for e in eintraege %}<tr><td>{{ e.name }}{% if e.name in doppelt %}
+<span class="status s-WARTET" title="Gleiches Original wie: {{ doppelt[e.name]|join(', ') }}">doppelt: {{ doppelt[e.name]|join(', ') }}</span>{% endif %}</td><td>{{ e.ecu|join(', ') or '?' }}</td>
 <td>{{ (e.bosch_sw + e.vag_teilenr)|join(', ') or '?' }}</td>
 <td>{% for o in e.optionen %}{{ optionen[o] }}{{ ', ' if not loop.last }}{% else %}<span class="leise">nur Original</span>{% endfor %}</td>
 <td>{{ (e.groesse / 1024)|round|int }} KB</td>
@@ -1367,8 +1476,27 @@ i.addEventListener('change',zeig);
 d.addEventListener('drop',ev=>{ev.preventDefault();i.files=ev.dataTransfer.files;zeig()});
 document.getElementById('zf').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird hochgeladen … (kann dauern)';b.disabled=true});
 document.getElementById('nf').addEventListener('submit',()=>{const b=document.getElementById('nlos');b.textContent='Wird gespeichert …';b.disabled=true});
-document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('change',()=>
-  x.parentElement.classList.toggle('gewaehlt',x.files.length>0)));
+document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('change',()=>{
+  x.parentElement.classList.toggle('gewaehlt',x.files.length>0); kennt();}));
+// Schon im Archiv? Fingerabdruck (SHA-256) im Browser berechnen, nur der wird an den Server geschickt
+const hash=async f=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',await f.arrayBuffer()))].map(b=>b.toString(16).padStart(2,'0')).join('');
+async function kennt(){
+  const box=document.getElementById('kennt'); if(!window.crypto||!crypto.subtle) return;
+  const felder=[...document.querySelectorAll('#nf input[type=file]')].filter(x=>x.files.length);
+  if(!felder.length){box.style.display='none';return}
+  const sh={}; for(const x of felder) sh[x.name]=await hash(x.files[0]);
+  const titel=x=>x.closest('label').querySelector('span').textContent.replace(' *','');
+  const fd=new FormData(); fd.append('csrf','{{ session.csrf }}'); fd.append('ori',sh.ori||'');
+  fd.append('mods',felder.filter(x=>x.name!=='ori').map(x=>sh[x.name]).join(','));
+  let a; try{a=await (await fetch('{{ url_for('archiv_kennt_api') }}',{method:'POST',body:fd})).json()}catch(e){return}
+  const z=[], esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  if(a.ori){z.push(`⚠️ Dieses Original ist schon im Archiv als <b>${esc(a.ori.name)}</b> (${esc(a.ori.optionen.join(', ')||'nur Original')}). `+
+    'Beim Speichern wird dort ergänzt – es entsteht kein doppeltes Fahrzeug.');
+    const n=document.querySelector('#nf input[name=name]'); n.value=a.ori.name;}
+  for(const x of felder){const m=x.name!=='ori'&&a.mods[sh[x.name]];
+    if(m) z.push(`⚠️ ${esc(titel(x))}: genau dieses File liegt schon bei <b>${esc(m.name)}</b> (${esc(m.option)}).`);}
+  box.innerHTML=z.join('<br>'); box.style.display=z.length?'block':'none';
+}
 </script>
 {% endblock %}""",
 

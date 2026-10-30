@@ -53,7 +53,7 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 5
+INDEX_VERSION = 6
 MAX_ABWEICHUNG = 0.05   # Rueckruesten ueber Softwarenummer: hoechstens 5 % der Bytes duerfen abweichen
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
@@ -374,7 +374,8 @@ def baue_index() -> dict:
                 continue
             optionen[opt] = {"datei": name, "bloecke": bloecke, "sha256": hashlib.sha256(mod).hexdigest()}
         info = erkenne(ori)   # ohne Tuning-File: nur Original (fuer Rueckruesten ueber Softwarenummer)
-        eintraege.append({"name": ordner.name, "ori_datei": ori_name, **info, "optionen": optionen})
+        eintraege.append({"name": ordner.name, "ori_datei": ori_name, "ori_sha256": hashlib.sha256(ori).hexdigest(),
+                          **info, "optionen": optionen})
         print(f"  + {ordner.name}: {', '.join(optionen) or 'nur Original'} | ECU {', '.join(info['ecu']) or '?'}")
 
     index = {"version": INDEX_VERSION, "eintraege": eintraege, "zeit": time.time()}

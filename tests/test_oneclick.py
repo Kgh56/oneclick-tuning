@@ -6,6 +6,7 @@ Automatische Tests. Ausfuehren im Projektordner:
 Arbeiten komplett in einem temporaeren Ordner, echte Daten werden nicht angefasst.
 """
 
+import html
 import io
 import json
 import os
@@ -470,6 +471,64 @@ class WebTests(Basis):
         self.assertIn("identisch mit dem Original", self.fahrzeug(a, "Neu", anders, stage1=anders))
         self.assertFalse((oneclick.ARCHIV / "Neu").exists())
 
+    def ordner(self):
+        return sorted(p.name for p in oneclick.ARCHIV.iterdir() if p.is_dir())
+
+    def test_doppeltes_original_wird_erkannt(self):
+        a = self.admin()
+        # Gleiches Original unter anderem Namen, gleiche Stage 1 -> nichts Neues, kein zweiter Ordner
+        text = html.unescape(self.fahrzeug(a, "Golf 7 nochmal", self.golf, stage1=self.stage1))
+        self.assertIn("schon im Archiv als „Golf7“", text)
+        self.assertIn("Stage 1 schon genau so vorhanden", text)
+        self.assertEqual(self.ordner(), ["BMW", "Golf7"])
+        # Gleiches Original + neue Lösung -> landet beim vorhandenen Fahrzeug
+        vmax = bytearray(self.golf)
+        vmax[0x7100:0x7102] = b"\xff\xff"
+        text = html.unescape(self.fahrzeug(a, "Irgendwas", self.golf, vmax=vmax))
+        self.assertIn("„Golf7“ ergänzt: Vmax", text)
+        self.assertEqual(self.ordner(), ["BMW", "Golf7"])
+        self.assertTrue((oneclick.ARCHIV / "Golf7" / "vmax.bin").exists())
+        # Tuning-File, das schon bei einem anderen Original liegt -> Verwechslung, nicht speichern
+        text = html.unescape(self.fahrzeug(a, "Neu", zufall(GROESSE, 13), stage1=self.bmw_st1))
+        self.assertIn("schon bei „BMW“ (Stage 1). Falsches Original", text)
+        self.assertFalse((oneclick.ARCHIV / "Neu" / "stage1.bin").exists())
+
+    def test_doppelt_im_zip_und_live_pruefung(self):
+        a = self.admin()
+        neu = zufall(GROESSE, 3)
+        mod = bytearray(neu)
+        mod[0x5000] ^= 0xFF
+        puffer = io.BytesIO()
+        with zipfile.ZipFile(puffer, "w") as z:
+            z.writestr("Golf/Golf_ORI.bin", bytes(self.golf))          # schon da, gleiche Stage 1
+            z.writestr("Golf/Golf_Stage1.bin", bytes(self.stage1))
+            z.writestr("A4/a4_ORI.bin", bytes(neu))                    # neu
+            z.writestr("A4/a4_Stage1.bin", bytes(mod))
+            z.writestr("A4 Kopie/a4_ORI.bin", bytes(neu))              # in derselben ZIP doppelt
+            z.writestr("A4 Kopie/a4_Stage1.bin", bytes(mod))
+        puffer.seek(0)
+        r = a.post("/admin/archiv/import", data={"csrf": a.csrf, "zip": (puffer, "f.zip")},
+                   content_type="multipart/form-data", follow_redirects=True)
+        text = html.unescape(r.text)
+        self.assertIn("1 Fahrzeug(e) neu ins Archiv übernommen. 2 waren schon komplett im Archiv", text)
+        self.assertEqual(self.ordner(), ["A4", "BMW", "Golf7"])
+        # Hinweis direkt nach der Dateiauswahl
+        import hashlib
+        h = lambda d: hashlib.sha256(bytes(d)).hexdigest()
+        j = a.post("/admin/archiv/kennt", data={"csrf": a.csrf, "ori": h(self.golf),
+                                                 "mods": f"{h(self.bmw_st1)},{h(b'x')}"}).json
+        self.assertEqual(j["ori"], {"name": "Golf7", "optionen": ["Stage 1", "Start/Stopp aus"]})
+        self.assertEqual(list(j["mods"].values()), [{"name": "BMW", "option": "Stage 1"}])
+        self.assertEqual(a.post("/admin/archiv/kennt", data={"csrf": a.csrf, "ori": "0"}).json["ori"], None)
+        self.assertEqual(self.client().post("/admin/archiv/kennt").status_code, 400)   # ohne Login/CSRF
+
+    def test_alte_doppelte_werden_markiert(self):
+        self.ablegen("Golf-Kopie", {"ori.bin": self.golf})
+        oneclick.baue_index()
+        text = html.unescape(self.admin().get("/admin/archiv").text)
+        self.assertIn("doppelt: Golf-Kopie", text)
+        self.assertIn("doppelt: Golf7", text)
+
     def loesung(self, a, aktion="neu", **daten):
         r = a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": aktion, **daten}, follow_redirects=True)
         return r.text
@@ -675,6 +734,12 @@ class ProgrammTests(Basis):
         alt_home = os.environ.get("HOME")
         self.addCleanup(lambda: os.environ.__setitem__("HOME", alt_home) if alt_home else os.environ.pop("HOME", None))
         os.environ["HOME"] = str(home)
+        try:
+            import webview  # noqa: F401
+        except Exception:   # hier ohne Windows-Abhaengigkeiten: nur die Konstante wird gebraucht
+            import types
+            sys.modules["webview"] = types.SimpleNamespace(SAVE_DIALOG=30)
+            self.addCleanup(sys.modules.pop, "webview", None)
         aufrufe = []
 
         class Fenster:
