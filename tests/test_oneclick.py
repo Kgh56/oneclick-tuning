@@ -316,12 +316,14 @@ class WebTests(Basis):
     def test_kombination_stage1_startstopp(self):
         A.speichere_config({"telegram_chat_id": "1"})
         aid = self.hochladen(self.golf)
-        self.bestellen(aid, "stage1", "startstopp")
+        self.bestellen(aid, "stage1", "startstopp", kontakt="Max Mustermann 0171 123")
         a = self.auftrag(aid)
         self.assertEqual((a["status"], a["option"]), ("WARTET", "stage1+startstopp"))
         import time
         time.sleep(0.3)
-        self.assertTrue(any("Stage 1 + Start/Stopp aus" in d["text"] for m, d in self.telegram if m == "sendMessage"))
+        texte = [d["text"] for m, d in self.telegram if m == "sendMessage"]
+        self.assertTrue(any("Stage 1 + Start/Stopp aus" in x for x in texte))
+        self.assertFalse(any("Mustermann" in x or "kunde.bin" in x for x in texte))   # Datenschutz
         A.entscheide(aid, True)
         erwartet = bytearray(self.stage1)
         erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
@@ -397,8 +399,6 @@ class WebTests(Basis):
 
     def test_anfrage_kompletter_ablauf(self):
         A.speichere_config({"telegram_chat_id": "1"})
-        dateien = []
-        A.telegram_datei = lambda chat, pfad, name, antwort_auf=None: dateien.append((pfad.read_bytes(), name, antwort_auf))
         neu = zufall(GROESSE, 7)
         r = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(neu)), "passat.bin")},
                             content_type="multipart/form-data")
@@ -418,9 +418,12 @@ class WebTests(Basis):
         time.sleep(0.1)
         m, daten = self.telegram[0]
         self.assertIn("Neue Anfrage", daten["text"])
-        self.assertIn("Golf 7", daten["text"])
+        self.assertIn("VW Golf 7 2016 2.0 TDI 150 PS", daten["text"])
+        # Datenschutz: nichts Persoenliches und keine Datei an Telegram
+        for privat in ("passat.bin", "Werkstatt X", "Bitte bis Freitag"):
+            self.assertNotIn(privat, daten["text"])
+        self.assertEqual([m for m, _ in self.telegram], ["sendMessage"])
         self.assertEqual([k["callback_data"] for k in daten["reply_markup"]["inline_keyboard"][0]], [f"nein:{aid}"])
-        self.assertEqual(dateien, [(bytes(neu), "passat.bin", 1)])
         # Noch kein File: Freigeben geht nicht, Kunde kann nicht laden
         self.assertIn("Kein File", A.entscheide(aid, True))
         self.assertEqual(self.laden(aid).status_code, 403)

@@ -194,20 +194,22 @@ def telegram_api(methode: str, daten: dict, timeout: int = 15):
         return None
 
 
+# Datenschutz: Telegram (ausserhalb der EU) bekommt keine personenbezogenen Daten - keinen Dateinamen,
+# keine Kontaktangabe, keine Nachricht des Kunden und keine Datei. Details nur im Admin-Bereich.
 def telegram_text(a: dict) -> str:
     if a.get("typ") == "anfrage":
         return telegram_text_anfrage(a)
     a = {k: html.escape(v) if isinstance(v, str) else v for k, v in a.items()}
     zeilen = [
         f"🔧 <b>Neuer Auftrag: {html.escape(option_namen()[a['option']])}</b>",
-        f"Datei: {a['datei']}",
         f"ECU: {a['ecu']}",
         f"Software: {a['software']}",
-        f"Kontakt: {a['kunde']}",
         (f"Treffer: ⚠️ {ART_TEXT['softwarenummer']}" if a.get("art") == "softwarenummer"
          else f"Treffer: 100 % – {ART_TEXT.get(a['art'], a['art'])}"),
         f"Quelle: {a['quelle'] or '–'}",
     ]
+    if a["status"] == "WARTET" and not lade_config().get("basis_url", "").startswith("https://"):
+        zeilen.append("\nDetails im Admin-Bereich.")
     if a["status"] == "FREIGEGEBEN":
         zeilen.append("\n✅ <b>FREIGEGEBEN</b>")
     elif a["status"] == "ABGELEHNT":
@@ -218,42 +220,17 @@ def telegram_text(a: dict) -> str:
 def telegram_text_anfrage(a: dict) -> str:
     e = lambda x: html.escape(str(x or "–"))
     fz = a.get("fahrzeug") or {}
+    fahrzeug = " ".join(x for x in (fz.get("marke"), fz.get("modell"), fz.get("baujahr"), fz.get("motor")) if x)
     zeilen = [f"📩 <b>Neue Anfrage: {e(option_namen()[a['option']])}</b>",
-              *(f"{titel}: {e(fz.get(feld))}" for feld, titel, _ in FAHRZEUG_FELDER),
-              f"ECU: {e(a['ecu'])}", f"Software: {e(a['software'])}", f"Datei: {e(a['datei'])}",
-              f"Kontakt: {e(a['kunde'])}"]
-    if a.get("nachricht"):
-        zeilen.append(f"Nachricht: {e(a['nachricht'])}")
+              f"Fahrzeug: {e(fahrzeug)}", f"ECU: {e(a['ecu'])}", f"Software: {e(a['software'])}"]
     if a["status"] == "WARTET":
-        zeilen.append("\nOriginal kommt gleich als Datei. Fertiges File im Admin-Bereich hochladen – "
+        zeilen.append("\nOriginal und alle Angaben im Admin-Bereich. Fertiges File dort hochladen – "
                       "dann bekommt der Kunde es automatisch auf der Seite.")
     elif a["status"] == "FREIGEGEBEN":
         zeilen.append("\n✅ <b>FERTIG – an den Kunden geschickt</b>")
     elif a["status"] == "ABGELEHNT":
         zeilen.append("\n❌ <b>ABGELEHNT</b>" + (f": {e(a['grund'])}" if a.get("grund") else ""))
     return "\n".join(zeilen)
-
-
-def telegram_datei(chat, pfad: Path, name: str, antwort_auf=None):
-    """Datei an Telegram schicken (multipart, bis 50 MB)."""
-    token = lade_config().get("telegram_token")
-    if not token:
-        return None
-    grenze = uuid.uuid4().hex
-    teile = [("chat_id", str(chat))] + ([("reply_to_message_id", str(antwort_auf))] if antwort_auf else [])
-    koerper = b"".join(f'--{grenze}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
-                       for k, v in teile)
-    sauber = re.sub(r'["\r\n\\]', "_", name)
-    koerper += (f'--{grenze}\r\nContent-Disposition: form-data; name="document"; filename="{sauber}"\r\n'
-                f"Content-Type: application/octet-stream\r\n\r\n").encode() + pfad.read_bytes() + f"\r\n--{grenze}--\r\n".encode()
-    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendDocument", data=koerper,
-                                 headers={"Content-Type": f"multipart/form-data; boundary={grenze}"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read())
-    except Exception as ex:   # Benachrichtigung darf nie etwas blockieren
-        print(f"Telegram-Fehler (sendDocument): {ex}", file=sys.stderr)
-        return None
 
 
 def telegram_knoepfe(a: dict) -> dict:
@@ -280,9 +257,6 @@ def telegram_melden(auftrag: dict):
             aktuell = finde_auftrag(auftrag["id"])
             aktuell["tg_nachricht"] = antwort["result"]["message_id"]
             speichere_auftrag(aktuell)
-        if auftrag.get("typ") == "anfrage":   # Original gleich mitschicken -> direkt bearbeiten
-            telegram_datei(chat, AUFTRAEGE / auftrag["id"] / "ori.bin", auftrag["datei"],
-                           antwort["result"]["message_id"])
 
 
 def telegram_aktualisieren(auftrag: dict):

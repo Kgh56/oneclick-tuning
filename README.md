@@ -118,8 +118,9 @@ Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wir
    mindestens eine gewünschte Lösung (Stage 1, Pops & Bangs, eigene Lösungen …).
 2. Das Original liegt dabei schon auf dem Server (wird beim Prüfen gespeichert, nicht abgeschickte Entwürfe
    werden nach 1 Tag gelöscht).
-3. Du bekommst in **Telegram** die Anfrage mit allen Fahrzeugdaten und **das Original direkt als Datei**
-   (Knopf „Ablehnen“ + Link in den Admin-Bereich). Im Admin-Bereich steht sie unter „Offene Anfragen“.
+3. Du bekommst in **Telegram** einen kurzen Hinweis (gewünschte Lösung, Fahrzeug, ECU, Software; Knopf
+   „Ablehnen“ + Link in den Admin-Bereich). Original, Kontakt und Nachricht gibt es nur im Admin-Bereich unter
+   „Offene Anfragen“ – aus Datenschutzgründen geht nichts Persönliches und keine Datei an Telegram.
 4. File bearbeiten → im Admin-Bereich bei der Anfrage **„Hochladen & an Kunden schicken“** (optional mit
    Archivname, dann bekommt der nächste Kunde mit dem File es automatisch). Oder **ablehnen** mit Grund.
 5. Die Seite des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
