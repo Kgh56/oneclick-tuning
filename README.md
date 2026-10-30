@@ -155,6 +155,19 @@ Kosten: Meta berechnet Vorlagen-Nachrichten pro Stück (wenige Cent; aktuelle Pr
 
 ---
 
+# Windows-Programm für Kunden
+Zusätzlich zur Webseite gibt es ein Windows-Programm (`kunde/oneclick_kunde.py`). Es spricht über die
+Schnittstelle `/api/...` mit dem Server – gleiche Regeln, gleiche Freigabe per Telegram.
+
+- **Download für Kunden:** Link auf der Startseite („Lieber als Windows-Programm?“) bzw.
+  `https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe`
+- **Bauen:** passiert automatisch bei jeder Änderung im Ordner `kunde/` (GitHub Actions, Windows-Rechner von GitHub).
+- **Ablauf im Programm:** Datei auswählen → verfügbare Lösungen ankreuzen → Auftrag senden → das Programm fragt
+  den Status selbst ab und meldet die Freigabe → Herunterladen. Aufträge bleiben nach einem Neustart in der Liste.
+- **Server-Adresse** ist fest eingestellt und kann im Programm unter „Einstellungen“ geändert werden.
+- Das Programm ist **nicht signiert**: Windows zeigt beim ersten Start „Der Computer wurde durch Windows geschützt“
+  → „Weitere Informationen“ → „Trotzdem ausführen“. Ohne Warnung geht es nur mit einem Code-Signatur-Zertifikat (kostenpflichtig).
+
 # Sicherheit
 - Admin-Login wird nach 5 Fehlversuchen für 15 Minuten gesperrt, Kunden-Uploads sind auf 30 pro Stunde begrenzt.
 - Alle Formulare sind gegen Fremd-Absendungen (CSRF) geschützt, Cookies nur über HTTPS.

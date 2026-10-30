@@ -546,6 +546,11 @@ class ApiTests(Basis):
         return self.c.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(daten)), name)},
                            content_type="multipart/form-data")
 
+    def test_programm_link(self):
+        self.assertIn("releases/download/programm/OneClick-Tuning.exe", A.app.test_client().get("/").text)
+        A.speichere_config({"programm_url": ""})
+        self.assertNotIn("Windows-Programm", A.app.test_client().get("/").text)
+
     def test_info(self):
         j = self.c.get("/api/info").json
         self.assertEqual(j["firma"], "OneClick Tuning")

@@ -49,6 +49,8 @@ AUFTRAEGE = BASE / "auftraege"
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
+# Download des Windows-Programms (wird von GitHub automatisch gebaut, siehe .github/workflows)
+PROGRAMM_URL = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe"
 
 
 
@@ -1018,6 +1020,7 @@ def einstellungen():
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
+                "programm_url": request.form.get("programm_url", "").strip(),
             })
             flash("Gespeichert.")
         elif aktion == "chat":
@@ -1219,7 +1222,8 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 
 "start.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="hero"><h1>Dein File.<br><span>Ein Klick.</span></h1>
-<p>Original hochladen, Lösung wählen, fertiges File herunterladen.</p></div>
+<p>Original hochladen, Lösung wählen, fertiges File herunterladen.</p>
+{% if programm_url %}<p style="font-size:14px;margin-top:14px"><a href="{{ programm_url }}" style="color:var(--blau);text-decoration:none">Lieber als Windows-Programm? Hier herunterladen ›</a></p>{% endif %}</div>
 <div class="karte">
 <form method="post" action="{{ url_for('pruefen') }}" enctype="multipart/form-data" id="f">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
@@ -1445,6 +1449,8 @@ document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('ch
 <input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Tuning">
 <label class="feld">Adresse der Seite</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
+<label class="feld">Download-Link für das Windows-Programm (leer = Link auf der Startseite ausblenden)</label>
+<input type="text" name="programm_url" value="{{ programm_url }}">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">
 <label class="feld">Telegram-Chat-ID</label>
@@ -1508,7 +1514,8 @@ app.jinja_loader = DictLoader(TEMPLATES)
 @app.context_processor
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
-            "firma": lade_config().get("firmenname") or "OneClick Tuning"}
+            "firma": lade_config().get("firmenname") or "OneClick Tuning",
+            "programm_url": lade_config().get("programm_url", PROGRAMM_URL)}
 
 
 # ---------------------------------------------------------------------------

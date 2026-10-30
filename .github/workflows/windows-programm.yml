@@ -1,0 +1,47 @@
+# Baut das Windows-Programm für Kunden (kunde/oneclick_kunde.py) als .exe
+# und stellt es unter "Releases" -> "programm" zum Download bereit.
+name: Windows-Programm bauen
+
+on:
+  push:
+    branches: [main]
+    paths: ["kunde/**", ".github/workflows/windows-programm.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bauen:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PyInstaller installieren
+        run: pip install pyinstaller==6.11.1
+
+      - name: .exe bauen
+        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning kunde/oneclick_kunde.py
+
+      - name: Kurztest (Programm lässt sich laden)
+        shell: bash
+        run: python -c "import sys; sys.path.insert(0, 'kunde'); import oneclick_kunde; print('ok', oneclick_kunde.VERSION)"
+
+      - name: Als Download bereitstellen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view programm >/dev/null 2>&1 || \
+            gh release create programm --title "Windows-Programm" \
+              --notes "Programm für Kunden: OneClick-Tuning.exe herunterladen und starten."
+          gh release upload programm dist/OneClick-Tuning.exe --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OneClick-Tuning
+          path: dist/OneClick-Tuning.exe
