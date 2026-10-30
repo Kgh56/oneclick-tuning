@@ -8,6 +8,7 @@ Arbeiten komplett in einem temporaeren Ordner, echte Daten werden nicht angefass
 
 import io
 import json
+import os
 import random
 import sys
 import tempfile
@@ -600,6 +601,71 @@ class ApiTests(Basis):
         A.entscheide(aid, False, grund="Software unbekannt")
         j = self.c.get(f"/api/auftrag/{aid}").json
         self.assertEqual((j["status"], j["grund"]), ("ABGELEHNT", "Software unbekannt"))
+
+
+class ProgrammTests(Basis):
+    """Bruecke des Windows-Programms (kunde/oneclick_kunde.py) gegen einen echten, laufenden Server."""
+
+    def setUp(self):
+        super().setUp()
+        import threading
+        from werkzeug.serving import make_server
+        self.server = make_server("127.0.0.1", 0, A.app, threaded=True)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        os.environ["APPDATA"] = str(Path(self.tmp.name) / "appdata")
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kunde"))
+        import oneclick_kunde as K
+        self.K = K
+        speicher = K.Speicher()
+        speicher.daten["server"] = f"http://127.0.0.1:{self.server.server_port}"
+        self.b = K.Bruecke(speicher)
+
+    def tearDown(self):
+        self.server.shutdown()
+        super().tearDown()
+
+    def b64(self, daten):
+        import base64
+        return base64.b64encode(bytes(daten)).decode()
+
+    def test_kompletter_ablauf(self):
+        d = self.b.start()
+        self.assertEqual((d["firma"], d["auftraege"]), ("OneClick Tuning", []))
+        a = self.b.pruefen("golf.bin", self.b64(self.golf))
+        self.assertEqual([o["key"] for o in a["angebot"]], ["stage1", "startstopp"])
+        erg = self.b.bestellen(a["id"], ["stage1", "startstopp"], " Werkstatt X ")
+        self.assertEqual(erg["auftrag"]["status"], "WARTET")
+        self.assertEqual(len(erg["auftraege"]), 1)
+        self.assertEqual(self.b.aktualisieren()["geaendert"], [])
+        A.entscheide(a["id"], True)
+        neu = self.b.aktualisieren()
+        self.assertEqual([x["status"] for x in neu["geaendert"]], ["FREIGEGEBEN"])
+        self.assertEqual(self.b.aktualisieren()["geaendert"], [])   # nur einmal melden
+        ziel = Path(self.tmp.name) / "fertig.bin"
+        self.assertEqual(self.b.herunterladen(a["id"], str(ziel)), {"pfad": str(ziel)})
+        erwartet = bytearray(self.stage1)
+        erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
+        self.assertEqual(ziel.read_bytes(), bytes(erwartet))
+        # Gespeichert: neue Bruecke (= Programm neu gestartet) kennt Auftrag und Kontakt
+        b2 = self.K.Bruecke()
+        b2._api = self.b._api
+        d2 = b2.start()
+        self.assertEqual((d2["kontakt"], d2["auftraege"][0]["status"]), ("Werkstatt X", "FREIGEGEBEN"))
+        self.assertEqual(self.b.entfernen(a["id"])["auftraege"], [])
+
+    def test_fehler_kommen_als_text(self):
+        self.assertIn("keine Lösung", self.b.pruefen("x.bin", self.b64(zufall(GROESSE, 5)))["fehler"])
+        self.assertIn("nicht gelesen", self.b.pruefen("x.bin", "kein base64!!")["fehler"])
+        a = self.b.pruefen("golf.bin", self.b64(self.golf))
+        self.assertIn("fehler", self.b.bestellen(a["id"], ["vmax"], ""))
+        self.assertIn("fehler", self.b.herunterladen("gibtsnicht", "x"))
+
+    def test_server_offline_und_wechseln(self):
+        d = self.b.server_setzen("127.0.0.1:1")   # ohne http:// -> https://, nicht erreichbar
+        self.assertTrue(d["server"].startswith("https://"))
+        self.assertIn("Keine Verbindung", d["verbindung"])
+        d = self.b.server_setzen(f"http://127.0.0.1:{self.server.server_port}/")
+        self.assertNotIn("verbindung", d)
 
 
 class UpdateTests(unittest.TestCase):

@@ -157,15 +157,17 @@ Kosten: Meta berechnet Vorlagen-Nachrichten pro Stück (wenige Cent; aktuelle Pr
 ---
 
 # Windows-Programm für Kunden
-Zusätzlich zur Webseite gibt es ein Windows-Programm (`kunde/oneclick_kunde.py`). Es spricht über die
-Schnittstelle `/api/...` mit dem Server – gleiche Regeln, gleiche Freigabe per Telegram.
+Kunden arbeiten mit dem Windows-Programm. Es besteht aus `kunde/oneclick_kunde.py` (Verbindung zum Server über
+`/api/...`) und `kunde/ui.html` (Oberfläche mit Animationen, angezeigt über Microsoft Edge WebView2, das in
+Windows 10/11 enthalten ist).
 
-- **Download für Kunden:** Link auf der Startseite („Lieber als Windows-Programm?“) bzw.
+- **Download für Kunden:** Knopf auf der Startseite bzw.
   `https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe`
-- **Bauen:** passiert automatisch bei jeder Änderung im Ordner `kunde/` (GitHub Actions, Windows-Rechner von GitHub).
-- **Ablauf im Programm:** Datei auswählen → verfügbare Lösungen ankreuzen → Auftrag senden → das Programm fragt
-  den Status selbst ab und meldet die Freigabe → Herunterladen. Aufträge bleiben nach einem Neustart in der Liste.
-- **Server-Adresse** ist fest eingestellt und kann im Programm unter „Einstellungen“ geändert werden.
+- **Bauen:** automatisch bei jeder Änderung im Ordner `kunde/` (GitHub Actions auf Windows). Nach dem Bauen wird
+  die .exe zur Probe gestartet (Selbsttest); nur wenn Oberfläche und Verbindung laufen, wird sie veröffentlicht.
+- **Ablauf im Programm:** Datei hineinziehen oder auswählen → Analyse → verfügbare Lösungen wählen → Auftrag senden →
+  das Programm fragt den Status selbst ab und meldet die Freigabe (mit Ton und Konfetti) → Herunterladen.
+- **Server-Adresse** ist fest eingestellt und kann im Programm über das Zahnrad geändert werden.
 - Das Programm ist **nicht signiert**: Windows zeigt beim ersten Start „Der Computer wurde durch Windows geschützt“
   → „Weitere Informationen“ → „Trotzdem ausführen“. Ohne Warnung geht es nur mit einem Code-Signatur-Zertifikat (kostenpflichtig).
 

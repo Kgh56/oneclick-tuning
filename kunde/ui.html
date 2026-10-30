@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OneClick Tuning</title>
+<style>
+:root{
+  --bg:#000;--glas:rgba(255,255,255,.05);--glas2:rgba(255,255,255,.08);--rand:rgba(255,255,255,.09);--rand2:rgba(255,255,255,.18);
+  --text:#f5f5f7;--leise:#a1a1a6;--dunkel:#6e6e73;--a1:#ff375f;--a2:#ff9f0a;--ok:#30d158;--warn:#ffd60a;--blau:#0a84ff;
+  --verlauf:linear-gradient(135deg,var(--a1),var(--a2));--feder:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);overflow:hidden;user-select:none;-webkit-font-smoothing:antialiased;
+  font:14.5px/1.5 "Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.005em}
+button,input{font:inherit;color:inherit}
+input{user-select:text}
+
+/* ---------- Animierter Hintergrund ---------- */
+.aurora{position:fixed;inset:-20%;z-index:0;filter:blur(90px) saturate(140%);opacity:.75;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen}
+.aurora i:nth-child(1){width:46vw;height:46vw;left:5%;top:0;background:radial-gradient(circle,#ff375f88,transparent 65%);animation:wandern1 22s ease-in-out infinite alternate}
+.aurora i:nth-child(2){width:50vw;height:50vw;right:0;top:10%;background:radial-gradient(circle,#0a84ff66,transparent 65%);animation:wandern2 26s ease-in-out infinite alternate}
+.aurora i:nth-child(3){width:42vw;height:42vw;left:30%;bottom:-5%;background:radial-gradient(circle,#ff9f0a55,transparent 65%);animation:wandern3 30s ease-in-out infinite alternate}
+@keyframes wandern1{to{transform:translate(18vw,14vh) scale(1.15)}}
+@keyframes wandern2{to{transform:translate(-16vw,18vh) scale(.9)}}
+@keyframes wandern3{to{transform:translate(-12vw,-20vh) scale(1.2)}}
+.raster{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(ellipse at 50% 30%,#000 20%,transparent 75%)}
+
+/* ---------- Intro ---------- */
+#intro{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#000;transition:opacity .7s var(--feder),visibility .7s}
+#intro.weg{opacity:0;visibility:hidden}
+#intro .logo-gross{font-size:46px;font-weight:700;letter-spacing:-.04em;display:flex;gap:.02em}
+#intro .logo-gross span{display:inline-block;opacity:0;transform:translateY(24px) scale(.96);filter:blur(8px);animation:buchstabe .9s var(--feder) forwards}
+#intro .linie{width:0;height:2px;margin:18px auto 0;background:var(--verlauf);border-radius:2px;box-shadow:0 0 18px #ff375f;animation:linie 1.1s .5s var(--feder) forwards}
+@keyframes buchstabe{to{opacity:1;transform:none;filter:none}}
+@keyframes linie{to{width:180px}}
+
+/* ---------- Grundlayout ---------- */
+.app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 28px 6px}
+.marke{font-size:21px;font-weight:700;letter-spacing:-.03em}
+.marke .glanz{background:linear-gradient(90deg,var(--a1),var(--a2),#fff,var(--a2),var(--a1));background-size:300% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:glanz 7s linear infinite}
+@keyframes glanz{to{background-position:300% 0}}
+.kopf-rechts{display:flex;align-items:center;gap:14px}
+.verbindung{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--leise)}
+.punkt{width:8px;height:8px;border-radius:50%;background:var(--dunkel);position:relative}
+.punkt.an{background:var(--ok)}.punkt.an::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--ok);animation:puls 2s ease-out infinite}
+.punkt.aus{background:var(--a1)}
+@keyframes puls{from{transform:scale(.6);opacity:.9}to{transform:scale(1.8);opacity:0}}
+.rund{width:36px;height:36px;border-radius:50%;border:1px solid var(--rand);background:var(--glas);display:grid;place-items:center;cursor:pointer;
+  transition:transform .3s var(--feder),background .2s}
+.rund:hover{background:var(--glas2);transform:rotate(60deg)}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,1fr);gap:22px;padding:14px 28px 26px}
+@media (max-width:900px){main{grid-template-columns:1fr;overflow:auto}}
+
+.karte{position:relative;background:var(--glas);border:1px solid var(--rand);border-radius:26px;padding:28px;
+  backdrop-filter:blur(28px) saturate(150%);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 30px 80px rgba(0,0,0,.45);
+  min-height:0;display:flex;flex-direction:column;animation:einblenden .8s var(--feder) both}
+.karte:nth-child(2){animation-delay:.12s}
+@keyframes einblenden{from{opacity:0;transform:translateY(22px) scale(.985)}}
+h1{font-size:28px;line-height:1.15;font-weight:700;letter-spacing:-.035em}
+h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
+.leise{color:var(--leise)}
+
+/* ---------- Ansichten mit Uebergang ---------- */
+.buehne{position:relative;flex:1;min-height:0}
+.ansicht{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;visibility:hidden;transform:translateX(30px);
+  transition:opacity .45s var(--feder),transform .55s var(--feder),visibility .45s}
+.ansicht.aktiv{opacity:1;visibility:visible;transform:none}
+.ansicht.raus{transform:translateX(-30px)}
+
+/* ---------- Upload-Zone ---------- */
+.zone{flex:1;margin-top:18px;position:relative;border-radius:22px;display:grid;place-items:center;text-align:center;cursor:pointer;
+  background:rgba(255,255,255,.025);transition:transform .35s var(--feder),background .3s;overflow:hidden;isolation:isolate}
+.zone::before{content:"";position:absolute;inset:-60%;z-index:-2;background:conic-gradient(from 0deg,transparent 0 62%,var(--a1) 72%,var(--a2) 80%,transparent 90%);
+  animation:drehen 4.5s linear infinite;opacity:.55;transition:opacity .3s}
+.zone::after{content:"";position:absolute;inset:1.5px;z-index:-1;border-radius:21px;background:#0b0b0d}
+.zone:hover{transform:scale(1.008)}.zone:hover::before{opacity:.9}
+.zone.ziehen{transform:scale(1.02)}.zone.ziehen::before{opacity:1;animation-duration:1.4s}
+@keyframes drehen{to{transform:rotate(360deg)}}
+.hoch{width:84px;height:84px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;background:var(--verlauf);
+  box-shadow:0 18px 50px rgba(255,55,95,.45),0 0 0 10px rgba(255,55,95,.08);animation:schweben 3.2s ease-in-out infinite}
+.hoch svg{width:34px;height:34px}
+@keyframes schweben{50%{transform:translateY(-9px);box-shadow:0 26px 60px rgba(255,55,95,.55),0 0 0 16px rgba(255,55,95,.05)}}
+.zone b{display:block;font-size:19px;font-weight:600;letter-spacing:-.02em;margin-bottom:4px}
+.zone input{display:none}
+
+/* ---------- Analyse ---------- */
+.analyse{flex:1;display:grid;place-items:center;text-align:center}
+.ringe{position:relative;width:150px;height:150px;margin:0 auto 26px}
+.ringe i{position:absolute;inset:0;border-radius:50%;border:2px solid transparent}
+.ringe i:nth-child(1){border-top-color:var(--a1);border-right-color:var(--a1);animation:drehen 1.1s linear infinite}
+.ringe i:nth-child(2){inset:16px;border-bottom-color:var(--a2);border-left-color:var(--a2);animation:drehen 1.6s linear infinite reverse}
+.ringe i:nth-child(3){inset:32px;border-top-color:var(--blau);animation:drehen 2.2s linear infinite}
+.ringe b{position:absolute;inset:48px;border-radius:50%;background:var(--verlauf);filter:blur(1px);animation:atmen 1.6s ease-in-out infinite;
+  display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff}
+@keyframes atmen{50%{transform:scale(.86);opacity:.75}}
+.schritt{height:26px;overflow:hidden;font-weight:600;font-size:16px;color:var(--text)}
+.schritt span{display:block;animation:hochrollen .45s var(--feder)}
+@keyframes hochrollen{from{transform:translateY(100%);opacity:0}}
+.balken{width:260px;height:4px;margin:16px auto 0;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.balken i{display:block;height:100%;width:40%;border-radius:4px;background:var(--verlauf);animation:scan 1.3s ease-in-out infinite}
+@keyframes scan{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+.datei-chip{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:6px 14px;border-radius:99px;background:var(--glas2);
+  border:1px solid var(--rand);font-size:13px;color:var(--leise)}
+
+/* ---------- Auswahl ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 20px}
+.chip{padding:5px 12px;border-radius:99px;background:var(--glas2);border:1px solid var(--rand);font-size:12.5px;color:var(--leise)}
+.chip b{color:var(--text);font-weight:600}
+.loesungen{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;overflow:auto;padding:12px 14px 26px;margin:0 -14px -14px}
+.loesung{position:relative;border-radius:18px;padding:18px 16px;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid var(--rand);
+  display:flex;align-items:center;gap:12px;font-weight:600;transition:transform .3s var(--feder),border-color .3s,background .3s,box-shadow .3s;
+  opacity:0;transform:translateY(16px) scale(.96);animation:karte-rein .6s var(--feder) forwards}
+@keyframes karte-rein{to{opacity:1;transform:none}}
+.loesung:hover{transform:translateY(-3px);border-color:var(--rand2)}
+.loesung.an{border-color:transparent;background:linear-gradient(#141416,#141416) padding-box,var(--verlauf) border-box;border:1.5px solid transparent;
+  box-shadow:0 14px 40px rgba(255,55,95,.28)}
+.haken{flex:none;width:24px;height:24px;border-radius:8px;border:1.5px solid var(--rand2);display:grid;place-items:center;transition:all .3s var(--feder)}
+.loesung.an .haken{background:var(--verlauf);border-color:transparent;transform:scale(1.08)}
+.haken svg{width:14px;height:14px;stroke:#fff;stroke-width:3;fill:none;stroke-dasharray:24;stroke-dashoffset:24;transition:stroke-dashoffset .35s .05s var(--feder)}
+.loesung.an .haken svg{stroke-dashoffset:0}
+.feld{margin-top:18px;width:100%;padding:13px 16px;border-radius:14px;border:1px solid var(--rand);background:rgba(255,255,255,.05);outline:none;
+  transition:border-color .2s,box-shadow .2s}
+.feld:focus{border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.22)}
+.feld::placeholder{color:var(--dunkel)}
+.knoepfe{display:flex;gap:10px;align-items:center;margin-top:16px}
+.btn{position:relative;overflow:hidden;border:0;border-radius:99px;padding:13px 28px;font-weight:600;cursor:pointer;color:#fff;background:var(--verlauf);
+  box-shadow:0 10px 32px rgba(255,55,95,.4);transition:transform .2s var(--feder),box-shadow .25s,opacity .2s}
+.btn::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;transform:skewX(-20deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);transition:left .7s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(255,55,95,.5)}.btn:hover::after{left:130%}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+.btn.grau{background:var(--glas2);border:1px solid var(--rand2);box-shadow:none}.btn.grau:hover{background:rgba(255,255,255,.13)}
+.btn.gruen{background:linear-gradient(135deg,#30d158,#0fb5a3);box-shadow:0 8px 26px rgba(48,209,88,.35)}
+.btn.klein{padding:8px 16px;font-size:13px}
+.welle{position:absolute;border-radius:50%;background:rgba(255,255,255,.45);transform:scale(0);animation:welle .6s ease-out forwards;pointer-events:none}
+@keyframes welle{to{transform:scale(4);opacity:0}}
+.hinweis{font-size:12.5px;color:var(--dunkel);margin-top:12px}
+
+/* ---------- Erfolg / Fehler ---------- */
+.mitte{flex:1;display:grid;place-items:center;text-align:center}
+.erfolg svg{width:110px;height:110px;margin-bottom:18px}
+.erfolg circle{fill:none;stroke:var(--ok);stroke-width:4;stroke-dasharray:320;stroke-dashoffset:320;animation:zeichnen .7s var(--feder) forwards}
+.erfolg path{fill:none;stroke:var(--ok);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:80;stroke-dashoffset:80;animation:zeichnen .45s .55s var(--feder) forwards}
+.erfolg svg{filter:drop-shadow(0 0 24px rgba(48,209,88,.5))}
+@keyframes zeichnen{to{stroke-dashoffset:0}}
+.wackeln{animation:wackeln .5s}
+@keyframes wackeln{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.warnsymbol{width:78px;height:78px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;font-size:34px;
+  background:rgba(255,214,10,.1);border:1px solid rgba(255,214,10,.35);color:var(--warn)}
+
+/* ---------- Auftraege ---------- */
+.liste{flex:1;min-height:0;overflow:auto;margin:14px -6px 0;padding:0 6px}
+.liste::-webkit-scrollbar{width:8px}.liste::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px}
+.auftrag{border-radius:18px;padding:14px 16px;margin-bottom:10px;background:rgba(255,255,255,.035);border:1px solid var(--rand);
+  animation:rein-rechts .55s var(--feder) both;transition:border-color .3s,background .3s}
+.auftrag:hover{background:rgba(255,255,255,.06)}
+@keyframes rein-rechts{from{opacity:0;transform:translateX(24px)}}
+.auftrag.neu{animation:rein-rechts .55s var(--feder) both,aufleuchten 2.4s .3s}
+@keyframes aufleuchten{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 2px var(--ok),0 0 40px rgba(48,209,88,.45)}}
+.a-kopf{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.a-datei{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a-info{font-size:12.5px;color:var(--leise);margin-top:2px}
+.a-fuss{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px}
+.pille{flex:none;display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:600}
+.pille.WARTET{background:rgba(255,214,10,.12);color:var(--warn)}
+.pille.WARTET i{width:7px;height:7px;border-radius:50%;background:var(--warn);animation:blinken 1.4s ease-in-out infinite}
+@keyframes blinken{50%{opacity:.25;transform:scale(.7)}}
+.pille.FREIGEGEBEN{background:rgba(48,209,88,.14);color:var(--ok)}
+.pille.ABGELEHNT{background:rgba(255,55,95,.14);color:#ff6482}
+.leer{flex:1;display:grid;place-items:center;text-align:center;color:var(--dunkel)}
+.leer svg{width:54px;height:54px;opacity:.5;margin-bottom:10px}
+.link{background:none;border:0;color:var(--dunkel);cursor:pointer;font-size:12.5px;padding:4px}.link:hover{color:var(--text)}
+
+/* ---------- Toasts / Dialog / Konfetti ---------- */
+#toasts{position:fixed;top:18px;right:18px;z-index:40;display:flex;flex-direction:column;gap:10px;width:340px}
+.toast{padding:14px 16px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(24px);border:1px solid var(--rand2);
+  box-shadow:0 20px 50px rgba(0,0,0,.5);animation:toast-rein .5s var(--feder) both;display:flex;gap:12px;align-items:flex-start}
+.toast.weg{animation:toast-raus .4s var(--feder) forwards}
+.toast .t-icon{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700}
+.toast.ok .t-icon{background:var(--ok);color:#00230b}.toast.fehler .t-icon{background:var(--a1)}.toast.info .t-icon{background:var(--blau)}
+@keyframes toast-rein{from{opacity:0;transform:translateX(40px) scale(.95)}}
+@keyframes toast-raus{to{opacity:0;transform:translateX(40px) scale(.95)}}
+#dialog{position:fixed;inset:0;z-index:45;display:grid;place-items:center;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
+  opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+#dialog.offen{opacity:1;visibility:visible}
+#dialog .karte{width:min(460px,90vw);transform:scale(.94);transition:transform .4s var(--feder);animation:none}
+#dialog.offen .karte{transform:none}
+#konfetti{position:fixed;inset:0;z-index:60;pointer-events:none}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="raster"></div>
+<div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
+<canvas id="konfetti"></canvas>
+<div id="toasts"></div>
+
+<div class="app">
+  <header>
+    <div class="marke"><span class="glanz" id="firma">OneClick Tuning</span></div>
+    <div class="kopf-rechts">
+      <div class="verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
+      <button class="rund" id="einstellungen-knopf" title="Einstellungen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Links: Ablauf -->
+    <section class="karte">
+      <div class="buehne">
+        <div class="ansicht aktiv" id="v-upload">
+          <h1>Original hochladen</h1>
+          <p class="leise" style="margin-top:6px">Wir prüfen sofort, welche Lösungen es für dein File gibt.</p>
+          <label class="zone" id="zone">
+            <input type="file" id="datei" accept=".bin,.ori,.org,.mod,*">
+            <div>
+              <div class="hoch"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+              <b>Datei hierher ziehen</b>
+              <span class="leise">oder klicken zum Auswählen · .bin / .ori · max. 16 MB</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="ansicht" id="v-analyse">
+          <div class="analyse"><div>
+            <div class="ringe"><i></i><i></i><i></i><b>ECU</b></div>
+            <div class="schritt" id="schritt"><span>Lese Steuergerät …</span></div>
+            <div class="balken"><i></i></div>
+            <div class="datei-chip" id="analyse-datei"></div>
+          </div></div>
+        </div>
+
+        <div class="ansicht" id="v-auswahl">
+          <h1 id="aw-datei"></h1>
+          <div class="chips" id="aw-chips"></div>
+          <h2 id="aw-titel">Verfügbare Lösungen</h2>
+          <div class="loesungen" id="aw-loesungen" style="margin-top:10px"></div>
+          <input class="feld" id="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
+          <div class="knoepfe">
+            <button class="btn" id="senden">Auftrag senden</button>
+            <button class="btn grau" id="abbrechen">Abbrechen</button>
+          </div>
+          <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
+        </div>
+
+        <div class="ansicht" id="v-erfolg">
+          <div class="mitte erfolg"><div>
+            <svg viewBox="0 0 110 110"><circle cx="55" cy="55" r="50"/><path d="M33 57l15 15 30-32"/></svg>
+            <h1>Auftrag gesendet</h1>
+            <p class="leise" style="margin-top:8px" id="erfolg-text"></p>
+          </div></div>
+        </div>
+
+        <div class="ansicht" id="v-fehler">
+          <div class="mitte"><div id="fehler-box">
+            <div class="warnsymbol">!</div>
+            <h1 id="fehler-titel">Keine Lösung gefunden</h1>
+            <p class="leise" style="margin:10px auto 22px;max-width:440px" id="fehler-text"></p>
+            <button class="btn" id="nochmal">Anderes File wählen</button>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rechts: Meine Auftraege -->
+    <section class="karte">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2>Meine Aufträge</h2>
+        <span class="leise" style="font-size:12.5px" id="anzahl"></span>
+      </div>
+      <div class="liste" id="liste"></div>
+    </section>
+  </main>
+</div>
+
+<div id="dialog">
+  <div class="karte">
+    <h2>Einstellungen</h2>
+    <p class="leise" style="margin-top:6px;font-size:13px">Adresse des Servers. Normalerweise musst du hier nichts ändern.</p>
+    <input class="feld" id="server-feld">
+    <div class="knoepfe">
+      <button class="btn" id="server-speichern">Speichern</button>
+      <button class="btn grau" id="dialog-zu">Schließen</button>
+    </div>
+    <div class="hinweis" id="version"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const api = () => window.pywebview.api;
+let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set()};
+
+/* ---------- Intro ---------- */
+function intro(text) {
+  const el = $("#intro-logo");
+  el.innerHTML = "";
+  [...text].forEach((z, i) => {
+    const s = document.createElement("span");
+    s.textContent = z === " " ? " " : z;
+    s.style.animationDelay = (i * 0.045) + "s";
+    if (i < text.indexOf(" ") || text.indexOf(" ") < 0) s.style.color = "#ff5470";
+    el.appendChild(s);
+  });
+}
+intro("OneClick Tuning");
+
+/* ---------- Ansichten ---------- */
+let aktuelle = "v-upload";
+function zeige(id) {
+  if (id === aktuelle) return;
+  const alt = document.getElementById(aktuelle), neu = document.getElementById(id);
+  alt.classList.remove("aktiv"); alt.classList.add("raus");
+  setTimeout(() => alt.classList.remove("raus"), 550);
+  neu.classList.add("aktiv");
+  aktuelle = id;
+}
+
+/* ---------- Toasts, Ton, Konfetti ---------- */
+function toast(art, titel, text = "", dauer = 5000) {
+  const t = document.createElement("div");
+  t.className = "toast " + art;
+  t.innerHTML = `<div class="t-icon">${art === "ok" ? "✓" : art === "fehler" ? "!" : "i"}</div><div><b></b><div class="leise" style="font-size:13px"></div></div>`;
+  t.querySelector("b").textContent = titel;
+  t.querySelector(".leise").textContent = text;
+  $("#toasts").appendChild(t);
+  setTimeout(() => { t.classList.add("weg"); setTimeout(() => t.remove(), 450); }, dauer);
+}
+function ton(freudig = true) {
+  try {
+    const c = new AudioContext(), g = c.createGain();
+    g.connect(c.destination); g.gain.value = 0.08;
+    (freudig ? [784, 988, 1319] : [440, 330]).forEach((f, i) => {
+      const o = c.createOscillator(); o.type = "sine"; o.frequency.value = f; o.connect(g);
+      o.start(c.currentTime + i * 0.11); o.stop(c.currentTime + i * 0.11 + 0.18);
+    });
+  } catch (e) {}
+}
+function konfetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = $("#konfetti"), ctx = cv.getContext("2d");
+  cv.width = innerWidth; cv.height = innerHeight;
+  const farben = ["#ff375f", "#ff9f0a", "#30d158", "#0a84ff", "#ffd60a", "#ffffff"];
+  const teile = Array.from({length: 160}, () => ({
+    x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight * .35,
+    vx: (Math.random() - .5) * 16, vy: -Math.random() * 15 - 5, g: .38 + Math.random() * .2,
+    w: 6 + Math.random() * 6, h: 3 + Math.random() * 5, r: Math.random() * 6, vr: (Math.random() - .5) * .4,
+    f: farben[Math.floor(Math.random() * farben.length)], leben: 1}));
+  let start = performance.now();
+  (function bild(t) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const fertig = t - start > 3200;
+    teile.forEach(p => {
+      p.vy += p.g; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      if (t - start > 2200) p.leben = Math.max(0, p.leben - .03);
+      ctx.save(); ctx.globalAlpha = p.leben; ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.fillStyle = p.f; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    });
+    if (!fertig) requestAnimationFrame(bild); else ctx.clearRect(0, 0, cv.width, cv.height);
+  })(start);
+}
+function welle(e) {
+  const b = e.currentTarget, r = b.getBoundingClientRect(), w = document.createElement("span"), d = Math.max(r.width, r.height);
+  w.className = "welle"; w.style.width = w.style.height = d + "px";
+  w.style.left = (e.clientX - r.left - d / 2) + "px"; w.style.top = (e.clientY - r.top - d / 2) + "px";
+  b.appendChild(w); setTimeout(() => w.remove(), 650);
+}
+document.addEventListener("click", e => { const b = e.target.closest(".btn"); if (b && !b.disabled) welle({currentTarget: b, clientX: e.clientX, clientY: e.clientY}); });
+
+/* ---------- Verbindung / Kopf ---------- */
+function verbindung(ok, text) {
+  $("#punkt").className = "punkt " + (ok ? "an" : "aus");
+  $("#verbindung-text").textContent = text;
+}
+function firma(name) {
+  if (!name) return;
+  $("#firma").textContent = name;
+  document.title = name;
+}
+
+/* ---------- Datei lesen + pruefen ---------- */
+const schritte = ["Lese Steuergerät …", "Erkenne Software …", "Suche im Archiv …", "Prüfe Tuning-Stellen …", "Fast fertig …"];
+let schrittTimer;
+function schrittAnimation() {
+  let i = 0;
+  $("#schritt").innerHTML = `<span>${schritte[0]}</span>`;
+  clearInterval(schrittTimer);
+  schrittTimer = setInterval(() => { i = Math.min(i + 1, schritte.length - 1); $("#schritt").innerHTML = `<span>${schritte[i]}</span>`; }, 900);
+}
+function dateiLesen(datei) {
+  return new Promise((ok, nein) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1] || "");
+    r.onerror = () => nein(r.error);
+    r.readAsDataURL(datei);
+  });
+}
+async function pruefen(datei) {
+  if (!datei) return;
+  if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
+  $("#analyse-datei").textContent = "📄 " + datei.name;
+  zeige("v-analyse"); schrittAnimation();
+  const beginn = Date.now();
+  let erg;
+  try { erg = await api().pruefen(datei.name, await dateiLesen(datei)); }
+  catch (e) { erg = {fehler: "Die Datei konnte nicht gelesen werden."}; }
+  await new Promise(r => setTimeout(r, Math.max(0, 1800 - (Date.now() - beginn))));   // Animation kurz zeigen
+  clearInterval(schrittTimer);
+  if (erg.fehler) return fehler(erg.fehler.includes("keine Lösung") ? "Keine Lösung gefunden" : "Das hat nicht geklappt", erg.fehler);
+  auswahlZeigen(erg);
+}
+function fehler(titel, text) {
+  $("#fehler-titel").textContent = titel;
+  $("#fehler-text").textContent = text;
+  zeige("v-fehler");
+  const box = $("#fehler-box"); box.classList.remove("wackeln"); void box.offsetWidth; box.classList.add("wackeln");
+  ton(false);
+}
+
+/* ---------- Auswahl ---------- */
+const HAKEN = '<span class="haken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>';
+function auswahlZeigen(a) {
+  zustand.entwurf = a;
+  zustand.auswahl = new Set(a.angebot.length ? [a.angebot[0].key] : []);
+  $("#aw-datei").textContent = a.datei;
+  $("#aw-chips").innerHTML = "";
+  [["ECU", a.ecu], ["Software", a.software]].forEach(([k, v]) => {
+    const c = document.createElement("span"); c.className = "chip"; c.innerHTML = `${k} <b></b>`; c.querySelector("b").textContent = v;
+    $("#aw-chips").appendChild(c);
+  });
+  $("#aw-titel").textContent = a.angebot.length > 1 ? "Verfügbare Lösungen – eine oder mehrere wählen" : "Verfügbare Lösung";
+  const feld = $("#aw-loesungen"); feld.innerHTML = "";
+  a.angebot.forEach((o, i) => {
+    const k = document.createElement("div");
+    k.className = "loesung"; k.dataset.key = o.key; k.style.animationDelay = (0.08 + i * 0.07) + "s";
+    k.innerHTML = HAKEN + "<span></span>"; k.querySelector("span:last-child").textContent = o.name;
+    k.addEventListener("click", () => umschalten(o.key));
+    feld.appendChild(k);
+  });
+  auswahlMalen();
+  $("#senden").textContent = "Auftrag senden";
+  zeige("v-auswahl");
+}
+function umschalten(key) {
+  const s = zustand.auswahl, orig = zustand.original;
+  if (s.has(key)) s.delete(key);
+  else {
+    if (key === orig || s.has(orig)) s.clear();   // Original (Rueckruesten) nicht kombinierbar
+    s.add(key);
+  }
+  auswahlMalen();
+}
+function auswahlMalen() {
+  document.querySelectorAll(".loesung").forEach(k => k.classList.toggle("an", zustand.auswahl.has(k.dataset.key)));
+  $("#senden").disabled = zustand.auswahl.size === 0;
+}
+async function senden() {
+  const b = $("#senden"); b.disabled = true; b.textContent = "Wird gesendet …";
+  const reihenfolge = zustand.entwurf.angebot.map(o => o.key).filter(k => zustand.auswahl.has(k));
+  const erg = await api().bestellen(zustand.entwurf.id, reihenfolge, $("#kontakt").value);
+  if (erg.fehler) {
+    b.disabled = false; b.textContent = "Auftrag senden";
+    toast("fehler", "Nicht gesendet", erg.fehler, 7000);
+    return;
+  }
+  zustand.auftraege = erg.auftraege;
+  listeMalen(erg.auftrag.id);
+  $("#erfolg-text").textContent = `„${erg.auftrag.option_name}“ wartet jetzt auf unsere Freigabe. Du bekommst hier Bescheid.`;
+  zeige("v-erfolg");
+  ton(true);
+  setTimeout(() => { if (aktuelle === "v-erfolg") zeige("v-upload"); }, 3800);
+}
+
+/* ---------- Auftraege ---------- */
+function datum(iso) {
+  const d = new Date(iso); if (isNaN(d)) return iso || "";
+  return d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " · " + d.toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"});
+}
+function listeMalen(hervorheben) {
+  const l = $("#liste"); l.innerHTML = "";
+  const auftraege = zustand.auftraege;
+  $("#anzahl").textContent = auftraege.length ? auftraege.length + (auftraege.length === 1 ? " Auftrag" : " Aufträge") : "";
+  if (!auftraege.length) {
+    l.innerHTML = `<div class="leer" style="height:100%"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><div>Noch keine Aufträge</div></div></div>`;
+    return;
+  }
+  auftraege.forEach((a, i) => {
+    const el = document.createElement("div");
+    el.className = "auftrag" + (a.id === hervorheben ? " neu" : "");
+    el.style.animationDelay = (i * 0.04) + "s";
+    el.innerHTML = `<div class="a-kopf"><div style="min-width:0"><div class="a-datei"></div><div class="a-info"></div></div>
+      <span class="pille ${a.status}">${a.status === "WARTET" ? "<i></i>" : ""}<span></span></span></div>
+      <div class="a-fuss"><span class="leise" style="font-size:12.5px"></span><span class="aktionen"></span></div>`;
+    el.querySelector(".a-datei").textContent = a.datei;
+    el.querySelector(".a-info").textContent = (a.option_name || "–") + " · " + datum(a.zeit);
+    el.querySelector(".pille span").textContent = a.status_text || a.status;
+    const unten = el.querySelector(".a-fuss .leise"), aktionen = el.querySelector(".aktionen");
+    if (a.status === "ABGELEHNT") unten.textContent = a.grund ? "Grund: " + a.grund : "Bei Fragen melde dich gerne bei uns.";
+    else if (a.status === "WARTET") unten.textContent = "Wird gerade von uns geprüft …";
+    if (a.status === "FREIGEGEBEN") {
+      const b = document.createElement("button"); b.className = "btn gruen klein"; b.textContent = "⬇  Herunterladen";
+      b.addEventListener("click", () => herunterladen(a, b)); aktionen.appendChild(b);
+    }
+    const x = document.createElement("button"); x.className = "link"; x.textContent = "Entfernen"; x.title = "Aus der Liste entfernen";
+    x.addEventListener("click", async () => {
+      el.style.transition = "opacity .3s, transform .3s"; el.style.opacity = 0; el.style.transform = "translateX(30px)";
+      zustand.auftraege = (await api().entfernen(a.id)).auftraege; setTimeout(() => listeMalen(), 300);
+    });
+    aktionen.appendChild(x);
+    l.appendChild(el);
+  });
+}
+async function herunterladen(a, b) {
+  b.disabled = true; b.textContent = "Wird geladen …";
+  const erg = await api().herunterladen(a.id);
+  b.disabled = false; b.textContent = "⬇  Herunterladen";
+  if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 7000);
+  else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 7000);
+}
+async function aktualisieren() {
+  try {
+    const erg = await api().aktualisieren();
+    if (!erg.geaendert.length) { if (JSON.stringify(erg.auftraege) !== JSON.stringify(zustand.auftraege)) { zustand.auftraege = erg.auftraege; listeMalen(); } return; }
+    zustand.auftraege = erg.auftraege;
+    listeMalen(erg.geaendert[0].id);
+    erg.geaendert.forEach(a => {
+      if (a.status === "FREIGEGEBEN") { toast("ok", "Freigegeben! 🎉", `${a.option_name} für ${a.datei} kann jetzt heruntergeladen werden.`, 8000); konfetti(); ton(true); }
+      else if (a.status === "ABGELEHNT") { toast("fehler", "Abgelehnt", `${a.datei}${a.grund ? " – " + a.grund : ""}`, 9000); ton(false); }
+    });
+  } catch (e) {}
+}
+
+/* ---------- Ereignisse ---------- */
+const zone = $("#zone");
+$("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.target.value = ""; });
+["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (aktuelle === "v-upload") zone.classList.add("ziehen"); }));
+["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || e.target === zone) zone.classList.remove("ziehen"); }));
+document.addEventListener("drop", e => { if (aktuelle === "v-upload" && e.dataTransfer.files.length) pruefen(e.dataTransfer.files[0]); });
+$("#senden").addEventListener("click", senden);
+$("#abbrechen").addEventListener("click", () => zeige("v-upload"));
+$("#nochmal").addEventListener("click", () => zeige("v-upload"));
+$("#einstellungen-knopf").addEventListener("click", () => $("#dialog").classList.add("offen"));
+$("#dialog-zu").addEventListener("click", () => $("#dialog").classList.remove("offen"));
+$("#dialog").addEventListener("click", e => { if (e.target.id === "dialog") $("#dialog").classList.remove("offen"); });
+$("#server-speichern").addEventListener("click", async () => {
+  const erg = await api().server_setzen($("#server-feld").value);
+  if (erg.fehler) return toast("fehler", "Nicht gespeichert", erg.fehler);
+  $("#dialog").classList.remove("offen");
+  starten(erg, false);
+  toast(erg.verbindung ? "fehler" : "ok", erg.verbindung ? "Keine Verbindung" : "Gespeichert", erg.verbindung || erg.server);
+});
+
+/* ---------- Start ---------- */
+function starten(d, mitIntro) {
+  zustand.original = d.original || "original";
+  zustand.auftraege = d.auftraege || [];
+  $("#kontakt").value = d.kontakt || "";
+  $("#server-feld").value = d.server || "";
+  $("#version").textContent = "Version " + (d.version || "");
+  if (d.firma) firma(d.firma);
+  verbindung(!d.verbindung, d.verbindung ? "Offline" : "Verbunden");
+  if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
+  listeMalen();
+}
+async function init() {
+  const beginn = Date.now();
+  const d = await api().start();
+  if (d.firma) intro(d.firma);
+  starten(d, true);
+  setTimeout(() => {
+    $("#intro").classList.add("weg");
+    if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
+  }, Math.max(1500, 2100 - (Date.now() - beginn)));
+  setInterval(aktualisieren, 8000);
+  setTimeout(aktualisieren, 2500);
+}
+if (window.pywebview && window.pywebview.api) init();
+else window.addEventListener("pywebviewready", init);
+</script>
+</body>
+</html>

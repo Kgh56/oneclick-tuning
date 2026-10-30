@@ -1,5 +1,5 @@
-# Baut das Windows-Programm für Kunden (kunde/oneclick_kunde.py) als .exe
-# und stellt es unter "Releases" -> "programm" zum Download bereit.
+# Baut das Windows-Programm für Kunden (kunde/oneclick_kunde.py + kunde/ui.html) als .exe,
+# startet es zur Probe auf Windows und stellt es unter "Releases" -> "programm" zum Download bereit.
 name: Windows-Programm bauen
 
 on:
@@ -21,15 +21,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: PyInstaller installieren
-        run: pip install pyinstaller==6.11.1
+      - name: Pakete installieren
+        run: pip install pyinstaller==6.11.1 "pywebview>=5,<6"
 
       - name: .exe bauen
-        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning kunde/oneclick_kunde.py
+        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning --add-data "kunde/ui.html;." kunde/oneclick_kunde.py
 
-      - name: Kurztest (Programm lässt sich laden)
+      - name: Selbsttest (fertige .exe starten, Oberfläche und Brücke prüfen)
         shell: bash
-        run: python -c "import sys; sys.path.insert(0, 'kunde'); import oneclick_kunde; print('ok', oneclick_kunde.VERSION)"
+        run: |
+          export ONECLICK_SELBSTTEST="$PWD/selbsttest.json"
+          timeout 240 ./dist/OneClick-Tuning.exe || echo "Programm-Ende: $?"
+          echo "Ergebnis:"; cat selbsttest.json; echo
+          grep -q '"ui":true' selbsttest.json
+          grep -q '"api":true' selbsttest.json
 
       - name: Als Download bereitstellen
         shell: bash
