@@ -660,6 +660,62 @@ class ProgrammTests(Basis):
         self.assertIn("fehler", self.b.bestellen(a["id"], ["vmax"], ""))
         self.assertIn("fehler", self.b.herunterladen("gibtsnicht", "x"))
 
+    def freigegebener_auftrag(self):
+        a = self.b.pruefen("golf.bin", self.b64(self.golf))
+        self.b.bestellen(a["id"], ["stage1"], "")
+        A.entscheide(a["id"], True)
+        self.b.aktualisieren()
+        return a["id"]
+
+    def test_herunterladen_mit_speichern_dialog(self):
+        """Der Fall 'Kunde klickt Herunterladen und nichts passiert' - inkl. aller Ausweichwege."""
+        aid = self.freigegebener_auftrag()
+        home = Path(self.tmp.name) / "home"
+        (home / "Downloads").mkdir(parents=True)
+        alt_home = os.environ.get("HOME")
+        self.addCleanup(lambda: os.environ.__setitem__("HOME", alt_home) if alt_home else os.environ.pop("HOME", None))
+        os.environ["HOME"] = str(home)
+        aufrufe = []
+
+        class Fenster:
+            antwort = None
+
+            def create_file_dialog(self, art, directory="", save_filename="", file_types=()):
+                aufrufe.append((save_filename, file_types))
+                if isinstance(self.antwort, Exception):
+                    raise self.antwort
+                return self.antwort
+        self.b._fenster = f = Fenster()
+
+        # Dialog: Kunde waehlt einen Ort
+        f.antwort = str(home / "gewaehlt.bin")
+        self.assertEqual(self.b.herunterladen(aid), {"pfad": f.antwort})
+        self.assertEqual(Path(f.antwort).read_bytes(), self.stage1)
+        self.assertEqual(aufrufe[0], ("golf_stage1.bin", self.K.DATEI_TYPEN))
+        # Dialog abgebrochen
+        f.antwort = None
+        self.assertEqual(self.b.herunterladen(aid), {"abgebrochen": True})
+        # Dialog geht kaputt -> landet trotzdem in Downloads (zweimal: nichts wird ueberschrieben)
+        f.antwort = ValueError("kaputt")
+        self.assertEqual(self.b.herunterladen(aid), {"pfad": str(home / "Downloads" / "golf_stage1.bin")})
+        self.assertEqual(self.b.herunterladen(aid), {"pfad": str(home / "Downloads" / "golf_stage1 (2).bin")})
+        # Gewaehlter Ordner nicht beschreibbar -> Downloads
+        f.antwort = str(home / "gibtsnicht" / "x.bin")
+        self.assertEqual(self.b.herunterladen(aid)["pfad"], str(home / "Downloads" / "golf_stage1 (3).bin"))
+        # Unerwarteter Fehler -> Meldung statt "passiert nix", und steht im Fehlerprotokoll
+        f.antwort = 12345
+        self.assertIn("Unerwarteter Fehler", self.b.herunterladen(aid)["fehler"])
+        self.assertIn("herunterladen", (self.K.datenordner() / "fehler.log").read_text(encoding="utf-8"))
+
+    def test_dateifilter_passen_zu_pywebview(self):
+        try:
+            from webview.util import parse_file_type
+        except Exception:
+            self.skipTest("pywebview nicht installiert (wird beim Bauen im Selbsttest geprueft)")
+        for typ in self.K.DATEI_TYPEN:
+            parse_file_type(typ)
+        self.assertEqual(self.K.dateiname_sauber('a:b?"c.bin'), "a_b__c.bin")
+
     def test_server_offline_und_wechseln(self):
         d = self.b.server_setzen("127.0.0.1:1")   # ohne http:// -> https://, nicht erreichbar
         self.assertTrue(d["server"].startswith("https://"))

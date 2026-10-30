@@ -39,6 +39,7 @@ jobs:
           echo "Ergebnis:"; cat selbsttest.json; echo
           grep -q '"ui":true' selbsttest.json
           grep -q '"api":true' selbsttest.json
+          grep -q '"dialog":true' selbsttest.json
 
       - name: Versionsdatei für das Auto-Update erzeugen
         shell: bash

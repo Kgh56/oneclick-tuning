@@ -282,6 +282,8 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 .toast{padding:14px 16px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(24px);border:1px solid var(--rand2);
   box-shadow:0 20px 50px rgba(0,0,0,.5);animation:toast-rein .5s var(--feder) both;display:flex;gap:12px;align-items:flex-start}
 .toast.weg{animation:toast-raus .4s var(--feder) forwards}
+.toast .t-aktion{margin-top:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--rand2);background:rgba(255,255,255,.08);color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.toast .t-aktion:hover{background:rgba(255,255,255,.16)}
 .toast .t-icon{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700}
 .toast.ok .t-icon{background:var(--ok);color:#00230b}.toast.fehler .t-icon{background:var(--a1)}.toast.info .t-icon{background:var(--blau)}
 @keyframes toast-rein{from{opacity:0;transform:translateX(40px) scale(.95)}}
@@ -483,6 +485,16 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 "use strict";
 const $ = s => document.querySelector(s);
 const api = () => window.pywebview.api;
+/* Programm-Funktion aufrufen; geht dabei etwas schief, kommt immer {fehler} zurück statt nichts */
+async function rufe(name, ...args) {
+  try {
+    const f = window.pywebview && window.pywebview.api && window.pywebview.api[name];
+    if (!f) return {fehler: "Das Programm ist noch nicht bereit. Bitte kurz warten und nochmal klicken."};
+    return (await f(...args)) || {};
+  } catch (e) {
+    return {fehler: "Unerwarteter Fehler: " + ((e && e.message) || e)};
+  }
+}
 let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: ""};
 const ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -589,12 +601,18 @@ function zeige(id) {
 }
 
 /* ---------- Toasts, Ton, Konfetti ---------- */
-function toast(art, titel, text = "", dauer = 5000) {
+function toast(art, titel, text = "", dauer = 5000, aktion = null) {
   const t = document.createElement("div");
   t.className = "toast " + art;
   t.innerHTML = `<div class="t-icon">${art === "ok" ? "✓" : art === "fehler" ? "!" : "i"}</div><div><b></b><div class="leise" style="font-size:13px"></div></div>`;
   t.querySelector("b").textContent = titel;
   t.querySelector(".leise").textContent = text;
+  if (aktion) {
+    const k = document.createElement("button");
+    k.className = "t-aktion"; k.textContent = aktion.text;
+    k.addEventListener("click", aktion.klick);
+    t.querySelector(".leise").after(k);
+  }
   $("#toasts").appendChild(t);
   setTimeout(() => { t.classList.add("weg"); setTimeout(() => t.remove(), 450); }, dauer);
 }
@@ -675,7 +693,7 @@ async function pruefen(datei) {
   zeige("v-analyse"); schrittAnimation();
   const beginn = Date.now();
   let erg;
-  try { erg = await api().pruefen(datei.name, await dateiLesen(datei)); }
+  try { erg = await rufe("pruefen", datei.name, await dateiLesen(datei)); }
   catch (e) { erg = {fehler: "Die Datei konnte nicht gelesen werden."}; }
   await new Promise(r => setTimeout(r, Math.max(0, 1800 - (Date.now() - beginn))));   // Animation kurz zeigen
   clearInterval(schrittTimer);
@@ -732,7 +750,7 @@ function auswahlMalen() {
 async function senden() {
   const b = $("#senden"); b.disabled = true; b.textContent = "Wird gesendet …";
   const reihenfolge = zustand.entwurf.angebot.map(o => o.key).filter(k => zustand.auswahl.has(k));
-  const erg = await api().bestellen(zustand.entwurf.id, reihenfolge, $("#kontakt").value);
+  const erg = await rufe("bestellen", zustand.entwurf.id, reihenfolge, $("#kontakt").value);
   if (erg.fehler) {
     b.disabled = false; b.textContent = "Auftrag senden";
     toast("fehler", "Nicht gesendet", erg.fehler, 7000);
@@ -787,7 +805,7 @@ function listeMalen(hervorheben) {
     const x = document.createElement("button"); x.className = "link"; x.textContent = "Entfernen"; x.title = "Aus der Liste entfernen";
     x.addEventListener("click", async () => {
       el.style.transition = "opacity .3s, transform .3s"; el.style.opacity = 0; el.style.transform = "translateX(30px)";
-      zustand.auftraege = (await api().entfernen(a.id)).auftraege; setTimeout(() => listeMalen(), 300);
+      zustand.auftraege = ((await rufe("entfernen", a.id)).auftraege || zustand.auftraege); setTimeout(() => listeMalen(), 300);
     });
     aktionen.appendChild(x);
     l.appendChild(el);
@@ -796,14 +814,17 @@ function listeMalen(hervorheben) {
 async function herunterladen(a, b) {
   const text = b.querySelector("span");
   b.disabled = true; b.classList.add("laedt"); text.textContent = "Wird geladen …";
-  const erg = await api().herunterladen(a.id);
-  b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen";
-  if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 7000);
-  else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 7000);
+  let erg;
+  try { erg = await rufe("herunterladen", a.id); }
+  finally { b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen"; }
+  if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
+  else if (erg.pfad) toast("ok", "Gespeichert", erg.pfad + " · Checksumme beim Schreiben korrigieren lassen.", 10000,
+                           {text: "Im Ordner zeigen", klick: () => rufe("ordner_zeigen", erg.pfad)});
 }
 async function aktualisieren() {
   try {
-    const erg = await api().aktualisieren();
+    const erg = await rufe("aktualisieren");
+    if (erg.fehler) return;
     if (!erg.geaendert.length) { if (JSON.stringify(erg.auftraege) !== JSON.stringify(zustand.auftraege)) { zustand.auftraege = erg.auftraege; listeMalen(); } return; }
     zustand.auftraege = erg.auftraege;
     listeMalen(erg.geaendert[0].id);
@@ -816,9 +837,9 @@ async function aktualisieren() {
 
 /* ---------- Ereignisse ---------- */
 $("#suche").addEventListener("input", e => { zustand.suche = e.target.value; listeMalen(); });
-$("#whatsapp").addEventListener("click", () => { if (api().whatsapp) api().whatsapp(); else window.open("https://wa.me/4915568540674"); });
+$("#whatsapp").addEventListener("click", () => { rufe("whatsapp"); });
 document.addEventListener("keydown", e => {
-  if (e.key === "F11") { e.preventDefault(); if (api().vollbild) api().vollbild(); }
+  if (e.key === "F11") { e.preventDefault(); rufe("vollbild"); }
   if (e.key === "Escape") $("#dialog").classList.remove("offen");
 });
 const zone = $("#zone");
@@ -833,7 +854,7 @@ $("#einstellungen-knopf").addEventListener("click", () => $("#dialog").classList
 $("#dialog-zu").addEventListener("click", () => $("#dialog").classList.remove("offen"));
 $("#dialog").addEventListener("click", e => { if (e.target.id === "dialog") $("#dialog").classList.remove("offen"); });
 $("#server-speichern").addEventListener("click", async () => {
-  const erg = await api().server_setzen($("#server-feld").value);
+  const erg = await rufe("server_setzen", $("#server-feld").value);
   if (erg.fehler) return toast("fehler", "Nicht gespeichert", erg.fehler);
   $("#dialog").classList.remove("offen");
   starten(erg, false);
@@ -858,7 +879,7 @@ async function updaten(info) {
   $("#update-titel").textContent = `Version ${info.version} wird installiert …`;
   $("#update").classList.add("offen");
   $("#intro").classList.add("weg");
-  const erg = await api().update_installieren();
+  const erg = await rufe("update_installieren");
   if (erg.ok) {
     $("#update-titel").textContent = "Fertig – startet neu …";
     $("#update-text").textContent = "Gleich geht es mit der neuen Version weiter.";
@@ -870,8 +891,9 @@ async function updaten(info) {
 }
 async function init() {
   const beginn = Date.now();
-  const updateSuche = api().update_pruefen().catch(() => ({neu: false}));
-  const d = await api().start();
+  const updateSuche = rufe("update_pruefen");
+  const d = await rufe("start");
+  if (d.fehler) d.verbindung = d.fehler;
   if (d.firma) intro(d.firma);
   starten(d, true);
   const info = await updateSuche;

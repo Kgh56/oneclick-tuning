@@ -588,9 +588,12 @@ def api_pruefen():
 
 @app.route("/api/auftrag/<aid>/bestellen", methods=["POST"])
 def api_bestellen(aid):
-    daten = request.get_json(silent=True) or {}
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    optionen = daten.get("optionen")
+    optionen = {str(o) for o in optionen} if isinstance(optionen, list) else set()
     try:
-        auftrag = auftrag_abschicken(aid, set(daten.get("optionen") or []), str(daten.get("kontakt") or ""))
+        auftrag = auftrag_abschicken(aid, optionen, str(daten.get("kontakt") or ""))
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
     return jsonify(api_auftrag(auftrag))
