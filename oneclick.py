@@ -53,7 +53,7 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 6
+INDEX_VERSION = 7
 MAX_ABWEICHUNG = 0.05   # Rueckruesten ueber Softwarenummer: hoechstens 5 % der Bytes duerfen abweichen
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
@@ -76,7 +76,8 @@ ECU_MUSTER = re.compile(
     rb"|IAW[_ ]?\d{1,2}[A-Z]{1,3}|MJD[_ ]?\d[A-Z0-9]{1,4}"       # Magneti Marelli
     rb")(?![A-Z0-9])"
 )
-BOSCH_SW = re.compile(rb"(?<!\d)1037\d{6}(?!\d)")
+# Bosch-Softwarenummer: klassisch "1037xxxxxx", bei neueren Steuergeraeten (z. B. EDC17CP57) "10SWxxxxxx"
+BOSCH_SW = re.compile(rb"(?<!\d)1037\d{6}(?!\d)|(?<![A-Za-z0-9])10SW\d{6}(?!\d)")
 BOSCH_HW = re.compile(rb"(?<!\d)02[68]1\d{6}(?!\d)")
 # VAG-Teilenummern von Steuergeraeten: xxx 906/907/927 xxx (z. B. 03L906018JL, 8V0906259, 0AM927769)
 VAG_TEILENR = re.compile(rb"(?<![A-Z0-9])[0-9][A-Z0-9]{2}9(?:06|07|27)\d{3}[A-Z]{0,3}(?![A-Z0-9])")

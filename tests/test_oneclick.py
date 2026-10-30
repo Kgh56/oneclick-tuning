@@ -199,6 +199,22 @@ class KernTests(Basis):
         self.assertEqual(l["original"]["art"], "softwarenummer")
         self.assertEqual(l["original"]["daten"], bytes(self.mazda))
 
+    def test_rueckruesten_neues_softwareformat_10sw(self):
+        """Neuere Bosch-Steuergeraete (z. B. Mercedes EDC17CP57) schreiben '10SW054399' statt '1037...'."""
+        ori = zufall(GROESSE, 31)
+        ori[0x300:0x340] = b"46/1/EDC17CP57/1/P695//P_695_GHB0__CV1923 10SW054399P695GHB0"[:0x40]
+        self.assertEqual(oneclick.erkenne(bytes(ori))["bosch_sw"], ["10SW054399"])
+        self.ablegen("MB", {"ori.bin": ori})
+        oneclick.baue_index()
+        st1 = bytearray(ori)
+        for off in range(0x9000, 0x9000 + 3000, 3):   # fremde Stage 1, nur Original im Archiv
+            st1[off] ^= 0x21
+        _, l = oneclick.finde_loesungen(bytes(st1))
+        self.assertEqual((l["original"]["art"], l["original"]["daten"]), ("softwarenummer", bytes(ori)))
+        i = st1.find(b"10SW054399")
+        st1[i:i + 10] = b"10SW054400"   # andere Software -> nichts
+        self.assertEqual(oneclick.finde_loesungen(bytes(st1))[1], {})
+
     def test_rueckruesten_softwarenummer_grenzen(self):
         self.nur_original_ablegen()
         # Original selbst hochgeladen -> nichts zurueckzuruesten
