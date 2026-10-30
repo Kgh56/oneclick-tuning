@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 
 STANDARD_SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping.de")
+WHATSAPP_URL = "https://wa.me/4915568540674"
 UPDATE_URL = os.environ.get("ONECLICK_UPDATE_URL", "https://github.com/Kgh56/oneclick-tuning/releases/download/programm")
 MAX_GROESSE = 16 * 1024 * 1024
 
@@ -316,6 +317,11 @@ class Bruecke:
     def vollbild(self) -> dict:
         if self._fenster:
             self._fenster.toggle_fullscreen()
+        return {}
+
+    def whatsapp(self) -> dict:
+        import webbrowser
+        webbrowser.open(WHATSAPP_URL)
         return {}
 
     def entfernen(self, aid: str) -> dict:

@@ -132,7 +132,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.65fr) min
 .suche input::placeholder{color:var(--dunkel)}
 
 /* Fusszeile */
-.fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 32px 14px;font-size:12px;color:var(--dunkel)}
+.fuss{display:flex;justify-content:space-between;gap:16px;padding:6px 110px 14px 32px;font-size:12px;color:var(--dunkel)}
 .fuss span{display:inline-flex;align-items:center;gap:6px}
 .fuss kbd{font:inherit;font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--rand2);color:var(--leise)}
 
@@ -295,6 +295,17 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 
 /* Kleine Fenster: weniger Deko, damit alles passt (am Ende, damit diese Regeln gewinnen) */
 @media (max-width:980px){main{grid-template-columns:1fr;overflow:auto}.stats{display:none}}
+#whatsapp{position:fixed;right:26px;bottom:26px;z-index:35;width:60px;height:60px;border-radius:50%;border:0;cursor:pointer;
+  display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#2be36f,#12a84c);
+  box-shadow:0 10px 30px rgba(37,211,102,.45),inset 0 1px 0 rgba(255,255,255,.35);
+  animation:wa-schweben 3.6s ease-in-out infinite;transition:transform .25s cubic-bezier(.2,.9,.3,1.4),box-shadow .25s}
+#whatsapp::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(37,211,102,.6);animation:wa-welle 2.4s ease-out infinite}
+#whatsapp:hover{transform:scale(1.1);box-shadow:0 14px 40px rgba(37,211,102,.65)}
+#whatsapp .tipp{position:absolute;right:74px;white-space:nowrap;font-size:13px;font-weight:600;padding:8px 12px;border-radius:10px;
+  background:rgba(20,20,24,.92);border:1px solid var(--rand,rgba(255,255,255,.1));opacity:0;transform:translateX(8px);transition:.25s;pointer-events:none}
+#whatsapp:hover .tipp{opacity:1;transform:none}
+@keyframes wa-schweben{50%{translate:0 -6px}}
+@keyframes wa-welle{from{transform:scale(1);opacity:.9}to{transform:scale(1.6);opacity:0}}
 @media (max-height:860px){.schritte{display:none}}
 @media (max-height:700px){.hero{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
@@ -313,6 +324,8 @@ h2{font-size:18px;font-weight:600;letter-spacing:-.02em}
 </div></div>
 <canvas id="konfetti"></canvas>
 <div id="toasts"></div>
+<button id="whatsapp" title="WhatsApp" aria-label="Per WhatsApp schreiben"><span class="tipp">Fragen? Schreib uns auf WhatsApp</span>
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.14-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.05 21.5h-.01a9.4 9.4 0 0 1-4.8-1.32l-.34-.2-3.57.94.95-3.48-.22-.36a9.43 9.43 0 0 1-1.45-5.03c0-5.2 4.24-9.44 9.45-9.44 2.52 0 4.89.99 6.67 2.77a9.38 9.38 0 0 1 2.76 6.68c0 5.21-4.24 9.44-9.44 9.44zm8.04-17.48A11.3 11.3 0 0 0 12.04.7C5.77.7.67 5.79.67 12.06c0 2 .52 3.96 1.52 5.68L.57 23.3l5.7-1.5a11.33 11.33 0 0 0 5.77 1.47h.01c6.27 0 11.37-5.1 11.37-11.36 0-3.04-1.18-5.89-3.33-8.04z"/></svg></button>
 
 <div class="app">
   <header>
@@ -803,6 +816,7 @@ async function aktualisieren() {
 
 /* ---------- Ereignisse ---------- */
 $("#suche").addEventListener("input", e => { zustand.suche = e.target.value; listeMalen(); });
+$("#whatsapp").addEventListener("click", () => { if (api().whatsapp) api().whatsapp(); else window.open("https://wa.me/4915568540674"); });
 document.addEventListener("keydown", e => {
   if (e.key === "F11") { e.preventDefault(); if (api().vollbild) api().vollbild(); }
   if (e.key === "Escape") $("#dialog").classList.remove("offen");
