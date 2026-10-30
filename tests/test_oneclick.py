@@ -902,7 +902,7 @@ class ProgrammUpdateTests(unittest.TestCase):
 
     def holen(self, url, timeout=0):
         self.abrufe.append(url.rsplit("/", 1)[1])
-        return json.dumps(self.info).encode() if url.endswith("version.json") else self.neu
+        return json.dumps(self.info).encode() if "version.json" in url else self.neu
 
     def updater(self, eigene=5):
         return self.K.Updater("https://beispiel.test/programm", self.exe, self.holen, eigene)
@@ -948,13 +948,16 @@ class ProgrammUpdateTests(unittest.TestCase):
             start.assert_called_once()
         self.assertEqual(self.exe.read_bytes(), self.neu)
         # ohne Updater (Entwicklung / Selbsttest): nie updaten
-        self.assertEqual(self.K.Bruecke().update_pruefen(), {"neu": False})
+        self.assertEqual(self.K.Bruecke().update_pruefen(), {"neu": False, "aktuell": self.K.VERSION})
+        self.assertIn("version.json?t=", self.abrufe[0])   # nie eine zwischengespeicherte Versionsinfo
 
     def test_offline_kein_absturz(self):
         def offline(url, timeout=0):
             raise OSError("kein Internet")
         b = self.K.Bruecke(updater=self.K.Updater("https://x", self.exe, offline, 1))
-        self.assertFalse(b.update_pruefen()["neu"])
+        d = b.update_pruefen()
+        self.assertEqual((d["neu"], d["fehler"]), (False, "Update-Server nicht erreichbar. Bitte Internetverbindung prüfen."))
+        self.assertIn("kein Internet", (self.K.datenordner() / "fehler.log").read_text(encoding="utf-8"))
 
 
 class UpdateTests(unittest.TestCase):

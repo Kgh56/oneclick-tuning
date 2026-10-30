@@ -115,7 +115,8 @@ def ui_datei() -> Path:
 # ---------------------------------------------------------------------------
 
 def herunterladen_url(url: str, timeout: int = 120) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": f"OneClick-Programm/{VERSION}"})
+    req = urllib.request.Request(url, headers={"User-Agent": f"OneClick-Programm/{VERSION}",
+                                               "Cache-Control": "no-cache", "Pragma": "no-cache"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -133,7 +134,8 @@ class Updater:
 
     def pruefen(self):
         """Infos zur neuen Version ({"version", "sha256", "groesse"}) oder None, wenn aktuell."""
-        info = json.loads(self.holen(f"{self.basis_url}/version.json", 20))
+        # ?t=...: niemals eine zwischengespeicherte alte Versionsinfo bekommen
+        info = json.loads(self.holen(f"{self.basis_url}/version.json?t={int(time.time())}", 20))
         return info if int(info["version"]) > self.eigene else None
 
     def installieren(self, info: dict) -> Path:
@@ -406,13 +408,15 @@ class Bruecke:
     @sicher
     def update_pruefen(self) -> dict:
         if not self._updater:
-            return {"neu": False}
+            return {"neu": False, "aktuell": VERSION}
         try:
             self._update_info = self._updater.pruefen()
-        except Exception as e:   # kein Internet, GitHub nicht erreichbar ... -> einfach weiter
-            return {"neu": False, "fehler": str(e)}
+        except Exception as e:   # kein Internet, GitHub nicht erreichbar ... -> spaeter nochmal
+            protokoll(f"Update-Suche: {e!r}")
+            return {"neu": False, "aktuell": VERSION,
+                    "fehler": "Update-Server nicht erreichbar. Bitte Internetverbindung prüfen."}
         if not self._update_info:
-            return {"neu": False}
+            return {"neu": False, "aktuell": VERSION}
         return {"neu": True, "version": f"2.{self._update_info['version']}", "aktuell": VERSION}
 
     @sicher
