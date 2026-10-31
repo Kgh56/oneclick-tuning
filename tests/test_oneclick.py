@@ -749,7 +749,7 @@ class SortierenTests(WebTests):
                 "csrf": a.csrf, "aktion": "uebernehmen", "name": name,
                 **{f"rolle_{ids[n]}": r for n, r in rollen.items()}}, follow_redirects=True).text)
         # Fehler: Rolle fehlt / Loesung doppelt
-        self.assertIn("Bitte für jede Datei eine Rolle", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1"}))
+        self.assertIn("Bitte für jede Datei auswählen", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1"}))
         self.assertIn("zweimal ausgewählt", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1", "789.bin": "stage1"}))
         # Richtig zugeordnet -> im Archiv, Kunde bekommt Treffer
         self.assertIn("„Audi-A4“ angelegt mit Stage 1, Pops & Bangs", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1", "789.bin": "popsbangs"}))
@@ -767,6 +767,48 @@ class SortierenTests(WebTests):
             a.post(f"/admin/sortieren/{s['id']}/{gid}", data={"csrf": a.csrf, "aktion": "verwerfen"})
         self.assertEqual(A.alle_stapel(), [])                               # leerer Stapel wird geloescht
         self.assertNotIn("Sortieren (", a.get("/admin/sortieren").text)
+
+    def test_zwei_autos_in_einer_gruppe_und_kombi_files(self):
+        """Gleiche Software, zwei Autos: beide Originale markieren; ein File mit Stage 1 + Pops & Bangs."""
+        a = self.admin()
+        auto1 = bytearray(zufall(GROESSE, 71))
+        auto2 = bytearray(auto1)
+        for off in range(0x40000, 0x40000 + 0x2000):   # zweites Auto: nur ein paar Kennfelder anders
+            auto2[off] ^= 0x33
+        auto1, auto2 = bytes(auto1), bytes(auto2)
+        st1_a1, st1_a2 = self.tuning(auto1, 11), self.tuning(auto2, 12)
+        kombi_a1 = self.tuning(st1_a1, 13, stellen=8)
+        self.zip_hochladen(a, {"k1.bin": auto1, "k2.bin": auto2, "k3.bin": st1_a1, "k4.bin": st1_a2, "k5.bin": kombi_a1})
+        s = self.stapel()
+        self.assertEqual(len({d["gruppe"] for d in s["dateien"]}), 1)   # alles aehnlich -> eine Gruppe
+        ids = {d["name"]: d["id"] for d in s["dateien"]}
+        gid = s["dateien"][0]["gruppe"]
+        def senden(rollen, namen):
+            return html.unescape(a.post(f"/admin/sortieren/{s['id']}/{gid}", data={
+                "csrf": a.csrf, "aktion": "uebernehmen", "name": "",
+                **{f"rolle_{ids[n]}": r for n, r in rollen.items()},
+                **{f"name_{ids[n]}": v for n, v in namen.items()}}, follow_redirects=True).text)
+        rollen = {"k1.bin": "original", "k2.bin": "original", "k3.bin": "stage1", "k4.bin": "stage1",
+                  "k5.bin": "stage1,popsbangs"}
+        self.assertIn("Bitte einen Namen", senden(rollen, {"k1.bin": "Auto Eins"}))
+        self.assertIn("zweimal vergeben", senden(rollen, {"k1.bin": "Gleich", "k2.bin": "Gleich"}))
+        text = senden(rollen, {"k1.bin": "Auto Eins", "k2.bin": "Auto Zwei"})
+        self.assertIn("„Auto-Eins“ angelegt mit Stage 1, Stage 1 + Pops & Bangs", text)
+        self.assertIn("„Auto-Zwei“ angelegt mit Stage 1", text)
+        self.assertEqual(A.alle_stapel(), [])
+        self.assertTrue((oneclick.ARCHIV / "Auto-Eins" / "stage1+popsbangs.bin").exists())
+        # Kunde: Kombi-File wird als eigene Loesung angeboten, Preis = Summe der Teile
+        _, l = oneclick.finde_loesungen(auto1)
+        self.assertEqual(set(l), {"stage1", "stage1+popsbangs"})
+        A.speichere_config({"stripe_key": "sk_test_x", "preise": {"stage1": 20000, "popsbangs": 5000}})
+        aid = self.hochladen(auto1)
+        self.assertEqual([o["name"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]],
+                         ["Stage 1", "Stage 1 + Pops & Bangs"])
+        j = json.loads(self.bestellen(aid, "stage1+popsbangs"))
+        self.assertEqual((j["option"], j["preis"]), ("stage1+popsbangs", 25000))
+        A.entscheide(aid, True)
+        A.speichere_config({"stripe_key": ""})
+        self.assertEqual(self.laden(aid).data, kombi_a1)
 
     def test_automatisch_und_rest_zum_sortieren(self):
         a = self.admin()

@@ -66,7 +66,12 @@ anhaken. Dateien, die der normale Import nicht zuordnen kann, landen ebenfalls d
   (ein Tuning-File unterscheidet sich vom Original nur in wenigen Blöcken, fremde Files fast komplett).
 - Vorschläge: Original (schon im Archiv, laut Dateiname oder bei 3+ Files die „Mitte“ der Gruppe), Lösung laut
   Dateiname, „schon im Archiv“ → Ignorieren, „Passt zum Archiv-Eintrag …“ für Tuning-Files zu vorhandenen Originalen.
-- Pro Datei die Rolle wählen (Original / Stage 1 / … / Ignorieren), Fahrzeugname eingeben, „Ins Archiv übernehmen“.
+- Pro Datei wählen, was sie ist: Original, eine oder **mehrere Lösungen** (z. B. Stage 1 + Pops & Bangs in einem File –
+  wird im Archiv als `stage1+popsbangs.bin` gespeichert und Kunden als eigene Lösung angeboten, Preis = Summe der Teile)
+  oder Ignorieren. Fahrzeugname eingeben, „Ins Archiv übernehmen“.
+- **Mehrere Autos in einer Gruppe** (gleiche Software): jedes Original als „Original“ markieren und benennen. Jedes
+  Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist; pro Auto wird ein Archiv-Eintrag angelegt.
+- Fehler beim Übernehmen löschen nichts: Dateien bleiben unter „Sortieren“, bis sie übernommen oder verworfen werden.
   Dateien lassen sich in andere Gruppen verschieben und zum Prüfen herunterladen. Doppelte werden erkannt.
 
 ## Kommandozeile (optional)

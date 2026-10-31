@@ -458,7 +458,6 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
-    reihenfolge = [*oneclick.optionen(), oneclick.ORIGINAL]
     (ordner / "ori.bin").write_bytes(daten)
     for opt, l in loesungen.items():
         (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
@@ -469,7 +468,7 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
         "option": None,
         "status": "ENTWURF",
         "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
-                    for opt, l in sorted(loesungen.items(), key=lambda t: reihenfolge.index(t[0]))},
+                    for opt, l in sorted(loesungen.items(), key=lambda t: oneclick.reihen_index(t[0]))},
         "ecu": ecu,
         "software": software,
         "zeit": datetime.now().isoformat(timespec="seconds"),
@@ -583,7 +582,7 @@ def preise() -> dict:
 
 def preis_von(optionen) -> int:
     p = preise()
-    return sum(p.get(o, 0) for o in optionen)
+    return sum(p.get(teil, 0) for o in optionen for teil in o.split("+"))
 
 
 def euro(cent: int) -> str:
@@ -1237,6 +1236,7 @@ def _gruppe_auswerten(stapel: dict, gid: int):
             d["vorschlag"] = namen_rolle.get(d["name"], "")
         bezug = abdruck[ori["id"]] if ori else None
         d["abweichung"] = None if bezug is None or d is ori else round((1 - aehnlichkeit(abdruck[d["id"]], bezug)) * 100, 1)
+        d["name_vorschlag"] = sicherer_name(Path(d["name"]).stem)
     gemeinsam = os.path.commonprefix([Path(d["name"]).stem for d in dateien]).strip(" _-.")
     name = archiv[0] if archiv else oris.get(ori["sha"]) if ori and ori["sha"] in oris else \
         (gemeinsam if len(gemeinsam) >= 4 else Path((ori or dateien[0])["name"]).stem)
@@ -1268,54 +1268,93 @@ def eingang_anlegen(dateien: list, quelle: str) -> dict:
     return {"id": sid, "dateien": len(eintraege), "gruppen": len(set(gruppen)), "bekannt": bekannt}
 
 
-def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict) -> list:
-    """Rollen {Datei-ID: 'original'|Loesung|'ignorieren'} pruefen und als Fahrzeug ins Archiv uebernehmen."""
+def rolle_lesen(wert: str) -> str:
+    """Formularwert -> 'original' | 'ignorieren' | Loesung | Kombination ('stage1+popsbangs') | ''."""
+    teile = [x for x in (wert or "").split(",") if x]
+    if not teile:
+        return ""
+    if teile in (["original"], [oneclick.ORIGINAL]):
+        return oneclick.ORIGINAL
+    if teile == ["ignorieren"]:
+        return "ignorieren"
+    unbekannt = [x for x in teile if x not in oneclick.optionen()]
+    if unbekannt or len(teile) != len(set(teile)):
+        raise Abgelehnt("Unbekannte Auswahl bei einer Datei. Bitte Seite neu laden.")
+    return oneclick.kombi_schluessel(teile)
+
+
+def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: dict = None) -> list:
+    """Rollen {Datei-ID: Formularwert} pruefen und ins Archiv uebernehmen.
+    Mehrere Originale = mehrere Fahrzeuge: jedes Tuning-File kommt zum Original, dem es am aehnlichsten ist.
+    Ein File kann mehrere Loesungen enthalten (z. B. Stage 1 + Pops & Bangs)."""
     stapel = lade_stapel(sid)
     dateien = {d["id"]: d for d in stapel["dateien"] if d["gruppe"] == gid}
     if not dateien:
         raise Abgelehnt("Diese Gruppe gibt es nicht mehr.")
     ordner = EINGANG / sid
-    erlaubt = set(oneclick.optionen())
-    ori_ids = [f for f, r in rollen.items() if r == oneclick.ORIGINAL and f in dateien]
-    mods, namen = {}, option_namen()
-    for f, r in rollen.items():
-        if f not in dateien or r in ("", "ignorieren", oneclick.ORIGINAL):
-            continue
-        if r not in erlaubt:
-            raise Abgelehnt(f"Unbekannte Lösung bei {dateien[f]['name']}.")
-        if r in mods:
-            raise Abgelehnt(f"„{namen[r]}“ ist zweimal ausgewählt. Jede Lösung nur einmal pro Fahrzeug.")
-        mods[r] = (ordner / f"{f}.bin").read_bytes()
-    offen = [dateien[f]["name"] for f in dateien if not rollen.get(f)]
+    lesen = lambda f: (ordner / f"{f}.bin").read_bytes()
+    rolle = {f: rolle_lesen(rollen.get(f, "")) for f in dateien}
+    offen = [dateien[f]["name"] for f, r in rolle.items() if not r]
     if offen:
-        raise Abgelehnt(f"Bitte für jede Datei eine Rolle wählen (oder „Ignorieren“): {', '.join(offen[:5])}")
-    if len(ori_ids) > 1:
-        raise Abgelehnt("Bitte nur eine Datei als Original markieren.")
-    name = sicherer_name(name or "")
-    if name == "unbenannt":
-        raise Abgelehnt("Bitte einen Namen für das Fahrzeug eingeben.")
+        raise Abgelehnt(f"Bitte für jede Datei auswählen, was sie ist (oder „Ignorieren“): {', '.join(offen[:5])}")
+    namen = option_namen()
+    namen_ori = namen_ori or {}
+    ori_ids = [f for f, r in rolle.items() if r == oneclick.ORIGINAL]
+    tuning = [f for f, r in rolle.items() if r not in (oneclick.ORIGINAL, "ignorieren")]
+
+    # Fahrzeuge bilden: {Name: (Original-Inhalt, [Tuning-IDs])}
+    fahrzeuge = {}
     if ori_ids:
-        ori = (ordner / f"{ori_ids[0]}.bin").read_bytes()
-    else:   # Original liegt schon im Archiv (nur Tuning-Files in der Gruppe)
-        e = next((e for e in oneclick.lade_index()["eintraege"] if e["name"] == name), None)
+        abdruck = {f: block_abdruck(lesen(f)) for f in ori_ids + tuning}
+        zuordnung = {o: [] for o in ori_ids}
+        for f in tuning:
+            bester = max(ori_ids, key=lambda o: aehnlichkeit(abdruck[f], abdruck[o]))
+            if aehnlichkeit(abdruck[f], abdruck[bester]) < AEHNLICH:
+                raise Abgelehnt(f"{dateien[f]['name']} passt zu keinem der markierten Originale. "
+                                "Bitte in eine andere Gruppe verschieben oder auf „Ignorieren“ stellen.")
+            zuordnung[bester].append(f)
+        for o in ori_ids:
+            n = sicherer_name(namen_ori.get(o) or (name if len(ori_ids) == 1 else ""))
+            if n == "unbenannt":
+                raise Abgelehnt(f"Bitte einen Namen für das Fahrzeug mit Original {dateien[o]['name']} eingeben.")
+            if n in fahrzeuge:
+                raise Abgelehnt(f"Der Name „{n}“ ist zweimal vergeben. Jedes Fahrzeug braucht einen eigenen Namen.")
+            fahrzeuge[n] = (lesen(o), zuordnung[o])
+    elif tuning:   # Original liegt schon im Archiv (nur Tuning-Files in der Gruppe)
+        n = sicherer_name(name or "")
+        e = next((e for e in oneclick.lade_index()["eintraege"] if e["name"] == n), None)
         if e is None:
             raise Abgelehnt("Kein Original markiert. Entweder eine Datei als Original wählen oder als Name "
                             "einen vorhandenen Archiv-Eintrag angeben, zu dem diese Tuning-Files gehören.")
-        ori = oneclick.archiv_datei(e).read_bytes()
-    for r, d in mods.items():
-        if len(d) != len(ori):
-            raise Abgelehnt(f"{namen[r]}: andere Dateigröße als das Original.")
-        if d == ori:
-            raise Abgelehnt(f"{namen[r]}: ist identisch mit dem Original.")
-    with index_sperre:
-        erg = archiv_speichern(name, ori, mods)
+        fahrzeuge[n] = (oneclick.archiv_datei(e).read_bytes(), tuning)
+
+    # Pruefen, bevor irgendetwas gespeichert wird
+    plan = []
+    for n, (ori, ids) in fahrzeuge.items():
+        mods = {}
+        for f in ids:
+            r, d = rolle[f], lesen(f)
+            if r in mods:
+                raise Abgelehnt(f"„{namen[r]}“ ist bei „{n}“ zweimal ausgewählt ({dateien[f]['name']}). "
+                                "Gehören die Files zu verschiedenen Autos, jedes Original als „Original“ markieren.")
+            if len(d) != len(ori):
+                raise Abgelehnt(f"{dateien[f]['name']}: andere Dateigröße als das Original.")
+            if d == ori:
+                raise Abgelehnt(f"{dateien[f]['name']}: ist identisch mit dem Original.")
+            mods[r] = d
+        plan.append((n, ori, mods))
+
+    meldungen = []
+    for n, ori, mods in plan:
+        with index_sperre:
+            meldungen += archiv_meldungen(archiv_speichern(n, ori, mods))
     with eingang_sperre:   # erledigte Dateien (auch ignorierte) aus dem Stapel entfernen
         stapel = lade_stapel(sid)
         stapel["dateien"] = [d for d in stapel["dateien"] if d["id"] not in dateien]
         for f in dateien:
             (ordner / f"{f}.bin").unlink(missing_ok=True)
         stapel_sichern(stapel)
-    return archiv_meldungen(erg)
+    return meldungen or ["Nichts übernommen – alle Dateien standen auf „Ignorieren“."]
 
 
 def stapel_sichern(stapel: dict):
@@ -1526,8 +1565,9 @@ def sortieren_gruppe(sid, gid):
     anker = url_for("sortieren")
     if aktion == "uebernehmen":
         rollen = {k[6:]: v for k, v in request.form.items() if k.startswith("rolle_")}
+        namen_ori = {k[5:]: v for k, v in request.form.items() if k.startswith("name_")}
         try:
-            for m in gruppe_uebernehmen(sid, gid, request.form.get("name", ""), rollen):
+            for m in gruppe_uebernehmen(sid, gid, request.form.get("name", ""), rollen, namen_ori):
                 flash(m)
         except Abgelehnt as e:
             flash(f"Gruppe {gid}: {e}")
@@ -2200,18 +2240,22 @@ meist ein Fahrzeug pro Gruppe. Wähle pro Datei, was sie ist, gib dem Fahrzeug e
 <h2>Gruppe {{ g.id }} <span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
 {% if g.archiv %}<p class="meldung" style="margin-top:0">Passt zum Archiv-Eintrag <b>{{ g.archiv }}</b>. Ohne eigenes Original in der Gruppe
 werden die Tuning-Files dort ergänzt.</p>{% endif %}
-<label class="feld">Name des Fahrzeugs (vorhandener Name = dort ergänzen)</label>
+<label class="feld">Name, wenn kein Original in der Gruppe ist (dann werden die Tuning-Files bei diesem Archiv-Eintrag ergänzt)</label>
 <input type="text" name="name" value="{{ g.name }}" list="archivnamen" autocomplete="off">
+<p class="hinweis" style="margin-top:-4px">Pro Datei auswählen, was sie ist – <b>auch mehreres</b> (z. B. Stage 1 + Pops &amp; Bangs in einem File).
+Sind es <b>mehrere Autos</b>, einfach jedes Original als „Original“ markieren und benennen: Jedes Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist.</p>
 <div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
 {% for d in g.dateien %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
 {% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}</td>
 <td class="leise">{{ d.ecu }}<br>{{ d.software }}</td>
 <td>{% if d.abweichung is none %}{% if d.vorschlag == original %}<span class="status s-FREIGEGEBEN">Original?</span>{% else %}–{% endif %}{% else %}{{ d.abweichung|string|replace('.', ',') }} %{% endif %}</td>
-<td><select name="rolle_{{ d.id }}" class="rolle">
-<option value="">– bitte wählen –</option>
-<option value="{{ original }}" {{ 'selected' if d.vorschlag == original }}>Original</option>
-{% for key, titel in archiv_optionen.items() %}<option value="{{ key }}" {{ 'selected' if d.vorschlag == key }}>{{ titel }}</option>{% endfor %}
-<option value="ignorieren" {{ 'selected' if d.vorschlag == 'ignorieren' }}>Ignorieren (nicht übernehmen)</option></select></td>
+<td><div class="rollen" data-feld="rolle_{{ d.id }}">
+<input type="hidden" name="rolle_{{ d.id }}" value="{{ d.vorschlag }}">
+<button type="button" class="chip ori" data-w="{{ original }}">Original</button>
+{% for key, titel in archiv_optionen.items() %}<button type="button" class="chip" data-w="{{ key }}">{{ titel }}</button>{% endfor %}
+<button type="button" class="chip weg" data-w="ignorieren">Ignorieren</button>
+<input type="text" class="ori-name" name="name_{{ d.id }}" placeholder="Name dieses Fahrzeugs"
+ value="{{ g.name if d.vorschlag == original else d.name_vorschlag }}" autocomplete="off" list="archivnamen"></div></td>
 <td><select name="ziel_{{ d.id }}" class="ziel" title="In eine andere Gruppe verschieben">
 {% for g2 in s.gruppen %}<option value="{{ g2.id }}" {{ 'selected' if g2.id == g.id }}>{{ g2.id }}</option>{% endfor %}<option value="neu">neue Gruppe</option></select></td></tr>
 {% endfor %}</table></div>
@@ -2222,15 +2266,40 @@ werden die Tuning-Files dort ergänzt.</p>{% endif %}
 {% endfor %}{% endfor %}
 <datalist id="archivnamen">{% for n in archiv_namen %}<option value="{{ n }}">{% endfor %}</datalist>
 <style>select{font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--rand);border-radius:10px;padding:8px 10px;max-width:100%}
-select option{background:#1c1c1e}td select.rolle{min-width:170px}</style>
+select option{background:#1c1c1e}
+.rollen{display:flex;flex-wrap:wrap;gap:6px;max-width:520px}
+.rollen .chip{font:inherit;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:99px;cursor:pointer;color:var(--leise);
+background:rgba(255,255,255,.05);border:1px solid var(--rand2);transition:all .15s}
+.rollen .chip:hover{color:var(--text);border-color:var(--leise)}
+.rollen .chip.an{color:#fff;background:var(--verlauf);border-color:transparent}
+.rollen .chip.ori.an{background:linear-gradient(135deg,#30d158,#0fb5a3)}
+.rollen .chip.weg.an{background:#48484a}
+.rollen .ori-name{display:none;margin:4px 0 0;flex-basis:100%;padding:8px 12px;font-size:14px}
+.rollen.ist-ori .ori-name{display:block}
+td:has(.rollen){white-space:normal}</style>
 <script>
 // Gruppe aendern = sofort verschieben
 document.querySelectorAll('select.ziel').forEach(function(s){s.addEventListener('change',function(){
   var f=s.form; f.querySelector('input[name=aktion]').value='verschieben'; f.submit();});});
-// Rolle "Original" nur einmal pro Gruppe: andere Original-Auswahl zuruecksetzen
-document.querySelectorAll('select.rolle').forEach(function(s){s.addEventListener('change',function(){
-  if(s.value!=='{{ original }}') return;
-  s.form.querySelectorAll('select.rolle').forEach(function(o){if(o!==s&&o.value==='{{ original }}')o.value='';});});});
+// Auswahl pro Datei: Original ODER Ignorieren ODER eine/mehrere Loesungen (z. B. Stage 1 + Pops & Bangs)
+document.querySelectorAll('.rollen').forEach(function(box){
+  var feld=box.querySelector('input[type=hidden]'), chips=box.querySelectorAll('.chip');
+  function malen(){
+    var werte=feld.value?feld.value.split(','):[];
+    chips.forEach(function(c){c.classList.toggle('an',werte.indexOf(c.dataset.w)>=0);});
+    box.classList.toggle('ist-ori',werte[0]==='{{ original }}');
+  }
+  chips.forEach(function(c){c.addEventListener('click',function(){
+    var w=c.dataset.w, werte=feld.value?feld.value.split(','):[];
+    if(w==='{{ original }}'||w==='ignorieren') werte=(werte.length===1&&werte[0]===w)?[]:[w];
+    else{
+      werte=werte.filter(function(x){return x!=='{{ original }}'&&x!=='ignorieren';});
+      var i=werte.indexOf(w); if(i>=0) werte.splice(i,1); else werte.push(w);
+    }
+    feld.value=werte.join(','); malen();
+  });});
+  malen();
+});
 </script>
 {% endblock %}""",
 

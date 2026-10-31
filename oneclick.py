@@ -301,11 +301,25 @@ def option_anlegen(name: str) -> str:
     return key
 
 
+def kombi_schluessel(teile) -> str:
+    """{'popsbangs', 'stage1'} -> 'stage1+popsbangs' (Reihenfolge wie bei den Loesungen)."""
+    reihenfolge = list(optionen())
+    teile = set(teile)
+    return "+".join(k for k in reihenfolge if k in teile)
+
+
+def reihen_index(key: str) -> float:
+    """Sortierung fuer Angebote: Kombinationen direkt hinter ihrer ersten Loesung, Original ans Ende."""
+    reihenfolge = [*optionen(), ORIGINAL]
+    erste = key.split("+")[0]
+    return (reihenfolge.index(erste) if erste in reihenfolge else len(reihenfolge)) + (0.5 if "+" in key else 0)
+
+
 def option_loeschen(key: str):
     eigene = eigene_optionen()
     if key not in eigene:
         raise ValueError("Feste Lösungen können nicht gelöscht werden.")
-    benutzt = [e["name"] for e in lade_index()["eintraege"] if key in e["optionen"]]
+    benutzt = [e["name"] for e in lade_index()["eintraege"] if any(key in o.split("+") for o in e["optionen"])]
     if benutzt:
         raise ValueError(f"„{eigene[key]}“ wird noch im Archiv benutzt ({', '.join(benutzt[:5])}). "
                          "Erst dort die Fahrzeuge löschen.")
@@ -335,6 +349,10 @@ def klassifiziere(namen: list) -> tuple:
         if n == ori:
             continue
         stamm = Path(n).stem.lower()
+        teile = stamm.split("+")
+        if len(teile) > 1 and all(x in optionen() for x in teile):   # kombiniertes File, z. B. stage1+popsbangs.bin
+            gefunden[kombi_schluessel(teile)] = n
+            continue
         key = next((k for k in eigene if k in schluessel(stamm) and k not in gefunden), None)
         if key is None:
             key = next((opt for opt, muster in MUSTER_OPTION.items()
