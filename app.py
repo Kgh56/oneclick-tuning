@@ -1172,8 +1172,13 @@ def alle_stapel() -> list:
     return sorted(liste, key=lambda s: s["zeit"])
 
 
+def sichtbar(d: dict) -> bool:
+    """Files mit Abgas-Abschaltung im Namen werden in 'Sortieren' ausgeblendet (sie werden nie uebernommen)."""
+    return not oneclick.abgas_datei(d["name"])
+
+
 def eingang_anzahl() -> int:
-    return sum(len(s["dateien"]) for s in alle_stapel())
+    return sum(1 for s in alle_stapel() for d in s["dateien"] if sichtbar(d))
 
 
 _abdruck_cache, _auswertung_cache = {}, {}
@@ -1314,7 +1319,8 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
         raise Abgelehnt("Diese Gruppe gibt es nicht mehr.")
     ordner = EINGANG / sid
     lesen = lambda f: (ordner / f"{f}.bin").read_bytes()
-    rolle = {f: rolle_lesen(rollen.get(f, "")) for f in dateien}
+    rolle = {f: "ignorieren" if not sichtbar(dateien[f]) and not rollen.get(f) else rolle_lesen(rollen.get(f, ""))
+             for f in dateien}
     abgas = [dateien[f]["name"] for f, r in rolle.items() if r != "ignorieren" and oneclick.abgas_datei(dateien[f]["name"])]
     if abgas:
         raise Abgelehnt(f"{', '.join(abgas[:3])}: laut Dateiname mit Abschaltung der Abgasreinigung – solche Files werden "
@@ -1613,15 +1619,37 @@ def archiv_import():
 @app.route("/admin/sortieren")
 @admin_noetig
 def sortieren():
-    stapel = []
+    stapel, ausgeblendet = [], 0
     for s in alle_stapel():
-        gruppen = [gruppe_auswerten(s, gid) for gid in sorted({d["gruppe"] for d in s["dateien"]})]
+        ausgeblendet += sum(1 for d in s["dateien"] if not sichtbar(d))
+        gids = sorted({d["gruppe"] for d in s["dateien"] if sichtbar(d)})
+        if not gids:
+            continue
+        gruppen = [gruppe_auswerten(s, gid) for gid in gids]
         for g in gruppen:
             plan = auto_plan(g)
             g["auto"] = plan if isinstance(plan, str) else "kann automatisch übernommen werden"
-        stapel.append({**s, "gruppen": gruppen})
-    return render_template("sortieren.html", stapel=stapel, archiv_optionen=oneclick.optionen(),
+        stapel.append({**s, "gruppen": gruppen, "sichtbar": sum(1 for d in s["dateien"] if sichtbar(d))})
+    return render_template("sortieren.html", stapel=stapel, ausgeblendet=ausgeblendet, archiv_optionen=oneclick.optionen(),
                            archiv_namen=[e["name"] for e in oneclick.lade_index()["eintraege"]])
+
+
+@app.route("/admin/sortieren/abgas-loeschen", methods=["POST"])
+@admin_noetig
+def abgas_loeschen():
+    """Die ausgeblendeten Abgas-Files endgueltig loeschen (nur auf Knopfdruck)."""
+    weg = 0
+    with eingang_sperre:
+        for s in alle_stapel():
+            raus = [d for d in s["dateien"] if not sichtbar(d)]
+            for d in raus:
+                (EINGANG / s["id"] / f"{d['id']}.bin").unlink(missing_ok=True)
+            if raus:
+                s["dateien"] = [d for d in s["dateien"] if sichtbar(d)]
+                stapel_sichern(s)
+                weg += len(raus)
+    flash(f"{weg} ausgeblendete Datei(en) gelöscht.")
+    return redirect(url_for("sortieren"))
 
 
 @app.route("/admin/sortieren/automatisch", methods=["POST"])
@@ -1631,7 +1659,7 @@ def sortieren_automatisch():
     gruppen = fahrzeuge = 0
     offen = {}
     for s in alle_stapel():
-        for gid in sorted({d["gruppe"] for d in s["dateien"]}):
+        for gid in sorted({d["gruppe"] for d in s["dateien"] if sichtbar(d)}):
             try:
                 stapel = lade_stapel(s["id"])
             except Exception:
@@ -2333,6 +2361,10 @@ async function kennt(){
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
 meist ein Fahrzeug pro Gruppe. Wähle pro Datei, was sie ist, gib dem Fahrzeug einen Namen und übernimm es ins Archiv.
 „Abweichung“ zeigt, wie viel sich eine Datei vom vorgeschlagenen Original unterscheidet (Tuning-Files meist unter 20 %, fremde Files fast 100 %).</p>
+{% if ausgeblendet %}<p class="meldung" style="margin:0 0 14px">{{ ausgeblendet }} Datei(en) mit Abschaltung der Abgasreinigung im Namen
+(DPF, AdBlue, EGR, NOx, Lambda …) sind ausgeblendet – sie werden nicht übernommen und liegen nur noch auf dem Server.
+<form method="post" action="{{ url_for('abgas_loeschen') }}" class="inline" onsubmit="return confirm('Diese ausgeblendeten Dateien endgültig löschen?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein" style="margin-left:6px">Endgültig löschen</button></form></p>{% endif %}
 {% if not stapel %}<p>Gerade gibt es nichts zu sortieren. Neue Dateien kommen über Archiv → ZIP-Import.</p>
 {% else %}<form method="post" action="{{ url_for('sortieren_automatisch') }}" style="margin-top:14px"
  onsubmit="var b=this.querySelector('button');b.textContent='Läuft … (bei vielen Dateien bis zu ein paar Minuten)';b.disabled=true">
@@ -2342,7 +2374,7 @@ am Inhalt erkennbar – und die Lösung steht im Dateinamen (z. B. stage1, pops,
 werden aufgeräumt. Alles andere bleibt hier stehen, mit dem Grund dazu.</p>{% endif %}</div>
 {% for s in stapel %}
 <div class="karte" style="padding-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-<h2 style="margin:0">{{ s.quelle }} <span class="leise" style="font-weight:400;font-size:14px">· {{ s.zeit[:16].replace('T', ' ') }} · {{ s.dateien|length }} Dateien in {{ s.gruppen|length }} Gruppen</span></h2>
+<h2 style="margin:0">{{ s.quelle }} <span class="leise" style="font-weight:400;font-size:14px">· {{ s.zeit[:16].replace('T', ' ') }} · {{ s.sichtbar }} Dateien in {{ s.gruppen|length }} Gruppen</span></h2>
 <form method="post" action="{{ url_for('stapel_verwerfen', sid=s.id) }}" class="inline" onsubmit="return confirm('Alle Dateien dieses Stapels löschen?')">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein">Ganzen Stapel verwerfen</button></form></div></div>
 {% for g in s.gruppen %}
@@ -2351,7 +2383,7 @@ werden aufgeräumt. Alles andere bleibt hier stehen, mit dem Grund dazu.</p>{% e
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="uebernehmen">
 <h2>Gruppe {{ g.id }} {% if g.auto.startswith('kann') %}<span class="status s-FREIGEGEBEN" style="font-size:12px;vertical-align:3px">automatisch möglich</span>
 {% else %}<span class="status s-WARTET" style="font-size:12px;vertical-align:3px" title="Warum nicht automatisch">{{ g.auto }}</span>{% endif %}
-<span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
+<span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|rejectattr('abgas')|list|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
 {% if g.archiv %}<p class="meldung" style="margin-top:0">Passt zum Archiv-Eintrag <b>{{ g.archiv }}</b>. Ohne eigenes Original in der Gruppe
 werden die Tuning-Files dort ergänzt.</p>{% endif %}
 <label class="feld">Name, wenn kein Original in der Gruppe ist (dann werden die Tuning-Files bei diesem Archiv-Eintrag ergänzt)</label>
@@ -2359,7 +2391,7 @@ werden die Tuning-Files dort ergänzt.</p>{% endif %}
 <p class="hinweis" style="margin-top:-4px">Pro Datei auswählen, was sie ist – <b>auch mehreres</b> (z. B. Stage 1 + Pops &amp; Bangs in einem File).
 Sind es <b>mehrere Autos</b>, einfach jedes Original als „Original“ markieren und benennen: Jedes Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist.</p>
 <div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
-{% for d in g.dateien %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
+{% for d in g.dateien if not d.abgas %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
 {% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}
 {% if d.abgas %}<br><span class="status s-ABGELEHNT">Abgasreinigung – wird nicht übernommen</span>{% endif %}</td>
 <td class="leise">{{ d.ecu }}<br>{{ d.software }}</td>

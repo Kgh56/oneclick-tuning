@@ -78,7 +78,8 @@ anhaken. Dateien, die der normale Import nicht zuordnen kann, landen ebenfalls d
   („Original nicht sicher erkennbar“ / „Lösung nicht aus dem Dateinamen erkennbar“). Namen ohne Buchstaben (z. B.
   „1001.bin“) werden durch Steuergerät + Software ersetzt.
 - Files, deren Name eine Abschaltung der Abgasreinigung nennt (DPF, AGR/EGR, AdBlue/SCR, NOx, Lambda, Kat …), werden
-  nicht übernommen: Der ZIP-Import überspringt sie (mit Meldung), schon liegende stehen fest auf „Ignorieren“, und das
+  nicht übernommen: Der ZIP-Import überspringt sie (mit Meldung), schon liegende werden in „Sortieren“ ausgeblendet
+  (Löschen nur per Knopf „Endgültig löschen“) und beim Übernehmen ignoriert, und das
   restliche Fahrzeug (Original, Stage 1 …) wird normal zugeordnet.
 - Fehler beim Übernehmen löschen nichts: Dateien bleiben unter „Sortieren“, bis sie übernommen oder verworfen werden.
   Dateien lassen sich in andere Gruppen verschieben und zum Prüfen herunterladen. Doppelte werden erkannt.
