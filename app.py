@@ -50,6 +50,7 @@ BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
 KUNDENSEITE = BASE / "web" / "kunde.html"
+STANDARD_WHATSAPP = "4915568540674"   # Support nach dem Download (Admin -> Einstellungen)
 
 
 
@@ -771,7 +772,8 @@ def api_info():
                    original=oneclick.ORIGINAL,
                    optionen=[{"key": o, "name": namen[o]} for o in oneclick.optionen()],   # fuer Anfragen
                    fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER],
-                   zahlung_aktiv=zahlung_aktiv(), preise=preise() if zahlung_aktiv() else {})
+                   zahlung_aktiv=zahlung_aktiv(), preise=preise() if zahlung_aktiv() else {},
+                   support_whatsapp=lade_config().get("support_whatsapp", STANDARD_WHATSAPP))
 
 
 @app.route("/api/pruefen", methods=["POST"])
@@ -885,6 +887,22 @@ def admin():
                            telegram=bool(lade_config().get("telegram_chat_id")),
                            zahlung=zahlung_aktiv(), euro=euro,
                            bezahlt=sum(a.get("betrag") or 0 for a in alle if a.get("bezahlt")))
+
+
+@app.route("/admin/suche")
+@admin_noetig
+def auftrag_suche():
+    """Auftrag ueber die Kurz-Nummer finden (der Kunde schickt sie per WhatsApp)."""
+    q = re.sub(r"[^0-9a-f]", "", request.args.get("q", "").lower())
+    if len(q) < 4:
+        flash("Bitte mindestens die ersten 4 Zeichen der Auftrags-Nr. eingeben.")
+        return redirect(url_for("admin"))
+    treffer = [a for a in alle_auftraege() if a["id"].startswith(q) and a["status"] != "ENTWURF"]
+    if len(treffer) == 1:
+        return redirect(url_for("auftrag_ansicht", aid=treffer[0]["id"]))
+    flash("Kein Auftrag mit dieser Nummer gefunden (vielleicht schon gelöscht)." if not treffer
+          else f"{len(treffer)} Aufträge passen – bitte mehr Zeichen eingeben.")
+    return redirect(url_for("admin"))
 
 
 @app.route("/admin/wartend")
@@ -1854,6 +1872,7 @@ def einstellungen():
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
+                "support_whatsapp": re.sub(r"[^0-9]", "", request.form.get("support_whatsapp", ""))[:20],
             })
             flash("Gespeichert.")
         elif aktion == "stripe":
@@ -1932,7 +1951,7 @@ def einstellungen():
         v = version()
     except Exception:
         v = {}
-    return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats),
+    return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
                            version=v, update_liste=session.get("update_liste"))
 
 
@@ -2129,7 +2148,8 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <h1>{% if a.typ == 'anfrage' %}📩 Anfrage: {% endif %}{% if a.option %}{{ optionen[a.option] }} · {% endif %}{{ a.datei }}</h1>
 <p><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span>
 <span class="leise">&nbsp; {{ a.zeit[:16].replace('T',' ') }}</span></p>
-<table>{% if a.typ == 'anfrage' %}{% for feld, titel, _ in fahrzeug_felder %}<tr><th>{{ titel }}</th><td>{{ a.fahrzeug.get(feld) or '–' }}</td></tr>{% endfor %}
+<table><tr><th>Auftrags-Nr.</th><td><code>{{ a.id[:8] }}</code> <span class="leise">(steht in WhatsApp-Nachrichten des Kunden)</span></td></tr>
+{% if a.typ == 'anfrage' %}{% for feld, titel, _ in fahrzeug_felder %}<tr><th>{{ titel }}</th><td>{{ a.fahrzeug.get(feld) or '–' }}</td></tr>{% endfor %}
 <tr><th>Gewünscht</th><td><b>{{ optionen[a.option] }}</b></td></tr>
 {% if a.nachricht %}<tr><th>Nachricht</th><td style="white-space:pre-wrap">{{ a.nachricht }}</td></tr>{% endif %}{% endif %}
 <tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
@@ -2227,6 +2247,9 @@ Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Bro
 <input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form>{% endif %}</td></tr>
 {% endfor %}</table></div>{% else %}<p class="leise">Nichts offen.</p>{% endif %}</div>
 <div class="karte"><h2>Alle Aufträge</h2>
+<form method="get" action="{{ url_for('auftrag_suche') }}" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+<input type="text" name="q" placeholder="Auftrags-Nr. aus WhatsApp, z. B. 3f9a1c2e" style="flex:1;min-width:200px;margin:0" autocomplete="off">
+<button class="btn grau">Suchen</button></form>
 <div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th>{% if zahlung %}<th>Zahlung</th>{% endif %}</tr>
 {% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
@@ -2499,6 +2522,8 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">
 <label class="feld">Telegram-Chat-ID</label>
 <input type="text" name="telegram_chat_id" value="{{ cfg.telegram_chat_id or '' }}" placeholder="wird unten automatisch gefunden">
+<label class="feld">WhatsApp-Nummer für Kunden mit Problemen nach dem Download (mit Ländervorwahl, z. B. 4915568540674; leer = Knopf aus)</label>
+<input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
 <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;cursor:pointer">

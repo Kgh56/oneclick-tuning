@@ -151,6 +151,13 @@ Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wir
    Archivname, dann bekommt der nächste Kunde mit dem File es automatisch). Oder **ablehnen** mit Grund.
 5. Die Seite des Kunden meldet sich automatisch: „Dein File ist fertig!“ → Herunterladen.
 
+## Hilfe nach dem Download (WhatsApp)
+Bei freigegebenen/bezahlten Aufträgen zeigt die Kundenseite neben „Herunterladen“ den Knopf **„Problem?“** (und nach dem
+Download in der Meldung). Er öffnet WhatsApp mit vorausgefüllter Nachricht: Kurz-Nr. des Auftrags, Datei, Lösung,
+Steuergerät, Software – der Kunde schreibt nur noch das Problem dazu. Die volle Auftragsnummer (= Download-Zugang) wird
+nicht mitgeschickt. Im Admin-Bereich unter „Alle Aufträge“ findet die **Suche** den Auftrag über die Kurz-Nr.
+Nummer: Admin → Einstellungen („WhatsApp-Nummer für Kunden mit Problemen“, leer = Knopf aus).
+
 ## Bezahlen mit Stripe
 Ablauf: Kunde wählt Lösungen (Preise werden angezeigt, mehrere werden addiert) → Auftrag → **du gibst frei** →
 Kunde klickt „Jetzt bezahlen“, bestätigt den Hinweis zum Widerrufsrecht und bezahlt auf der Stripe-Bezahlseite →

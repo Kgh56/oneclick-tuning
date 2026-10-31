@@ -1091,6 +1091,25 @@ class ApiTests(Basis):
         A.speichere_config({"firmenname": "Muster <Tuning>"})
         self.assertIn("<title>Muster &lt;Tuning&gt;</title>", self.c.get("/").text)
 
+    def test_support_whatsapp_und_suche(self):
+        self.assertEqual(self.c.get("/api/info").json["support_whatsapp"], "4915568540674")   # Standard
+        A.speichere_config({"support_whatsapp": ""})
+        self.assertEqual(self.c.get("/api/info").json["support_whatsapp"], "")              # Knopf aus
+        self.assertIn("supportUrl", self.c.get("/").text)
+        # Admin findet den Auftrag ueber die Kurz-Nummer aus der WhatsApp
+        aid = self.pruefen(self.golf).json["id"]
+        self.c.post(f"/api/auftrag/{aid}/bestellen", json={"optionen": ["stage1"]})
+        a = A.app.test_client()
+        a.get("/login")
+        with a.session_transaction() as s:
+            csrf = s["csrf"]
+        a.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": csrf})
+        r = a.get(f"/admin/suche?q={aid[:8].upper()}")
+        self.assertTrue(r.headers["Location"].endswith(f"/auftrag/{aid}"))
+        self.assertIn(aid[:8], a.get(f"/auftrag/{aid}").text)
+        self.assertIn("Kein Auftrag", html.unescape(a.get("/admin/suche?q=ffffffff", follow_redirects=True).text))
+        self.assertEqual(A.app.test_client().get(f"/admin/suche?q={aid[:8]}").status_code, 302)   # ohne Login -> Login
+
     def test_info(self):
         j = self.c.get("/api/info").json
         self.assertEqual(j["firma"], "OneClick Tuning")
