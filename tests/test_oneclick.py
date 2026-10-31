@@ -810,6 +810,33 @@ class SortierenTests(WebTests):
         A.speichere_config({"stripe_key": ""})
         self.assertEqual(self.laden(aid).data, kombi_a1)
 
+    def test_automatisch_zuordnen_nur_was_sicher_ist(self):
+        a = self.admin()
+        audi, x, m = bytes(zufall(GROESSE, 81)), bytes(zufall(GROESSE, 82)), bytes(zufall(GROESSE, 83))
+        self.zip_hochladen(a, {
+            "audi ori.bin": audi, "audi stage1.bin": self.tuning(audi, 1), "audi st1 pops.bin": self.tuning(audi, 2),
+            "golf_stage2.bin": self.tuning(self.golf, 3),          # Original liegt im Archiv (Golf7)
+            "kopie.bin": self.stage1,                              # schon im Archiv -> aufraeumen
+            "x1.bin": x, "x2.bin": self.tuning(x, 4),              # wer ist Original? -> du
+            "m1.bin": m, "m2.bin": self.tuning(m, 5), "m3.bin": self.tuning(m, 6)})   # Loesung unbekannt -> du
+        seite = html.unescape(a.get("/admin/sortieren").text)
+        self.assertIn("automatisch möglich", seite)
+        self.assertIn("Original nicht sicher erkennbar", seite)
+        text = html.unescape(a.post("/admin/sortieren/automatisch", data={"csrf": a.csrf}, follow_redirects=True).text)
+        self.assertIn("Automatisch erledigt: 2 Gruppe(n), 2 Fahrzeug(e)", text)   # Audi + Golf (Kopie und Stage 2 sind eine Gruppe)
+        self.assertIn("2 Gruppe(n) brauchen dich", text)
+        self.assertIn("1× Original nicht sicher erkennbar", text)
+        self.assertIn("1× Lösung nicht aus dem Dateinamen erkennbar", text)
+        e = {x["name"]: x for x in oneclick.lade_index()["eintraege"]}
+        audi_name = next(n for n in e if n.lower().startswith("audi"))
+        self.assertEqual(set(e[audi_name]["optionen"]), {"stage1", "stage1+popsbangs"})
+        self.assertIn("stage2", e["Golf7"]["optionen"])
+        rest = sorted(d["name"] for d in self.stapel()["dateien"])
+        self.assertEqual(rest, ["m1.bin", "m2.bin", "m3.bin", "x1.bin", "x2.bin"])
+        # Zweiter Lauf aendert nichts mehr
+        text = html.unescape(a.post("/admin/sortieren/automatisch", data={"csrf": a.csrf}, follow_redirects=True).text)
+        self.assertIn("Automatisch erledigt: 0 Gruppe(n)", text)
+
     def test_automatisch_und_rest_zum_sortieren(self):
         a = self.admin()
         neu = bytes(zufall(GROESSE, 51))

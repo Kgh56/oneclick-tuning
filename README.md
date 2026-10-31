@@ -71,6 +71,12 @@ anhaken. Dateien, die der normale Import nicht zuordnen kann, landen ebenfalls d
   oder Ignorieren. Fahrzeugname eingeben, „Ins Archiv übernehmen“.
 - **Mehrere Autos in einer Gruppe** (gleiche Software): jedes Original als „Original“ markieren und benennen. Jedes
   Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist; pro Auto wird ein Archiv-Eintrag angelegt.
+- **„Automatisch zuordnen“** übernimmt alle Gruppen, bei denen nichts geraten werden muss: Original schon im Archiv,
+  „ori“ im Dateinamen oder eindeutig am Inhalt erkennbar (ab 3 Files) bzw. Tuning-Files zu einem Archiv-Original –
+  und die Lösung steht im Dateinamen (stage1/st1, stage2, pops, vmax, launch, start/stop, eigene Lösungen, auch
+  kombiniert wie „stage1_pops“). Dateien, die schon im Archiv sind, werden aufgeräumt. Der Rest bleibt mit Grund stehen
+  („Original nicht sicher erkennbar“ / „Lösung nicht aus dem Dateinamen erkennbar“). Namen ohne Buchstaben (z. B.
+  „1001.bin“) werden durch Steuergerät + Software ersetzt.
 - Fehler beim Übernehmen löschen nichts: Dateien bleiben unter „Sortieren“, bis sie übernommen oder verworfen werden.
   Dateien lassen sich in andere Gruppen verschieben und zum Prüfen herunterladen. Doppelte werden erkannt.
 

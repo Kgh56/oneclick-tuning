@@ -1035,7 +1035,7 @@ def ordner_vereinheitlichen(ziel: Path) -> dict:
     return {opt: ziel / f"{opt}.bin" for opt in vorhanden}
 
 
-def archiv_speichern(name: str, ori: bytes, mods: dict, ersetzen: bool = True) -> dict:
+def archiv_speichern(name: str, ori: bytes, mods: dict, ersetzen: bool = True, index: bool = True) -> dict:
     """Fahrzeug anlegen oder ergaenzen und dabei Doppelte erkennen (Aufrufer haelt index_sperre).
     Ist das Original schon im Archiv (auch unter anderem Namen), wird dort ergaenzt statt doppelt angelegt.
     -> {"name", "neu", "vorhanden_als", "gespeichert", "ersetzt", "gleich", "anderswo", "konflikt"}"""
@@ -1068,7 +1068,8 @@ def archiv_speichern(name: str, ori: bytes, mods: dict, ersetzen: bool = True) -
         (ziel / "ori.bin").write_bytes(ori)
     for opt in erg["gespeichert"] + erg["ersetzt"]:
         (ziel / f"{opt}.bin").write_bytes(mods[opt])
-    oneclick.baue_index()
+    if index:
+        oneclick.baue_index()
     return erg
 
 
@@ -1211,9 +1212,17 @@ def _gruppe_auswerten(stapel: dict, gid: int):
             or (d["sha"] in mods_bekannt and "{} bei „{}“".format(option_namen()[mods_bekannt[d['sha']][1]], mods_bekannt[d['sha']][0])) or ""
     # Original: 1. schon im Archiv als Original, 2. Dateiname, 3. "Mitte" der Gruppe (ab 3 Files)
     ori_name, rollen = oneclick.klassifiziere([d["name"] for d in dateien])
-    ori = next((d for d in dateien if d["sha"] in oris), None) or next((d for d in dateien if d["name"] == ori_name), None)
+    ori = next((d for d in dateien if d["sha"] in oris), None)
+    ori_grund = "archiv" if ori else None
+    if ori is None:
+        ori = next((d for d in dateien if d["name"] == ori_name), None)
+        ori_grund = "name" if ori else None
     if ori is None and len(dateien) >= 3:
-        ori = max(dateien, key=lambda d: sum(aehnlichkeit(abdruck[d["id"]], abdruck[x["id"]]) for x in dateien))
+        summen = sorted(((sum(aehnlichkeit(abdruck[d["id"]], abdruck[x["id"]]) for x in dateien if x is not d), n)
+                         for n, d in enumerate(dateien)), reverse=True)
+        ori = dateien[summen[0][1]]
+        # eindeutig nur, wenn das "mittlere" File klar aehnlicher zu allen anderen ist als das zweitbeste
+        ori_grund = "mitte" if summen[0][0] - summen[1][0] >= 0.03 * (len(dateien) - 1) else "mitte-unsicher"
     # Passt die Gruppe zu einem Original im Archiv?
     archiv = None
     if ori is None or ori["sha"] not in oris:
@@ -1237,10 +1246,15 @@ def _gruppe_auswerten(stapel: dict, gid: int):
         bezug = abdruck[ori["id"]] if ori else None
         d["abweichung"] = None if bezug is None or d is ori else round((1 - aehnlichkeit(abdruck[d["id"]], bezug)) * 100, 1)
         d["name_vorschlag"] = sicherer_name(Path(d["name"]).stem)
+        d["loesung_name"] = oneclick.loesung_aus_name(d["name"]) if not (ori and d is ori) else None
     gemeinsam = os.path.commonprefix([Path(d["name"]).stem for d in dateien]).strip(" _-.")
-    name = archiv[0] if archiv else oris.get(ori["sha"]) if ori and ori["sha"] in oris else \
-        (gemeinsam if len(gemeinsam) >= 4 else Path((ori or dateien[0])["name"]).stem)
+    ohne_namen = f"{dateien[0]['ecu'].split(',')[0]}_{dateien[0]['software'].split(',')[0]}".replace("?", "unbekannt")
+    vorschlag = gemeinsam if len(gemeinsam) >= 4 else Path((ori or dateien[0])["name"]).stem
+    if len(re.findall(r"[A-Za-z]", vorschlag)) < 3:   # "1001.bin" sagt nichts -> Steuergeraet + Software
+        vorschlag = ohne_namen
+    name = archiv[0] if archiv else oris.get(ori["sha"]) if ori and ori["sha"] in oris else vorschlag
     return {"id": gid, "dateien": dateien, "name": sicherer_name(name), "archiv": archiv[0] if archiv else None,
+            "ori_id": ori["id"] if ori else None, "ori_grund": ori_grund,
             "groesse": len(inhalt[dateien[0]["id"]]), "ecu": dateien[0]["ecu"], "software": dateien[0]["software"]}
 
 
@@ -1283,7 +1297,7 @@ def rolle_lesen(wert: str) -> str:
     return oneclick.kombi_schluessel(teile)
 
 
-def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: dict = None) -> list:
+def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: dict = None, index: bool = True) -> list:
     """Rollen {Datei-ID: Formularwert} pruefen und ins Archiv uebernehmen.
     Mehrere Originale = mehrere Fahrzeuge: jedes Tuning-File kommt zum Original, dem es am aehnlichsten ist.
     Ein File kann mehrere Loesungen enthalten (z. B. Stage 1 + Pops & Bangs)."""
@@ -1347,7 +1361,7 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
     meldungen = []
     for n, ori, mods in plan:
         with index_sperre:
-            meldungen += archiv_meldungen(archiv_speichern(n, ori, mods))
+            meldungen += archiv_meldungen(archiv_speichern(n, ori, mods, index=index))
     with eingang_sperre:   # erledigte Dateien (auch ignorierte) aus dem Stapel entfernen
         stapel = lade_stapel(sid)
         stapel["dateien"] = [d for d in stapel["dateien"] if d["id"] not in dateien]
@@ -1355,6 +1369,38 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
             (ordner / f"{f}.bin").unlink(missing_ok=True)
         stapel_sichern(stapel)
     return meldungen or ["Nichts übernommen – alle Dateien standen auf „Ignorieren“."]
+
+
+def auto_plan(g: dict):
+    """Kann die Gruppe ohne Raten zugeordnet werden? -> (rollen, name, namen_ori) oder Begruendung (str)."""
+    rollen, namen_ori = {}, {}
+    ori_sicher = g["ori_id"] and g["ori_grund"] in ("archiv", "name", "mitte")
+    for d in g["dateien"]:
+        if d["vorschlag"] == "ignorieren":
+            rollen[d["id"]] = "ignorieren"
+        elif d["id"] == g["ori_id"] and ori_sicher:
+            rollen[d["id"]] = oneclick.ORIGINAL
+            namen_ori[d["id"]] = g["name"]
+        elif d["loesung_name"]:
+            rollen[d["id"]] = d["loesung_name"].replace("+", ",")
+        elif d["id"] == g["ori_id"] or (not g["ori_id"] and len(g["dateien"]) <= 2 and not g["archiv"]):
+            return "Original nicht sicher erkennbar"
+        else:
+            return "Lösung nicht aus dem Dateinamen erkennbar"
+    if oneclick.ORIGINAL not in rollen.values() and any(r != "ignorieren" for r in rollen.values()) and not g["archiv"]:
+        return "Original nicht sicher erkennbar"
+    return rollen, g["name"], namen_ori
+
+
+def freier_archivname(name: str, ori: bytes = None) -> str:
+    """Name, unter dem nichts anderes liegt (sonst _2, _3 ...). Gleiches Original = gleicher Eintrag."""
+    basis, n = name, 2
+    while (oneclick.ARCHIV / name).exists():
+        vorhanden, _ = oneclick.klassifiziere([p.name for p in (oneclick.ARCHIV / name).iterdir() if p.is_file()])
+        if ori is not None and vorhanden and (oneclick.ARCHIV / name / vorhanden).read_bytes() == ori:
+            break
+        name, n = f"{basis}_{n}", n + 1
+    return name
 
 
 def stapel_sichern(stapel: dict):
@@ -1553,9 +1599,52 @@ def sortieren():
     stapel = []
     for s in alle_stapel():
         gruppen = [gruppe_auswerten(s, gid) for gid in sorted({d["gruppe"] for d in s["dateien"]})]
+        for g in gruppen:
+            plan = auto_plan(g)
+            g["auto"] = plan if isinstance(plan, str) else "kann automatisch übernommen werden"
         stapel.append({**s, "gruppen": gruppen})
     return render_template("sortieren.html", stapel=stapel, archiv_optionen=oneclick.optionen(),
                            archiv_namen=[e["name"] for e in oneclick.lade_index()["eintraege"]])
+
+
+@app.route("/admin/sortieren/automatisch", methods=["POST"])
+@admin_noetig
+def sortieren_automatisch():
+    """Alle Gruppen uebernehmen, die sich ohne Raten zuordnen lassen. Der Rest bleibt fuer den Admin."""
+    gruppen = fahrzeuge = 0
+    offen = {}
+    for s in alle_stapel():
+        for gid in sorted({d["gruppe"] for d in s["dateien"]}):
+            try:
+                stapel = lade_stapel(s["id"])
+            except Exception:
+                continue
+            if not any(d["gruppe"] == gid for d in stapel["dateien"]):
+                continue
+            g = gruppe_auswerten(stapel, gid)
+            plan = auto_plan(g)
+            if isinstance(plan, str):
+                offen[plan] = offen.get(plan, 0) + 1
+                continue
+            rollen, name, namen_ori = plan
+            ori_id = next((f for f, r in rollen.items() if r == oneclick.ORIGINAL), None)
+            ori = (EINGANG / s["id"] / f"{ori_id}.bin").read_bytes() if ori_id else None
+            if ori_id:
+                namen_ori[ori_id] = freier_archivname(sicherer_name(name), ori)
+            try:
+                meldungen = gruppe_uebernehmen(s["id"], gid, name, rollen, namen_ori, index=False)
+                gruppen += 1
+                fahrzeuge += sum(1 for m in meldungen if "angelegt" in m or "ergänzt" in m)
+            except Abgelehnt as e:
+                offen[f"Prüfung: {e}"[:90]] = offen.get(f"Prüfung: {e}"[:90], 0) + 1
+    with index_sperre:
+        oneclick.baue_index()
+    flash(f"Automatisch erledigt: {gruppen} Gruppe(n), {fahrzeuge} Fahrzeug(e) neu angelegt oder ergänzt "
+          "(Gruppen nur mit schon vorhandenen Files wurden aufgeräumt).")
+    if offen:
+        flash(f"{sum(offen.values())} Gruppe(n) brauchen dich: " +
+              ", ".join(f"{n}× {grund}" for grund, n in sorted(offen.items(), key=lambda x: -x[1])) + ".")
+    return redirect(url_for("sortieren"))
 
 
 @app.route("/admin/sortieren/<sid>/<int:gid>", methods=["POST"])
@@ -2227,7 +2316,13 @@ async function kennt(){
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
 meist ein Fahrzeug pro Gruppe. Wähle pro Datei, was sie ist, gib dem Fahrzeug einen Namen und übernimm es ins Archiv.
 „Abweichung“ zeigt, wie viel sich eine Datei vom vorgeschlagenen Original unterscheidet (Tuning-Files meist unter 20 %, fremde Files fast 100 %).</p>
-{% if not stapel %}<p>Gerade gibt es nichts zu sortieren. Neue Dateien kommen über Archiv → ZIP-Import.</p>{% endif %}</div>
+{% if not stapel %}<p>Gerade gibt es nichts zu sortieren. Neue Dateien kommen über Archiv → ZIP-Import.</p>
+{% else %}<form method="post" action="{{ url_for('sortieren_automatisch') }}" style="margin-top:14px"
+ onsubmit="var b=this.querySelector('button');b.textContent='Läuft … (bei vielen Dateien bis zu ein paar Minuten)';b.disabled=true">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn gruen">Automatisch zuordnen</button></form>
+<p class="hinweis">Übernimmt alle Gruppen, bei denen nichts geraten werden muss: Original schon im Archiv, „ori“ im Namen oder eindeutig
+am Inhalt erkennbar – und die Lösung steht im Dateinamen (z. B. stage1, pops, vmax, eigene Lösungen). Dateien, die schon im Archiv sind,
+werden aufgeräumt. Alles andere bleibt hier stehen, mit dem Grund dazu.</p>{% endif %}</div>
 {% for s in stapel %}
 <div class="karte" style="padding-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
 <h2 style="margin:0">{{ s.quelle }} <span class="leise" style="font-weight:400;font-size:14px">· {{ s.zeit[:16].replace('T', ' ') }} · {{ s.dateien|length }} Dateien in {{ s.gruppen|length }} Gruppen</span></h2>
@@ -2237,7 +2332,9 @@ meist ein Fahrzeug pro Gruppe. Wähle pro Datei, was sie ist, gib dem Fahrzeug e
 <div class="karte" id="g-{{ s.id }}-{{ g.id }}">
 <form method="post" action="{{ url_for('sortieren_gruppe', sid=s.id, gid=g.id) }}">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="uebernehmen">
-<h2>Gruppe {{ g.id }} <span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
+<h2>Gruppe {{ g.id }} {% if g.auto.startswith('kann') %}<span class="status s-FREIGEGEBEN" style="font-size:12px;vertical-align:3px">automatisch möglich</span>
+{% else %}<span class="status s-WARTET" style="font-size:12px;vertical-align:3px" title="Warum nicht automatisch">{{ g.auto }}</span>{% endif %}
+<span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
 {% if g.archiv %}<p class="meldung" style="margin-top:0">Passt zum Archiv-Eintrag <b>{{ g.archiv }}</b>. Ohne eigenes Original in der Gruppe
 werden die Tuning-Files dort ergänzt.</p>{% endif %}
 <label class="feld">Name, wenn kein Original in der Gruppe ist (dann werden die Tuning-Files bei diesem Archiv-Eintrag ergänzt)</label>

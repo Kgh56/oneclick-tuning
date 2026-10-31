@@ -308,6 +308,21 @@ def kombi_schluessel(teile) -> str:
     return "+".join(k for k in reihenfolge if k in teile)
 
 
+def loesung_aus_name(name: str):
+    """Loesung(en), die der Dateiname eindeutig nennt: 'Golf_stage1_pops.bin' -> 'stage1+popsbangs', sonst None.
+    Raet nicht: ohne Hinweis im Namen kommt None zurueck."""
+    stamm = Path(name).stem.lower()
+    alle = optionen()
+    teile = stamm.split("+")
+    if len(teile) > 1 and all(x in alle for x in teile):
+        return kombi_schluessel(teile)
+    if stamm in alle:
+        return stamm
+    treffer = {k for k in eigene_optionen() if k in schluessel(stamm)}
+    treffer |= {opt for opt, muster in MUSTER_OPTION.items() if muster.search(stamm)}
+    return kombi_schluessel(treffer) if treffer else None
+
+
 def reihen_index(key: str) -> float:
     """Sortierung fuer Angebote: Kombinationen direkt hinter ihrer ersten Loesung, Original ans Ende."""
     reihenfolge = [*optionen(), ORIGINAL]
