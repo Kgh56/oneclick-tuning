@@ -58,6 +58,17 @@ Erkannt werden Namen mit „ori/original“ bzw. „stage1/st1“, „stage2“,
 Liegen genau zwei Dateien im Ordner und eine ist das Original, gilt die andere als Stage 1.
 Original und Tuning-File müssen gleich groß sein (gleiche Leseart).
 
+## Lose Dateien sortieren (Archiv → Sortieren)
+ZIP mit losen Dateien ohne Ordner und ohne „ori“/„stage1“ im Namen? Beim ZIP-Import **„Alle Dateien selbst zuordnen“**
+anhaken. Dateien, die der normale Import nicht zuordnen kann, landen ebenfalls dort statt übersprungen zu werden.
+
+- Die Seite gruppiert automatisch nach Inhalt: gleiche Größe und überwiegend gleiche 4-KB-Blöcke = gleiches Fahrzeug
+  (ein Tuning-File unterscheidet sich vom Original nur in wenigen Blöcken, fremde Files fast komplett).
+- Vorschläge: Original (schon im Archiv, laut Dateiname oder bei 3+ Files die „Mitte“ der Gruppe), Lösung laut
+  Dateiname, „schon im Archiv“ → Ignorieren, „Passt zum Archiv-Eintrag …“ für Tuning-Files zu vorhandenen Originalen.
+- Pro Datei die Rolle wählen (Original / Stage 1 / … / Ignorieren), Fahrzeugname eingeben, „Ins Archiv übernehmen“.
+  Dateien lassen sich in andere Gruppen verschieben und zum Prüfen herunterladen. Doppelte werden erkannt.
+
 ## Kommandozeile (optional)
 ```
 python oneclick.py index                 # Archiv einlesen

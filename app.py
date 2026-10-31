@@ -45,6 +45,7 @@ import oneclick
 
 BASE = Path(__file__).resolve().parent
 AUFTRAEGE = BASE / "auftraege"
+EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
@@ -94,6 +95,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 sperre = threading.Lock()
 index_sperre = threading.Lock()
+eingang_sperre = threading.Lock()
 telegram_chats = {}   # zuletzt gesehene Chats (fuer die Einrichtung im Admin-Bereich)
 versuche = {}         # (art, ip) -> Zeitstempel, gegen Passwort-Raten und Upload-Flut
 
@@ -1096,8 +1098,240 @@ def archiv_meldungen(erg: dict, quelle: str = "") -> list:
     return m
 
 
-def importiere_zip(stream) -> list:
+# ---------------------------------------------------------------------------
+# Sortieren: lose Dateien selbst zu Fahrzeugen zuordnen
+# ---------------------------------------------------------------------------
+
+BLOCK = 4096
+AEHNLICH = 0.5   # Anteil gleicher (nicht leerer) 4-KB-Bloecke, ab dem zwei Files zum selben Fahrzeug gehoeren
+
+
+def block_abdruck(daten: bytes) -> list:
+    """Pro 4-KB-Block ein Hash; leere Bloecke (nur ein Bytewert, z. B. FF) zaehlen nicht."""
+    aus, daten = [], bytes(daten)
+    for i in range(0, len(daten), BLOCK):
+        x = daten[i:i + BLOCK]
+        aus.append(None if x.count(x[:1]) == len(x) else hash(x))
+    return aus
+
+
+def aehnlichkeit(a: list, b: list) -> float:
+    """0..1: wie viele inhaltliche Bloecke gleich sind (Original vs. Tuning meist > 0,8, fremde Files ~0)."""
+    if len(a) != len(b):
+        return 0.0
+    zaehl = sum(1 for x in a if x is not None)
+    if not zaehl:
+        return 1.0 if a == b else 0.0
+    return sum(1 for x, y in zip(a, b) if x is not None and x == y) / zaehl
+
+
+def gruppieren(abdruecke: list) -> list:
+    """Dateien mit gleicher Groesse und aehnlichem Inhalt in Gruppen -> Gruppennummer je Datei."""
+    eltern = list(range(len(abdruecke)))
+    def wurzel(i):
+        while eltern[i] != i:
+            eltern[i] = eltern[eltern[i]]
+            i = eltern[i]
+        return i
+    nach_groesse = {}
+    for i, a in enumerate(abdruecke):
+        nach_groesse.setdefault(len(a), []).append(i)
+    for liste in nach_groesse.values():
+        for n, i in enumerate(liste):
+            for j in liste[n + 1:]:
+                if wurzel(i) != wurzel(j) and aehnlichkeit(abdruecke[i], abdruecke[j]) >= AEHNLICH:
+                    eltern[wurzel(j)] = wurzel(i)
+    nummern, aus = {}, []
+    for i in range(len(abdruecke)):
+        aus.append(nummern.setdefault(wurzel(i), len(nummern) + 1))
+    return aus
+
+
+def stapel_datei(sid: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{32}", sid):
+        abort(404)
+    return EINGANG / sid / "stapel.json"
+
+
+def lade_stapel(sid: str) -> dict:
+    pfad = stapel_datei(sid)
+    if not pfad.exists():
+        abort(404)
+    return json.loads(pfad.read_text())
+
+
+def alle_stapel() -> list:
+    if not EINGANG.exists():
+        return []
+    liste = []
+    for p in EINGANG.glob("*/stapel.json"):
+        try:
+            liste.append(json.loads(p.read_text()))
+        except (OSError, ValueError):
+            continue
+    return sorted(liste, key=lambda s: s["zeit"])
+
+
+def eingang_anzahl() -> int:
+    return sum(len(s["dateien"]) for s in alle_stapel())
+
+
+_abdruck_cache, _auswertung_cache = {}, {}
+
+
+def archiv_abdruck(pfad: Path) -> list:
+    """Abdruck einer Archiv-Datei, zwischengespeichert bis sich die Datei aendert."""
+    schluessel = (str(pfad), pfad.stat().st_mtime_ns)
+    if schluessel not in _abdruck_cache:
+        if len(_abdruck_cache) > 3000:
+            _abdruck_cache.clear()
+        _abdruck_cache[schluessel] = block_abdruck(pfad.read_bytes())
+    return _abdruck_cache[schluessel]
+
+
+def gruppe_auswerten(stapel: dict, gid: int):
+    """Wie _gruppe_auswerten, aber zwischengespeichert bis sich Gruppe oder Archiv aendern."""
+    index = oneclick.lade_index()
+    schluessel = (stapel["id"], gid, tuple(sorted(d["id"] for d in stapel["dateien"] if d["gruppe"] == gid)), index.get("zeit"))
+    if schluessel not in _auswertung_cache:
+        if len(_auswertung_cache) > 2000:
+            _auswertung_cache.clear()
+        _auswertung_cache[schluessel] = _gruppe_auswerten(stapel, gid)
+    return json.loads(json.dumps(_auswertung_cache[schluessel]))   # Kopie
+
+
+def _gruppe_auswerten(stapel: dict, gid: int):
+    """Vorschlaege fuer eine Gruppe: Original, Rollen, Name, passender Archiv-Eintrag, Abweichungen."""
+    ordner = EINGANG / stapel["id"]
+    dateien = [d for d in stapel["dateien"] if d["gruppe"] == gid]
+    inhalt = {d["id"]: (ordner / f"{d['id']}.bin").read_bytes() for d in dateien}
+    abdruck = {k: block_abdruck(v) for k, v in inhalt.items()}
+    oris, mods_bekannt = archiv_kennt()
+    for d in dateien:
+        d["bekannt"] = oris.get(d["sha"]) and f"Original von „{oris[d['sha']]}“" \
+            or (d["sha"] in mods_bekannt and "{} bei „{}“".format(option_namen()[mods_bekannt[d['sha']][1]], mods_bekannt[d['sha']][0])) or ""
+    # Original: 1. schon im Archiv als Original, 2. Dateiname, 3. "Mitte" der Gruppe (ab 3 Files)
+    ori_name, rollen = oneclick.klassifiziere([d["name"] for d in dateien])
+    ori = next((d for d in dateien if d["sha"] in oris), None) or next((d for d in dateien if d["name"] == ori_name), None)
+    if ori is None and len(dateien) >= 3:
+        ori = max(dateien, key=lambda d: sum(aehnlichkeit(abdruck[d["id"]], abdruck[x["id"]]) for x in dateien))
+    # Passt die Gruppe zu einem Original im Archiv?
+    archiv = None
+    if ori is None or ori["sha"] not in oris:
+        probe = abdruck[(ori or dateien[0])["id"]]
+        info = oneclick.erkenne(inhalt[(ori or dateien[0])["id"]])
+        nummern = set(info["bosch_sw"] + info["vag_teilenr"])
+        for e in oneclick.lade_index()["eintraege"]:
+            andere = set(e.get("bosch_sw", []) + e.get("vag_teilenr", []))
+            if e["groesse"] == len(inhalt[dateien[0]["id"]]) and not (nummern and andere and not nummern & andere):
+                a = aehnlichkeit(probe, archiv_abdruck(oneclick.archiv_datei(e)))
+                if a >= AEHNLICH and (archiv is None or a > archiv[1]):
+                    archiv = (e["name"], a)
+    namen_rolle = {n: k for k, n in rollen.items()}
+    for d in dateien:
+        if d["bekannt"] and not (ori and d is ori):
+            d["vorschlag"] = "ignorieren"
+        elif ori and d is ori:
+            d["vorschlag"] = oneclick.ORIGINAL
+        else:
+            d["vorschlag"] = namen_rolle.get(d["name"], "")
+        bezug = abdruck[ori["id"]] if ori else None
+        d["abweichung"] = None if bezug is None or d is ori else round((1 - aehnlichkeit(abdruck[d["id"]], bezug)) * 100, 1)
+    gemeinsam = os.path.commonprefix([Path(d["name"]).stem for d in dateien]).strip(" _-.")
+    name = archiv[0] if archiv else oris.get(ori["sha"]) if ori and ori["sha"] in oris else \
+        (gemeinsam if len(gemeinsam) >= 4 else Path((ori or dateien[0])["name"]).stem)
+    return {"id": gid, "dateien": dateien, "name": sicherer_name(name), "archiv": archiv[0] if archiv else None,
+            "groesse": len(inhalt[dateien[0]["id"]]), "ecu": dateien[0]["ecu"], "software": dateien[0]["software"]}
+
+
+def eingang_anlegen(dateien: list, quelle: str) -> dict:
+    """Lose Dateien [(name, inhalt)] als Stapel zum Sortieren ablegen und automatisch gruppieren."""
+    dateien = [(n, d) for n, d in dateien if len(d) >= 1024][:3000]
+    abdruecke = [block_abdruck(d) for _, d in dateien]
+    gruppen = gruppieren(abdruecke)
+    oris, mods = archiv_kennt()
+    sid = uuid.uuid4().hex
+    ordner = EINGANG / sid
+    ordner.mkdir(parents=True)
+    eintraege = []
+    for (name, daten), gid in zip(dateien, gruppen):
+        fid = uuid.uuid4().hex[:12]
+        (ordner / f"{fid}.bin").write_bytes(daten)
+        info = oneclick.erkenne(daten)
+        eintraege.append({"id": fid, "name": PurePosixPath(name).name[:150], "groesse": len(daten), "sha": sha(daten),
+                          "gruppe": gid, "ecu": ", ".join(info["ecu"]) or "?",
+                          "software": ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"})
+    stapel = {"id": sid, "quelle": PurePosixPath(quelle or "ZIP").name[:120],
+              "zeit": datetime.now().isoformat(timespec="seconds"), "dateien": eintraege}
+    json_speichern(ordner / "stapel.json", stapel)
+    bekannt = sum(1 for e in eintraege if e["sha"] in oris or e["sha"] in mods)
+    return {"id": sid, "dateien": len(eintraege), "gruppen": len(set(gruppen)), "bekannt": bekannt}
+
+
+def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict) -> list:
+    """Rollen {Datei-ID: 'original'|Loesung|'ignorieren'} pruefen und als Fahrzeug ins Archiv uebernehmen."""
+    stapel = lade_stapel(sid)
+    dateien = {d["id"]: d for d in stapel["dateien"] if d["gruppe"] == gid}
+    if not dateien:
+        raise Abgelehnt("Diese Gruppe gibt es nicht mehr.")
+    ordner = EINGANG / sid
+    erlaubt = set(oneclick.optionen())
+    ori_ids = [f for f, r in rollen.items() if r == oneclick.ORIGINAL and f in dateien]
+    mods, namen = {}, option_namen()
+    for f, r in rollen.items():
+        if f not in dateien or r in ("", "ignorieren", oneclick.ORIGINAL):
+            continue
+        if r not in erlaubt:
+            raise Abgelehnt(f"Unbekannte Lösung bei {dateien[f]['name']}.")
+        if r in mods:
+            raise Abgelehnt(f"„{namen[r]}“ ist zweimal ausgewählt. Jede Lösung nur einmal pro Fahrzeug.")
+        mods[r] = (ordner / f"{f}.bin").read_bytes()
+    offen = [dateien[f]["name"] for f in dateien if not rollen.get(f)]
+    if offen:
+        raise Abgelehnt(f"Bitte für jede Datei eine Rolle wählen (oder „Ignorieren“): {', '.join(offen[:5])}")
+    if len(ori_ids) > 1:
+        raise Abgelehnt("Bitte nur eine Datei als Original markieren.")
+    name = sicherer_name(name or "")
+    if name == "unbenannt":
+        raise Abgelehnt("Bitte einen Namen für das Fahrzeug eingeben.")
+    if ori_ids:
+        ori = (ordner / f"{ori_ids[0]}.bin").read_bytes()
+    else:   # Original liegt schon im Archiv (nur Tuning-Files in der Gruppe)
+        e = next((e for e in oneclick.lade_index()["eintraege"] if e["name"] == name), None)
+        if e is None:
+            raise Abgelehnt("Kein Original markiert. Entweder eine Datei als Original wählen oder als Name "
+                            "einen vorhandenen Archiv-Eintrag angeben, zu dem diese Tuning-Files gehören.")
+        ori = oneclick.archiv_datei(e).read_bytes()
+    for r, d in mods.items():
+        if len(d) != len(ori):
+            raise Abgelehnt(f"{namen[r]}: andere Dateigröße als das Original.")
+        if d == ori:
+            raise Abgelehnt(f"{namen[r]}: ist identisch mit dem Original.")
+    with index_sperre:
+        erg = archiv_speichern(name, ori, mods)
+    with eingang_sperre:   # erledigte Dateien (auch ignorierte) aus dem Stapel entfernen
+        stapel = lade_stapel(sid)
+        stapel["dateien"] = [d for d in stapel["dateien"] if d["id"] not in dateien]
+        for f in dateien:
+            (ordner / f"{f}.bin").unlink(missing_ok=True)
+        stapel_sichern(stapel)
+    return archiv_meldungen(erg)
+
+
+def stapel_sichern(stapel: dict):
+    """Speichern; ein leerer Stapel wird komplett geloescht."""
+    ordner = EINGANG / stapel["id"]
+    if stapel["dateien"]:
+        json_speichern(ordner / "stapel.json", stapel)
+    else:
+        shutil.rmtree(ordner, ignore_errors=True)
+
+
+def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -> list:
+    """ZIP ins Archiv. Was sich nicht automatisch zuordnen laesst (oder alles, wenn alles_sortieren),
+    landet unter Archiv -> Sortieren, wo der Admin Original / Stage 1 / ... selbst festlegt."""
     meldungen, ok, ergaenzt, doppelt = [], 0, 0, 0
+    zum_sortieren = []   # (Dateiname, Inhalt)
     with zipfile.ZipFile(stream) as z:
         gruppen = {}
         for info in z.infolist():
@@ -1113,8 +1347,8 @@ def importiere_zip(stream) -> list:
         for schluessel, infos in sorted(gruppen.items()):
             namen = {PurePosixPath(i.filename).name: i for i in infos}
             ori_name, optionen = oneclick.klassifiziere(list(namen))
-            if not ori_name:
-                meldungen.append(f"Übersprungen: {schluessel} (kein Original erkannt: {', '.join(namen)})")
+            if alles_sortieren or not ori_name:
+                zum_sortieren += [(PurePosixPath(i.filename).name, z.read(i)) for i in infos]
                 continue
             ori = z.read(namen[ori_name])
             passend = {opt: z.read(namen[n]) for opt, n in optionen.items()}
@@ -1141,6 +1375,13 @@ def importiere_zip(stream) -> list:
                 meldungen += [x for x in archiv_meldungen(erg, schluessel) if "nichts geändert" not in x]
     with index_sperre:
         oneclick.baue_index()
+    if zum_sortieren:
+        erg = eingang_anlegen(zum_sortieren, quelle)
+        meldungen.insert(0, f"{erg['dateien']} Datei(en) in {erg['gruppen']} Gruppe(n) warten unter „Sortieren“ darauf, "
+                            "dass du Original, Stage 1 usw. zuordnest."
+                            + (f" {erg['bekannt']} davon sind schon im Archiv." if erg["bekannt"] else ""))
+        if alles_sortieren:
+            return meldungen
     zeile = f"{ok} Fahrzeug(e) neu ins Archiv übernommen."
     if ergaenzt:
         zeile += f" {ergaenzt} vorhandene(s) ergänzt."
@@ -1257,14 +1498,77 @@ def archiv_import():
         flash("Bitte eine ZIP-Datei auswählen.")
         return redirect(url_for("admin_archiv"))
     try:
-        meldungen = importiere_zip(datei.stream)
+        meldungen = importiere_zip(datei.stream, request.form.get("sortieren") == "1", datei.filename)
     except zipfile.BadZipFile:
         meldungen = ["Die Datei ist keine gültige ZIP-Datei."]
     for m in meldungen[:30]:
         flash(m)
     if len(meldungen) > 30:
         flash(f"… und {len(meldungen) - 30} weitere Meldungen.")
-    return redirect(url_for("admin_archiv"))
+    return redirect(url_for("sortieren") if eingang_anzahl() else url_for("admin_archiv"))
+
+
+@app.route("/admin/sortieren")
+@admin_noetig
+def sortieren():
+    stapel = []
+    for s in alle_stapel():
+        gruppen = [gruppe_auswerten(s, gid) for gid in sorted({d["gruppe"] for d in s["dateien"]})]
+        stapel.append({**s, "gruppen": gruppen})
+    return render_template("sortieren.html", stapel=stapel, archiv_optionen=oneclick.optionen(),
+                           archiv_namen=[e["name"] for e in oneclick.lade_index()["eintraege"]])
+
+
+@app.route("/admin/sortieren/<sid>/<int:gid>", methods=["POST"])
+@admin_noetig
+def sortieren_gruppe(sid, gid):
+    aktion = request.form.get("aktion", "")
+    anker = url_for("sortieren")
+    if aktion == "uebernehmen":
+        rollen = {k[6:]: v for k, v in request.form.items() if k.startswith("rolle_")}
+        try:
+            for m in gruppe_uebernehmen(sid, gid, request.form.get("name", ""), rollen):
+                flash(m)
+        except Abgelehnt as e:
+            flash(f"Gruppe {gid}: {e}")
+            anker += f"#g-{sid}-{gid}"
+    elif aktion in ("verschieben", "verwerfen"):
+        with eingang_sperre:
+            stapel = lade_stapel(sid)
+            if aktion == "verwerfen":
+                weg = {d["id"] for d in stapel["dateien"] if d["gruppe"] == gid}
+                stapel["dateien"] = [d for d in stapel["dateien"] if d["id"] not in weg]
+                for f in weg:
+                    (EINGANG / sid / f"{f}.bin").unlink(missing_ok=True)
+                flash(f"Gruppe {gid} verworfen ({len(weg)} Datei(en) gelöscht).")
+            else:
+                neue = max((d["gruppe"] for d in stapel["dateien"]), default=0) + 1
+                for d in stapel["dateien"]:
+                    ziel = request.form.get(f"ziel_{d['id']}", "")
+                    if d["gruppe"] == gid and ziel and ziel != str(gid):
+                        d["gruppe"] = neue if ziel == "neu" else int(ziel) if ziel.isdigit() else d["gruppe"]
+                anker += f"#g-{sid}-{gid}"
+            stapel_sichern(stapel)
+    return redirect(anker)
+
+
+@app.route("/admin/sortieren/<sid>/datei/<fid>")
+@admin_noetig
+def sortieren_datei(sid, fid):
+    stapel = lade_stapel(sid)
+    d = next((d for d in stapel["dateien"] if d["id"] == fid), None)
+    if d is None:
+        abort(404)
+    return send_file(EINGANG / sid / f"{fid}.bin", as_attachment=True, download_name=d["name"])
+
+
+@app.route("/admin/sortieren/<sid>/verwerfen", methods=["POST"])
+@admin_noetig
+def stapel_verwerfen(sid):
+    lade_stapel(sid)
+    shutil.rmtree(EINGANG / sid, ignore_errors=True)
+    flash("Stapel verworfen, alle Dateien darin gelöscht.")
+    return redirect(url_for("sortieren"))
 
 
 @app.route("/admin/archiv/<name>/loeschen", methods=["POST"])
@@ -1589,6 +1893,7 @@ table:not(.liste-tab) th{white-space:normal;padding-left:0}
 <nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}">Aufträge</a>
 <a href="{{ url_for('admin_archiv') }}">Archiv</a>
+{% if zu_sortieren %}<a href="{{ url_for('sortieren') }}">Sortieren ({{ zu_sortieren }})</a>{% endif %}
 <a href="{{ url_for('einstellungen') }}">Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
 <main>
@@ -1761,6 +2066,9 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 {% endblock %}""",
 
 "archiv.html": """{% extends "basis.html" %}{% block inhalt %}
+{% if zu_sortieren %}<div class="karte" style="border-color:rgba(255,214,10,.4)"><h2>{{ zu_sortieren }} Datei(en) warten aufs Sortieren</h2>
+<p class="leise" style="margin-top:-6px">Lege fest, was Original, Stage 1 usw. ist – dann kommen sie ins Archiv.</p>
+<a class="btn" href="{{ url_for('sortieren') }}">Jetzt sortieren</a></div>{% endif %}
 <div class="karte"><h1>Neues Fahrzeug hinzufügen</h1>
 <p class="leise">Je mehr Original/Tuning-Paare im Archiv liegen, desto mehr Kunden bekommen sofort einen Treffer.</p>
 <form method="post" action="{{ url_for('archiv_neu') }}" enctype="multipart/form-data" id="nf">
@@ -1785,6 +2093,10 @@ Nur ein Original ohne Tuning-File geht auch: Dann bekommen Kunden mit einem frem
 <div id="dropText"><b>ZIP-Datei mit euren Files hierher ziehen</b><br>oder klicken zum Auswählen</div></label>
 <button class="btn" id="los">ZIP importieren</button>
 <a class="btn grau" href="{{ url_for('archiv_backup') }}">Archiv als ZIP herunterladen (Backup)</a>
+<label style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer">
+<input type="checkbox" name="sortieren" value="1" style="margin-top:3px">
+<span><b>Alle Dateien selbst zuordnen</b><br><span class="leise" style="font-size:13px">Für ZIPs mit losen Dateien ohne Ordner und ohne
+„ori“/„stage1“ im Namen: Die Seite sortiert ähnliche Files in Gruppen, du legst unter „Sortieren“ fest, was Original, Stage 1 usw. ist.</span></span></label>
 </form>
 <div class="hinweis"><b>So soll die ZIP aussehen:</b> pro Fahrzeug ein Ordner mit Original und Tuning-File, z. B.
 <code>Golf7_2.0TDI/Golf7_ORI.bin</code> + <code>Golf7_2.0TDI/Golf7_Stage1.bin</code>.
@@ -1867,6 +2179,58 @@ async function kennt(){
     if(m) z.push(`⚠️ ${esc(titel(x))}: genau dieses File liegt schon bei <b>${esc(m.name)}</b> (${esc(m.option)}).`);}
   box.innerHTML=z.join('<br>'); box.style.display=z.length?'block':'none';
 }
+</script>
+{% endblock %}""",
+
+"sortieren.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>Sortieren</h1>
+<p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
+meist ein Fahrzeug pro Gruppe. Wähle pro Datei, was sie ist, gib dem Fahrzeug einen Namen und übernimm es ins Archiv.
+„Abweichung“ zeigt, wie viel sich eine Datei vom vorgeschlagenen Original unterscheidet (Tuning-Files meist unter 20 %, fremde Files fast 100 %).</p>
+{% if not stapel %}<p>Gerade gibt es nichts zu sortieren. Neue Dateien kommen über Archiv → ZIP-Import.</p>{% endif %}</div>
+{% for s in stapel %}
+<div class="karte" style="padding-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+<h2 style="margin:0">{{ s.quelle }} <span class="leise" style="font-weight:400;font-size:14px">· {{ s.zeit[:16].replace('T', ' ') }} · {{ s.dateien|length }} Dateien in {{ s.gruppen|length }} Gruppen</span></h2>
+<form method="post" action="{{ url_for('stapel_verwerfen', sid=s.id) }}" class="inline" onsubmit="return confirm('Alle Dateien dieses Stapels löschen?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein">Ganzen Stapel verwerfen</button></form></div></div>
+{% for g in s.gruppen %}
+<div class="karte" id="g-{{ s.id }}-{{ g.id }}">
+<form method="post" action="{{ url_for('sortieren_gruppe', sid=s.id, gid=g.id) }}">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="uebernehmen">
+<h2>Gruppe {{ g.id }} <span class="leise" style="font-weight:400;font-size:14px">· {{ g.dateien|length }} Datei(en) · {{ (g.groesse / 1024)|round|int }} KB · ECU {{ g.ecu }} · Software {{ g.software }}</span></h2>
+{% if g.archiv %}<p class="meldung" style="margin-top:0">Passt zum Archiv-Eintrag <b>{{ g.archiv }}</b>. Ohne eigenes Original in der Gruppe
+werden die Tuning-Files dort ergänzt.</p>{% endif %}
+<label class="feld">Name des Fahrzeugs (vorhandener Name = dort ergänzen)</label>
+<input type="text" name="name" value="{{ g.name }}" list="archivnamen" autocomplete="off">
+<div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
+{% for d in g.dateien %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
+{% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}</td>
+<td class="leise">{{ d.ecu }}<br>{{ d.software }}</td>
+<td>{% if d.abweichung is none %}{% if d.vorschlag == original %}<span class="status s-FREIGEGEBEN">Original?</span>{% else %}–{% endif %}{% else %}{{ d.abweichung|string|replace('.', ',') }} %{% endif %}</td>
+<td><select name="rolle_{{ d.id }}" class="rolle">
+<option value="">– bitte wählen –</option>
+<option value="{{ original }}" {{ 'selected' if d.vorschlag == original }}>Original</option>
+{% for key, titel in archiv_optionen.items() %}<option value="{{ key }}" {{ 'selected' if d.vorschlag == key }}>{{ titel }}</option>{% endfor %}
+<option value="ignorieren" {{ 'selected' if d.vorschlag == 'ignorieren' }}>Ignorieren (nicht übernehmen)</option></select></td>
+<td><select name="ziel_{{ d.id }}" class="ziel" title="In eine andere Gruppe verschieben">
+{% for g2 in s.gruppen %}<option value="{{ g2.id }}" {{ 'selected' if g2.id == g.id }}>{{ g2.id }}</option>{% endfor %}<option value="neu">neue Gruppe</option></select></td></tr>
+{% endfor %}</table></div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+<button class="btn">Ins Archiv übernehmen</button>
+<button class="btn grau" name="aktion" value="verwerfen" onclick="return confirm('Diese Gruppe löschen? Die Dateien werden nicht übernommen.')">Gruppe verwerfen</button></div>
+</form></div>
+{% endfor %}{% endfor %}
+<datalist id="archivnamen">{% for n in archiv_namen %}<option value="{{ n }}">{% endfor %}</datalist>
+<style>select{font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--rand);border-radius:10px;padding:8px 10px;max-width:100%}
+select option{background:#1c1c1e}td select.rolle{min-width:170px}</style>
+<script>
+// Gruppe aendern = sofort verschieben
+document.querySelectorAll('select.ziel').forEach(function(s){s.addEventListener('change',function(){
+  var f=s.form; f.querySelector('input[name=aktion]').value='verschieben'; f.submit();});});
+// Rolle "Original" nur einmal pro Gruppe: andere Original-Auswahl zuruecksetzen
+document.querySelectorAll('select.rolle').forEach(function(s){s.addEventListener('change',function(){
+  if(s.value!=='{{ original }}') return;
+  s.form.querySelectorAll('select.rolle').forEach(function(o){if(o!==s&&o.value==='{{ original }}')o.value='';});});});
 </script>
 {% endblock %}""",
 
@@ -1964,7 +2328,8 @@ app.jinja_loader = DictLoader(TEMPLATES)
 @app.context_processor
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
-            "firma": lade_config().get("firmenname") or "OneClick Tuning"}
+            "firma": lade_config().get("firmenname") or "OneClick Tuning",
+            "zu_sortieren": eingang_anzahl() if session.get("admin") else 0}
 
 
 # ---------------------------------------------------------------------------

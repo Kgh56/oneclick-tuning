@@ -9,3 +9,4 @@ benutzer.json
 __pycache__/
 *.pyc
 optionen.json
+eingang/

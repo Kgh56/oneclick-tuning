@@ -41,6 +41,7 @@ class Basis(unittest.TestCase):
         oneclick.ARCHIV, oneclick.INDEX_DATEI = d / "archiv", d / "index.json"
         oneclick.OPTIONEN_DATEI = d / "optionen.json"
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
+        A.EINGANG = d / "eingang"
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
         self.telegram = []
@@ -692,6 +693,107 @@ class WebTests(Basis):
         self.assertFalse((A.AUFTRAEGE / entwurf).exists())
         self.assertFalse((A.AUFTRAEGE / erledigt).exists())
         self.assertTrue((A.AUFTRAEGE / wartet).exists())   # wartende nie loeschen
+
+
+class SortierenTests(WebTests):
+    """Lose Dateien aus einer ZIP selbst zuordnen (Archiv -> Sortieren)."""
+
+    def tuning(self, ori, seed, stellen=30):
+        mod = bytearray(ori)
+        rnd = random.Random(seed)
+        for _ in range(stellen):
+            off = rnd.randrange(0x8000, len(ori) - 64)
+            mod[off:off + 16] = bytes(rnd.randrange(256) for _ in range(16))
+        return bytes(mod)
+
+    def zip_hochladen(self, a, dateien, sortieren="1"):
+        puffer = io.BytesIO()
+        with zipfile.ZipFile(puffer, "w") as z:
+            for name, daten in dateien.items():
+                z.writestr(name, bytes(daten))
+        puffer.seek(0)
+        return a.post("/admin/archiv/import", data={"csrf": a.csrf, "zip": (puffer, "kunden.zip"), "sortieren": sortieren},
+                      content_type="multipart/form-data")
+
+    def stapel(self):
+        return A.alle_stapel()[0]
+
+    def gruppe_von(self, name):
+        return next(d["gruppe"] for d in self.stapel()["dateien"] if d["name"] == name)
+
+    def test_lose_dateien_gruppieren_und_uebernehmen(self):
+        a = self.admin()
+        audi = bytes(zufall(GROESSE, 41))
+        mazda = bytes(zufall(GROESSE, 42))
+        dateien = {"123.bin": audi, "456.bin": self.tuning(audi, 1), "789.bin": self.tuning(audi, 2),
+                   "mz_a.bin": mazda, "mz_b.bin": self.tuning(mazda, 3),
+                   "kopie.bin": self.stage1,                              # liegt schon im Archiv (Golf7)
+                   "bmw_neu.bin": self.tuning(self.bmw, 4)}              # Tuning zu einem Archiv-Original
+        r = self.zip_hochladen(a, dateien)
+        self.assertTrue(r.headers["Location"].endswith("/admin/sortieren"))
+        g = {n: self.gruppe_von(n) for n in dateien}
+        self.assertEqual(g["123.bin"], g["456.bin"]); self.assertEqual(g["123.bin"], g["789.bin"])
+        self.assertEqual(g["mz_a.bin"], g["mz_b.bin"])
+        self.assertEqual(len({g["123.bin"], g["mz_a.bin"], g["kopie.bin"], g["bmw_neu.bin"]}), 4)
+        seite = html.unescape(a.get("/admin/sortieren").text)
+        self.assertIn("Sortieren (7)", seite)                                # Menue zeigt die Anzahl
+        self.assertIn("schon im Archiv: Stage 1 bei „Golf7“", seite)
+        self.assertIn("Passt zum Archiv-Eintrag <b>BMW</b>", seite)
+        # Vorschlag: bei 3 Files ist die "Mitte" das Original
+        s = self.stapel()
+        ga = A.gruppe_auswerten(s, g["123.bin"])
+        self.assertEqual([d["name"] for d in ga["dateien"] if d["vorschlag"] == "original"], ["123.bin"])
+        ids = {d["name"]: d["id"] for d in s["dateien"]}
+        def senden(gruppe, name, rollen):
+            return html.unescape(a.post(f"/admin/sortieren/{s['id']}/{gruppe}", data={
+                "csrf": a.csrf, "aktion": "uebernehmen", "name": name,
+                **{f"rolle_{ids[n]}": r for n, r in rollen.items()}}, follow_redirects=True).text)
+        # Fehler: Rolle fehlt / Loesung doppelt
+        self.assertIn("Bitte für jede Datei eine Rolle", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1"}))
+        self.assertIn("zweimal ausgewählt", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1", "789.bin": "stage1"}))
+        # Richtig zugeordnet -> im Archiv, Kunde bekommt Treffer
+        self.assertIn("„Audi-A4“ angelegt mit Stage 1, Pops & Bangs", senden(g["123.bin"], "Audi A4", {"123.bin": "original", "456.bin": "stage1", "789.bin": "popsbangs"}))
+        _, l = oneclick.finde_loesungen(audi)
+        self.assertLessEqual({"stage1", "popsbangs"}, set(l))
+        # Nur Tuning-File, Original liegt im Archiv: Name des Archiv-Eintrags reicht
+        self.assertIn("„BMW“ ergänzt: Vmax", senden(g["bmw_neu.bin"], "BMW", {"bmw_neu.bin": "vmax"}))
+        # Ohne Original und ohne passenden Archiv-Namen geht es nicht
+        self.assertIn("Kein Original markiert", senden(g["mz_a.bin"], "Mazda", {"mz_a.bin": "stage1", "mz_b.bin": "ignorieren"}))
+        # Verschieben in neue Gruppe, dann verwerfen
+        a.post(f"/admin/sortieren/{s['id']}/{g['mz_a.bin']}", data={"csrf": a.csrf, "aktion": "verschieben",
+               f"ziel_{ids['mz_b.bin']}": "neu", f"ziel_{ids['mz_a.bin']}": str(g["mz_a.bin"])})
+        self.assertNotEqual(self.gruppe_von("mz_a.bin"), self.gruppe_von("mz_b.bin"))
+        for gid in {d["gruppe"] for d in self.stapel()["dateien"]}:
+            a.post(f"/admin/sortieren/{s['id']}/{gid}", data={"csrf": a.csrf, "aktion": "verwerfen"})
+        self.assertEqual(A.alle_stapel(), [])                               # leerer Stapel wird geloescht
+        self.assertNotIn("Sortieren (", a.get("/admin/sortieren").text)
+
+    def test_automatisch_und_rest_zum_sortieren(self):
+        a = self.admin()
+        neu = bytes(zufall(GROESSE, 51))
+        self.zip_hochladen(a, {"Polo/polo_ori.bin": neu, "Polo/polo_stage1.bin": self.tuning(neu, 5),
+                               "lose_datei.bin": bytes(zufall(GROESSE, 52))}, sortieren="")
+        self.assertTrue((oneclick.ARCHIV / "Polo" / "stage1.bin").exists())   # automatisch wie bisher
+        self.assertEqual([d["name"] for d in self.stapel()["dateien"]], ["lose_datei.bin"])   # Rest wartet
+
+    def test_nur_admin_und_kaputte_nummern(self):
+        k = self.client()
+        self.assertEqual(k.get("/admin/sortieren").status_code, 302)
+        a = self.admin()
+        self.assertEqual(a.get("/admin/sortieren/../datei/x").status_code, 404)
+        self.assertEqual(a.get("/admin/sortieren/" + "0" * 32 + "/datei/x").status_code, 404)
+        self.assertEqual(a.post("/admin/sortieren/" + "0" * 32 + "/1", data={"csrf": a.csrf, "aktion": "verwerfen"}).status_code, 404)
+
+    def test_aehnlichkeit(self):
+        audi = bytes(zufall(GROESSE, 61))
+        a, b, c = (A.block_abdruck(x) for x in (audi, self.tuning(audi, 9), zufall(GROESSE, 62)))
+        self.assertGreater(A.aehnlichkeit(a, b), 0.8)
+        self.assertLess(A.aehnlichkeit(a, c), 0.05)
+        self.assertEqual(A.gruppieren([a, b, c]), [1, 1, 2])
+
+
+for _name in [n for n in vars(WebTests) if n.startswith("test_") and n not in vars(SortierenTests)]:
+    setattr(SortierenTests, _name, None)
 
 
 class ZahlungTests(WebTests):
