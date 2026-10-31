@@ -175,6 +175,13 @@ Einrichten (Admin → Einstellungen → „Bezahlen mit Stripe“):
 Ohne Stripe-Schlüssel ist Bezahlen aus und alles läuft wie vorher. Die Schlüssel werden nie angezeigt.
 Im Testmodus (`sk_test_…`) mit der Testkarte 4242 4242 4242 4242, beliebiges Datum in der Zukunft, beliebige Prüfziffer.
 
+## Rechtstexte
+Impressum, Datenschutz, AGB, Widerrufsbelehrung (mit Muster-Formular) und Hinweise zu Einsatz und Haftung stehen unter
+`/impressum`, `/datenschutz`, `/agb`, `/widerruf`, `/haftung` und sind unten auf jeder Seite verlinkt. Standardtexte
+liegen in `web/rechtstexte/` (Datenschutz zeigt die eingestellte Aufbewahrungsdauer automatisch an). Unter Einstellungen
+kann jeder Text durch einen eigenen ersetzt werden; Feld leer = Standardtext. Vor dem Bezahlen bestätigt der Kunde AGB
+und den vorzeitigen Beginn der Ausführung (Widerrufsrecht); Zeitpunkt und Wortlaut werden beim Auftrag gespeichert.
+
 ## Admin-Bereich
 | Seite | Was |
 |---|---|

@@ -1,0 +1,43 @@
+Allgemeine Geschäftsbedingungen von GH-MAPPING für das Portal OneClick Tuning
+Stand: Oktober 2026
+
+## § 1 Geltungsbereich
+Diese AGB gelten für alle Leistungen von Luisa Neuer, GH-MAPPING, Hachenburgerstraße 3, 56269 Dierdorf (nachfolgend „GH-MAPPING“) im Bereich Kennfeldoptimierung („Fileservice“), die über das Portal OneClick Tuning (oneclicksoulution.gh-mapping.de, nachfolgend „Portal“) beauftragt werden. Abweichende Bedingungen des Kunden gelten nur bei ausdrücklicher schriftlicher Zustimmung.
+
+## § 2 Leistung
+(1) GH-MAPPING stellt bearbeitete Steuergerätedateien („Files“) bereit. Der Kunde lädt dazu im Portal die Originaldatei seines Steuergeräts hoch. Liegt für diese Datei bereits eine passende, von GH-MAPPING in WinOLS erstellte Bearbeitung vor, zeigt das Portal die verfügbaren Leistungen an; andernfalls kann der Kunde eine Anfrage stellen, die GH-MAPPING individuell bearbeitet.
+(2) Angegebene Leistungswerte sind Erfahrungswerte und keine zugesicherten Eigenschaften.
+
+## § 3 Vertragsschluss
+(1) Die Anzeige der für eine Datei verfügbaren Leistungen im Portal ist kein bindendes Angebot. Mit dem Absenden eines Auftrags oder einer Anfrage gibt der Kunde ein Angebot ab.
+(2) Der Vertrag kommt zustande, wenn GH-MAPPING den Auftrag bzw. die Anfrage im Portal freigibt. Der Kunde wird darüber im Portal informiert. GH-MAPPING kann Aufträge und Anfragen ohne Angabe von Gründen ablehnen; dann entstehen dem Kunden keine Kosten.
+(3) Der Vertragstext wird nicht gesondert gespeichert. Auftragsdaten sind im Portal unter „Meine Aufträge“ abrufbar, solange der Auftrag gespeichert ist.
+
+## § 4 Mitwirkung des Kunden
+Der Kunde stellt eine vollständige, unveränderte Originaldatei sowie korrekte Fahrzeug- und Steuergerätedaten bereit und sichert die Originaldatei vor dem Aufspielen. Er ist für das fachgerechte Auslesen und Aufspielen (OBD, Bench, Boot), die Korrektur der Checksumme durch sein Flash-Tool sowie den technischen Zustand des Fahrzeugs verantwortlich.
+
+## § 5 Preise und Zahlung
+(1) Es gelten die bei Auftragserteilung im Portal angezeigten Preise; bei Anfragen der Preis, den GH-MAPPING mit der Freigabe nennt. Bei mehreren Leistungen in einem File werden die Preise addiert.
+(2) Die Bezahlung erfolgt nach der Freigabe online über den Zahlungsdienstleister Stripe. Erst nach erfolgreicher Zahlung kann das File heruntergeladen werden. Die Rechnung erhält der Kunde per E-Mail.
+(3) Als Kleinunternehmer im Sinne des § 19 UStG wird keine Umsatzsteuer berechnet und nicht ausgewiesen.
+
+## § 6 Lieferung
+Das File wird nach erfolgreicher Zahlung im Portal zum Download bereitgestellt. Es bleibt dort abrufbar, bis der Auftrag nach Ablauf der Aufbewahrungsfrist gelöscht wird. Der Kunde sollte das File nach dem Download sichern.
+
+## § 7 Digitale Inhalte und Widerruf
+Bearbeitete Dateien sind digitale Inhalte, die nicht auf einem körperlichen Datenträger geliefert werden. Verbrauchern steht ein Widerrufsrecht nach Maßgabe der Widerrufsbelehrung zu. Das Widerrufsrecht erlischt, wenn der Verbraucher ausdrücklich zugestimmt hat, dass GH-MAPPING vor Ablauf der Widerrufsfrist mit der Ausführung beginnt, und seine Kenntnis vom Verlust des Widerrufsrechts bestätigt hat (§ 356 Abs. 5 BGB). Diese Zustimmung und Bestätigung gibt der Verbraucher im Portal vor der Bezahlung ab. Die Widerrufsbelehrung mit Muster-Widerrufsformular ist im Portal unter „Widerruf“ abrufbar.
+
+## § 8 Nutzung im Straßenverkehr
+Kennfeldoptimierungen können Emissions- und Zulassungsvorschriften berühren. Die Files haben keine Zulassung für den öffentlichen Straßenverkehr, keine allgemeine Betriebserlaubnis und kein Teilegutachten. Der Einsatz ist ausschließlich abseits öffentlicher Straßen vorgesehen; Leistungen wie Pop & Bang sind ausschließlich dafür bestimmt. Soweit der Kunde das Fahrzeug dennoch im öffentlichen Straßenverkehr nutzt, ist er allein dafür verantwortlich, erforderliche Eintragungen und Abnahmen (§ 19 StVZO) zu veranlassen und seinen Versicherer zu informieren. Weitere Angaben finden sich in den Hinweisen zu Einsatz und Haftung.
+
+## § 9 Gewährleistung und Haftung
+(1) GH-MAPPING haftet unbeschränkt für Vorsatz und grobe Fahrlässigkeit, bei Verletzung von Leben, Körper oder Gesundheit sowie nach zwingenden gesetzlichen Vorschriften, etwa dem Produkthaftungsgesetz.
+(2) Bei einfacher Fahrlässigkeit haftet GH-MAPPING nur bei Verletzung wesentlicher Vertragspflichten und begrenzt auf den vertragstypischen, vorhersehbaren Schaden.
+(3) Im Übrigen ist die Haftung ausgeschlossen. Nicht ersetzt werden insbesondere Schäden, die auf fehlerhaftem Auslesen oder Aufspielen der Datei, technischen Vorschäden, mechanischer Überlastung, Eingriffen Dritter oder einer Nutzung außerhalb des vorgesehenen Einsatzbereichs beruhen. Das gilt auch für Defekte an Steuergerät, Motor, Getriebe oder anderen Fahrzeugteilen, den Verlust von Garantie-, Gewährleistungs- und Kulanzansprüchen, das Erlöschen der Betriebserlaubnis sowie behördliche Maßnahmen wie Stilllegung, Sicherstellung oder Beschlagnahme des Fahrzeugs.
+(4) Treten nach dem Aufspielen Fehler auf, meldet der Kunde diese mit Auftragsnummer, Fehlerbeschreibung und Fehlercodes (z. B. über den Knopf „Problem?“ im Portal). Nachbesserungen (z. B. Anpassung der Datei anhand von Logs) erfolgen im Rahmen des beauftragten Umfangs. Gesetzliche Gewährleistungsrechte bleiben unberührt.
+
+## § 10 Nutzungsrechte
+Der Kunde erhält ein einfaches, nicht übertragbares Recht, das File für das Fahrzeug zu nutzen, dessen Originaldatei er hochgeladen hat. Weitergabe, Vervielfältigung oder Weiterverkauf des Files sind nicht gestattet.
+
+## § 11 Schlussbestimmungen
+Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts; gegenüber Verbrauchern nur, soweit zwingende Verbraucherschutzvorschriften ihres Wohnsitzstaats nicht entgegenstehen. Gerichtsstand für Kaufleute ist Dierdorf. Sollten einzelne Bestimmungen unwirksam sein, bleibt der Vertrag im Übrigen wirksam.

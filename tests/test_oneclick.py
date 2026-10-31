@@ -1110,6 +1110,23 @@ class ApiTests(Basis):
         self.assertIn("Kein Auftrag", html.unescape(a.get("/admin/suche?q=ffffffff", follow_redirects=True).text))
         self.assertEqual(A.app.test_client().get(f"/admin/suche?q={aid[:8]}").status_code, 302)   # ohne Login -> Login
 
+    def test_rechtstexte(self):
+        for pfad, text in [("/impressum", "DE460621511"), ("/agb", "§ 3 Vertragsschluss"), ("/widerruf", "Muster-Widerrufsformular"),
+                           ("/haftung", "Einsatzbereich"), ("/datenschutz", "nach 90 Tagen automatisch gelöscht")]:
+            r = self.c.get(pfad)
+            self.assertEqual(r.status_code, 200, pfad)
+            self.assertIn(text, html.unescape(r.text), pfad)
+        self.assertIn("<h3>§ 1 Geltungsbereich</h3>", self.c.get("/agb").text)                       # Ueberschriften
+        self.assertIn('<a href="https://stripe.com/de/privacy"', self.c.get("/datenschutz").text)    # Links klickbar
+        A.speichere_config({"aufbewahrung_tage": 30, "agb": "Meine eigenen <AGB>"})
+        self.assertIn("nach 30 Tagen automatisch gelöscht", html.unescape(self.c.get("/datenschutz").text))
+        r = self.c.get("/agb").text
+        self.assertIn("Meine eigenen &lt;AGB&gt;", r)                                                # eigener Text, sicher
+        self.assertNotIn("§ 3 Vertragsschluss", r)
+        seite = self.c.get("/").text
+        for link in ('href="/agb"', 'href="/widerruf"', 'href="/haftung"', 'id="zd-agb"'):
+            self.assertIn(link, seite)
+
     def test_info(self):
         j = self.c.get("/api/info").json
         self.assertEqual(j["firma"], "OneClick Tuning")

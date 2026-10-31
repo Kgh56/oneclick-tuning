@@ -50,6 +50,9 @@ BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
 KUNDENSEITE = BASE / "web" / "kunde.html"
+RECHTSTEXTE = BASE / "web" / "rechtstexte"   # Standardtexte, wenn unter Einstellungen nichts eingetragen ist
+RECHTLICHES = {"impressum": "Impressum", "datenschutz": "Datenschutz", "agb": "AGB",
+               "widerruf": "Widerrufsbelehrung", "haftung": "Hinweise zu Einsatz und Haftung"}
 STANDARD_WHATSAPP = "4915568540674"   # Support nach dem Download (Admin -> Einstellungen)
 
 
@@ -407,12 +410,57 @@ def login():
 
 @app.route("/impressum")
 def impressum():
-    return render_template("text.html", titel="Impressum", text=lade_config().get("impressum", ""))
+    return rechtsseite("impressum")
+
+
+def rechtstext(art: str) -> str:
+    """Eigener Text aus den Einstellungen, sonst der mitgelieferte Standardtext."""
+    eigen = (lade_config().get(art) or "").strip()
+    if eigen:
+        return eigen
+    pfad = RECHTSTEXTE / f"{art}.txt"
+    text = pfad.read_text(encoding="utf-8") if pfad.exists() else ""
+    tage = int(lade_config().get("aufbewahrung_tage", 90) or 0)
+    return text.replace("{AUFBEWAHRUNG}", f"nach {tage} Tagen" if tage else "nicht")
+
+
+def rechtsseite(art: str):
+    return render_template("text.html", titel=RECHTLICHES[art], text=rechtstext(art))
 
 
 @app.route("/datenschutz")
 def datenschutz():
-    return render_template("text.html", titel="Datenschutz", text=lade_config().get("datenschutz", ""))
+    return rechtsseite("datenschutz")
+
+
+@app.route("/agb")
+def agb():
+    return rechtsseite("agb")
+
+
+@app.route("/widerruf")
+def widerruf():
+    return rechtsseite("widerruf")
+
+
+@app.route("/haftung")
+def haftung():
+    return rechtsseite("haftung")
+
+
+@app.template_filter("rechtstext")
+def rechtstext_html(text: str):
+    """Einfache Formatierung: Zeilen mit '## ' werden Ueberschriften, Links werden klickbar."""
+    from markupsafe import Markup, escape
+    teile = []
+    for zeile in (text or "").split("\n"):
+        if zeile.startswith("## "):
+            teile.append(f"<h3>{escape(zeile[3:].strip())}</h3>")
+        else:
+            z = str(escape(zeile))
+            z = re.sub(r"(https?://[^\s<]+)", r'<a href="\1" target="_blank" rel="noopener">\1</a>', z)
+            teile.append(z + "\n")
+    return Markup("".join(teile))
 
 
 @app.route("/logout")
@@ -566,7 +614,8 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
 # ---------------------------------------------------------------------------
 
 STRIPE_API = "https://api.stripe.com/v1"
-ZUSTIMMUNG_TEXT = ("Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung beginnt. "
+ZUSTIMMUNG_TEXT = ("Ich habe die AGB und die Hinweise zu Einsatz und Haftung gelesen und akzeptiere sie. "
+                   "Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung beginnt. "
                    "Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere.")
 _stripe_zuletzt = {}   # Auftrag -> Zeitpunkt der letzten Nachfrage bei Stripe (nicht oefter als alle 5 s)
 
@@ -1866,6 +1915,9 @@ def einstellungen():
             speichere_config({
                 "firmenname": request.form.get("firmenname", "").strip()[:60],
                 "impressum": request.form.get("impressum", "").strip()[:20000],
+                "agb": request.form.get("agb", "").strip()[:50000],
+                "widerruf": request.form.get("widerruf", "").strip()[:20000],
+                "haftung": request.form.get("haftung", "").strip()[:20000],
                 "datenschutz": request.form.get("datenschutz", "").strip()[:50000],
                 "basis_url": request.form.get("basis_url", "").strip(),
                 "telegram_token": request.form.get("telegram_token", "").strip(),
@@ -1952,6 +2004,7 @@ def einstellungen():
     except Exception:
         v = {}
     return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
+                           rechtliches=RECHTLICHES,
                            version=v, update_liste=session.get("update_liste"))
 
 
@@ -2104,7 +2157,7 @@ table:not(.liste-tab) th{white-space:normal;padding-left:0}
 {% for m in get_flashed_messages() %}<div class="meldung">{{ m }}</div>{% endfor %}
 {% block inhalt %}{% endblock %}
 </main>
-<footer><a href="{{ url_for('impressum') }}">Impressum</a><a href="{{ url_for('datenschutz') }}">Datenschutz</a></footer>
+<footer><a href="{{ url_for('impressum') }}">Impressum</a><a href="{{ url_for('datenschutz') }}">Datenschutz</a><a href="{{ url_for('agb') }}">AGB</a><a href="{{ url_for('widerruf') }}">Widerruf</a><a href="{{ url_for('haftung') }}">Haftung</a></footer>
 <script>
 // Tabellen mit Kopfzeile = Listen: am Handy als Karten, jede Zelle bekommt ihre Spaltenueberschrift
 document.querySelectorAll('table').forEach(function(t){
@@ -2130,7 +2183,8 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 
 "text.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>{{ titel }}</h1>
-{% if text %}<div style="white-space:pre-line">{{ text }}</div>
+{% if text %}<div class="rechtstext" style="white-space:pre-line">{{ text|rechtstext }}</div>
+<style>.rechtstext h3{font-size:17px;margin:14px 0 2px;white-space:normal}.rechtstext a{overflow-wrap:anywhere}</style>
 {% else %}<p class="leise">Noch nicht eingetragen.{% if session.admin %} → Einstellungen{% endif %}</p>{% endif %}</div>
 {% endblock %}""",
 
@@ -2530,10 +2584,19 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <input type="checkbox" name="nur_identisch" value="1" {{ 'checked' if cfg.nur_identisch }} style="margin-top:4px">
 <span><b>Nur komplett identische Originale</b><br><span class="leise" style="font-size:13px">Aus: Treffer auch, wenn das File an allen Stellen,
 die euer Tuning ändert, exakt gleich ist (z. B. andere Fahrgestellnummer). An: nur wenn das ganze File Byte für Byte gleich ist.</span></span></label>
-<label class="feld">Impressum (Pflicht für Firmen-Webseiten: Name, Anschrift, Kontakt, ggf. USt-ID / Handelsregister)</label>
-<textarea name="impressum" placeholder="Firma GmbH&#10;Musterstraße 1&#10;12345 Musterstadt&#10;…">{{ cfg.impressum or '' }}</textarea>
-<label class="feld">Datenschutzerklärung (z. B. mit einem Generator erstellen oder vom Anwalt; die Seite speichert hochgeladene Files und die optionale Kontaktangabe)</label>
-<textarea name="datenschutz">{{ cfg.datenschutz or '' }}</textarea>
+<div class="hinweis" style="margin:4px 0 12px"><b>Rechtstexte:</b> Feld leer lassen = mitgelieferter Standardtext (passt zu dieser Seite
+und wird bei Updates aktuell gehalten). Nur ausfüllen, wenn du einen eigenen Text (z. B. vom Anwalt) verwenden willst.
+Ansehen: {% for art, titel in rechtliches.items() %}<a href="{{ url_for(art) }}" target="_blank">{{ titel }}</a>{{ ' · ' if not loop.last }}{% endfor %}</div>
+<label class="feld">Impressum</label>
+<textarea name="impressum" placeholder="leer = Standardtext">{{ cfg.impressum or '' }}</textarea>
+<label class="feld">Datenschutzerklärung</label>
+<textarea name="datenschutz" placeholder="leer = Standardtext">{{ cfg.datenschutz or '' }}</textarea>
+<label class="feld">AGB</label>
+<textarea name="agb" placeholder="leer = Standardtext">{{ cfg.agb or '' }}</textarea>
+<label class="feld">Widerrufsbelehrung (mit Muster-Widerrufsformular)</label>
+<textarea name="widerruf" placeholder="leer = Standardtext">{{ cfg.widerruf or '' }}</textarea>
+<label class="feld">Hinweise zu Einsatz und Haftung</label>
+<textarea name="haftung" placeholder="leer = Standardtext">{{ cfg.haftung or '' }}</textarea>
 <button class="btn">Speichern</button></form></div>
 
 <div class="karte" id="stripe"><h2>Bezahlen mit Stripe</h2>

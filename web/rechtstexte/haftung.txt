@@ -1,0 +1,17 @@
+Hinweise zu Einsatz und Haftung
+
+## Einsatzbereich
+Die von GH-MAPPING erstellten Files verändern Kennfelder im Steuergerät. Sie haben keine Zulassung für den öffentlichen Straßenverkehr, keine allgemeine Betriebserlaubnis (ABE), kein Teilegutachten und keine Eintragung nach § 19 StVZO. Der Einsatz erfolgt ausschließlich abseits öffentlicher Straßen.
+
+## Verantwortung des Kunden
+GH-MAPPING liefert ausschließlich die Datei und führt keine Arbeiten am Fahrzeug aus. Das Auslesen des Steuergeräts, das Einspielen des Files (einschließlich Korrektur der Checksumme durch das Flash-Tool), der Betrieb des Fahrzeugs sowie alle erforderlichen Eintragungen, Abnahmen und Genehmigungen liegen allein in Ihrer Verantwortung. Sichern Sie die Originaldatei vor dem Einspielen.
+
+## Mögliche Folgen
+Das Einspielen eines Files kann zu Fehlfunktionen oder Defekten am Steuergerät, am Motor, am Getriebe und an weiteren Fahrzeugteilen führen. Möglich sind außerdem der Verlust von Garantie-, Gewährleistungs- und Kulanzansprüchen, das Erlöschen der Betriebserlaubnis, Probleme mit der Versicherung sowie behördliche Maßnahmen wie Bußgelder, Stilllegung oder Sicherstellung des Fahrzeugs.
+
+## Haftung
+Wir haften nicht für Schäden, die durch das Einspielen des Files, den Betrieb des Fahrzeugs oder eine Nutzung außerhalb des vorgesehenen Einsatzbereichs entstehen. Das gilt insbesondere für Fehler beim Einspielen der Software, Defekte am Fahrzeug, Folgeschäden, den Verlust der Betriebserlaubnis und behördliche Maßnahmen wie die Sicherstellung oder Beschlagnahme des Fahrzeugs.
+Unberührt bleibt die Haftung für Vorsatz und grobe Fahrlässigkeit, für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit sowie die Haftung nach zwingenden gesetzlichen Vorschriften. Bei leicht fahrlässiger Verletzung wesentlicher Vertragspflichten ist die Haftung auf den vorhersehbaren, vertragstypischen Schaden begrenzt.
+
+## Probleme nach dem Einspielen
+Treten Fehler am Fahrzeug auf, melden Sie sich bitte mit Auftragsnummer, Fehlerbeschreibung und Fehlercodes, z. B. über den Knopf „Problem?“ bei Ihrem Auftrag. Spielen Sie im Zweifel zunächst Ihre gesicherte Originaldatei wieder ein.

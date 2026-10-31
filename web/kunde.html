@@ -284,6 +284,7 @@ select.feld option{background:#1c1c1e}
 .btn.laedt .symbol .pfeil{animation:wippen .6s ease-in-out infinite}
 .welle{position:absolute;border-radius:50%;background:rgba(255,255,255,.45);transform:scale(0);animation:welle .6s ease-out forwards;pointer-events:none}
 @keyframes welle{to{transform:scale(4);opacity:0}}
+.hinweis a,#zahl-dialog label a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .hinweis{font-size:12.5px;color:var(--dunkel);margin-top:12px}
 
 /* ---------- Erfolg / Fehler ---------- */
@@ -378,8 +379,11 @@ select.feld option{background:#1c1c1e}
   <div class="betrag" id="zd-betrag"></div>
   <p class="leise" style="font-size:13px">Du wirst zur sicheren Bezahlseite von Stripe weitergeleitet (Karte, Apple Pay, PayPal …).
     Danach kommst du automatisch hierher zurück und kannst dein File herunterladen. Die Rechnung kommt per E-Mail.</p>
+  <label><input type="checkbox" id="zd-agb"><span>Ich habe die <a href="/agb" target="_blank">AGB</a> und die
+    <a href="/haftung" target="_blank">Hinweise zu Einsatz und Haftung</a> gelesen und akzeptiere sie.</span></label>
   <label><input type="checkbox" id="zd-ok"><span>Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung
-    beginnt. Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere.</span></label>
+    beginnt. Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere
+    (<a href="/widerruf" target="_blank">Widerrufsbelehrung</a>).</span></label>
   <div class="knoepfe">
     <button class="btn bezahlen" id="zd-los" disabled>Weiter zur Bezahlung</button>
     <button class="btn grau" id="zd-zu">Abbrechen</button>
@@ -475,7 +479,8 @@ select.feld option{background:#1c1c1e}
             <button class="btn" id="senden">Auftrag senden</button>
             <button class="btn grau" id="abbrechen">Abbrechen</button>
           </div>
-          <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
+          <div class="hinweis">Nach dem Senden geben wir deinen Auftrag kurz frei. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.
+            Es gelten unsere <a href="/agb" target="_blank">AGB</a> und die <a href="/haftung" target="_blank">Hinweise zu Einsatz und Haftung</a>.</div>
           <button class="anfrage-link" id="andere-anfrage">
             <span class="af-icon"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></span>
             <span class="af-text"><b>Nicht dabei, was du brauchst?</b><span>Stell uns eine Anfrage – wir machen dir das File und melden uns hier, sobald es fertig ist.</span></span>
@@ -498,7 +503,8 @@ select.feld option{background:#1c1c1e}
             <button class="btn" id="af-senden">Anfrage senden</button>
             <button class="btn grau" id="af-abbrechen">Abbrechen</button>
           </div>
-          <div class="hinweis">Felder mit <b style="color:#ff453a">*</b> bitte ausfüllen. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.</div>
+          <div class="hinweis">Felder mit <b style="color:#ff453a">*</b> bitte ausfüllen. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen.
+            Es gelten unsere <a href="/agb" target="_blank">AGB</a> und die <a href="/haftung" target="_blank">Hinweise zu Einsatz und Haftung</a>.</div>
         </div>
 
         <div class="ansicht" id="v-erfolg">
@@ -548,7 +554,7 @@ select.feld option{background:#1c1c1e}
   </main>
   <footer class="fuss">
     <span id="fuss-firma">© OneClick Tuning</span>
-    <span><a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></span>
+    <span><a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a> · <a href="/agb">AGB</a> · <a href="/widerruf">Widerruf</a> · <a href="/haftung">Haftung</a></span>
   </footer>
 </div>
 
@@ -1071,10 +1077,10 @@ function bezahlenDialog(a) {
   zahlAuftrag = a;
   $("#zd-was").textContent = `${a.option_name} · ${a.datei}`;
   $("#zd-betrag").textContent = a.preis_text || euro(a.preis);
-  $("#zd-ok").checked = false; $("#zd-los").disabled = true; $("#zd-los").textContent = "Weiter zur Bezahlung";
+  $("#zd-ok").checked = false; $("#zd-agb").checked = false; $("#zd-los").disabled = true; $("#zd-los").textContent = "Weiter zur Bezahlung";
   $("#zahl-dialog").classList.add("offen");
 }
-$("#zd-ok").addEventListener("change", e => { $("#zd-los").disabled = !e.target.checked; });
+["#zd-ok", "#zd-agb"].forEach(s => $(s).addEventListener("change", () => { $("#zd-los").disabled = !($("#zd-ok").checked && $("#zd-agb").checked); }));
 $("#zd-zu").addEventListener("click", () => $("#zahl-dialog").classList.remove("offen"));
 $("#zahl-dialog").addEventListener("click", e => { if (e.target.id === "zahl-dialog") $("#zahl-dialog").classList.remove("offen"); });
 $("#zd-los").addEventListener("click", async () => {

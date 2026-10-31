@@ -1,0 +1,59 @@
+Datenschutzerklärung für das Portal OneClick Tuning (oneclicksoulution.gh-mapping.de)
+Stand: Oktober 2026
+
+## 1. Verantwortlicher
+Luisa Neuer, GH-MAPPING, Hachenburgerstraße 3, 56269 Dierdorf, Deutschland
+E-Mail: info@gh-mapping.de · WhatsApp: +49 155 68540674
+
+## 2. Überblick
+Über dieses Portal können Sie Steuergerätedateien (ECU-Files) hochladen, verfügbare Lösungen auswählen oder eine Anfrage stellen, nach unserer Freigabe bezahlen und das fertige File herunterladen. Eine Registrierung ist nicht nötig. Auf der Kundenseite setzen wir keine Cookies, verwenden keine Analyse- oder Werbe-Tools und laden keine Inhalte von fremden Anbietern (z. B. keine externen Schriftarten).
+
+## 3. Hosting und Server-Zugriffe
+Das Portal läuft auf einem eigenen Server der STRATO GmbH, Otto-Ostrowski-Straße 7, 10249 Berlin, in Deutschland. Mit STRATO besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
+Beim Aufruf verarbeitet der Server technisch notwendig Ihre IP-Adresse, Datum und Uhrzeit, die aufgerufene Adresse und Angaben zu Ihrem Browser, um die Seite auszuliefern. Wir speichern keine Zugriffsprotokolle. Zum Schutz vor Missbrauch (Begrenzung von Uploads, Anfragen und Zahlungsversuchen pro Stunde) wird Ihre IP-Adresse kurzzeitig nur im Arbeitsspeicher des Servers festgehalten und spätestens beim nächsten Neustart gelöscht. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem sicheren Betrieb).
+
+## 4. Hochgeladene Dateien, Aufträge und Anfragen
+Wenn Sie ein File prüfen lassen, einen Auftrag senden oder eine Anfrage stellen, verarbeiten wir:
+- die hochgeladene Steuergerätedatei und ihren Dateinamen. Solche Dateien können die Fahrgestellnummer (FIN) und weitere fahrzeugbezogene Daten enthalten, die einer Person zugeordnet werden können;
+- daraus erkannte Angaben wie Steuergerät und Softwarenummer;
+- die gewählten bzw. gewünschten Lösungen und den Preis;
+- freiwillige Kontaktangaben (Name, Firma, Telefon);
+- bei Anfragen zusätzlich Ihre Fahrzeugdaten (Marke, Modell, Baujahr, Motor, optional Motorcode und Getriebe) und Ihre Nachricht.
+Zweck ist die Prüfung Ihres Files sowie die Erstellung, Freigabe und Bereitstellung des fertigen Files. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertrag bzw. vorvertragliche Maßnahmen).
+Speicherdauer: Geprüfte Dateien, zu denen Sie keinen Auftrag und keine Anfrage absenden, werden nach einem Tag automatisch gelöscht. Erledigte Aufträge und Anfragen werden {AUFBEWAHRUNG} automatisch gelöscht. Gesetzliche Aufbewahrungspflichten (z. B. für Rechnungen und Buchungsbelege) bleiben unberührt.
+
+## 5. Archiv
+Damit Kunden mit derselben Software künftig sofort ein passendes File erhalten, können wir ein Original und das von uns bearbeitete File in unser Archiv übernehmen. Ihre Kontaktangaben, Fahrzeugangaben aus dem Formular und Ihre Nachricht werden dabei nicht übernommen; eine in der Datei enthaltene Fahrgestellnummer bleibt in der Datei. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem schnellen Service). Sie können dem jederzeit widersprechen; dann löschen wir die betreffenden Dateien aus dem Archiv.
+
+## 6. Benachrichtigung über Telegram
+Damit wir neue Aufträge und Anfragen schnell bearbeiten können, erhalten wir einen kurzen Hinweis über den Messenger Telegram (Telegram Messenger Inc. bzw. Telegram FZ-LLC, Dubai, Vereinigte Arabische Emirate). Übermittelt werden nur technische Angaben ohne Personenbezug: gewählte bzw. gewünschte Lösung, Steuergerät, Softwarenummer, Preis und bei Anfragen Marke, Modell, Baujahr und Motor des Fahrzeugs. Ihre Datei, der Dateiname, Ihre Kontaktangaben und Ihre Nachricht werden nicht an Telegram übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an schneller Bearbeitung).
+
+## 7. Bezahlung über Stripe
+Nach unserer Freigabe bezahlen Sie auf der Bezahlseite von Stripe, auf die Sie aus dem Portal weitergeleitet werden. Zahlungsdienstleister ist Stripe Payments Europe, Ltd., 1 Grand Canal Street Lower, Dublin 2, Irland (Stripe). Stripe verarbeitet die für die Zahlung erforderlichen Daten (z. B. Name, E-Mail-Adresse, Zahlungsmitteldaten, Betrag und Zeitpunkt der Zahlung) sowie technische Daten und sendet Ihnen die Rechnung per E-Mail. Teilweise verarbeitet Stripe Daten in eigener Verantwortung, z. B. zur Betrugsprävention und zur Erfüllung gesetzlicher Pflichten.
+An Stripe übermitteln wir nur den Betrag, die Bezeichnung der Lösung und eine Auftragsnummer – nicht Ihre Datei, den Dateinamen oder Ihre Fahrzeugdaten. Von Stripe erhalten wir Zahlungsstatus, Betrag und eine Zahlungskennung. Außerdem speichern wir Zeitpunkt und Wortlaut Ihrer Zustimmung zu AGB und vorzeitigem Beginn der Ausführung (Widerrufsrecht), um sie nachweisen zu können.
+Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung); soweit wir Zahlungsdaten zur Buchführung aufbewahren, Art. 6 Abs. 1 lit. c DSGVO. Stripe kann Daten in Drittländer, insbesondere die USA, übermitteln. Einzelheiten: https://stripe.com/de/privacy
+
+## 8. Kontakt über WhatsApp
+Bei Problemen mit einem File können Sie uns über den Knopf „Problem?“ per WhatsApp schreiben. Der Knopf öffnet WhatsApp mit einer vorausgefüllten Nachricht (Kurz-Nummer des Auftrags, Dateiname, Lösung, Steuergerät, Software), die Sie selbst absenden. Anbieter ist WhatsApp Ireland Limited, Irland (Meta). Wir verarbeiten Ihre Telefonnummer, Ihren Profilnamen und den Inhalt Ihrer Nachrichten, um Ihr Anliegen zu bearbeiten (Art. 6 Abs. 1 lit. b DSGVO). WhatsApp kann Metadaten verarbeiten und Daten an Unternehmen der Meta-Gruppe und in Drittländer, insbesondere die USA, übermitteln. Einzelheiten: https://www.whatsapp.com/legal/privacy-policy-eea
+
+## 9. Speicherung in Ihrem Browser
+Die Liste „Meine Aufträge“ speichert Ihr Browser lokal auf Ihrem Gerät (localStorage): Auftragsnummern, Dateinamen, Status, gewählte Lösungen, Preis, Kurzangaben zum Fahrzeug und Ihre Kontaktangabe, damit Sie sie nicht erneut eintippen müssen. Diese Liste wird nicht an uns übertragen; der Browser fragt damit nur den Status Ihrer Aufträge bei uns ab. Rechtsgrundlage ist § 25 Abs. 2 Nr. 2 TDDDG (unbedingt erforderlich für den von Ihnen gewünschten Dienst) sowie Art. 6 Abs. 1 lit. b DSGVO. Sie können Einträge jederzeit mit „Entfernen“ oder durch Löschen der Browserdaten entfernen.
+
+## 10. Cookies
+Die Kundenseite setzt keine Cookies. Nur im internen Admin-Bereich wird für die Anmeldung ein technisch notwendiges Sitzungs-Cookie verwendet.
+
+## 11. Sicherheit
+Alle Verbindungen sind per HTTPS verschlüsselt. Auf einen Auftrag kann nur zugreifen, wer seine zufällige, 32-stellige Auftragsnummer kennt. Ein Download ist erst nach unserer Freigabe und, falls ein Preis anfällt, nach erfolgreicher Zahlung möglich.
+
+## 12. Datensicherung
+Unser Archiv und die Einstellungen werden täglich auf dem Server gesichert; die Sicherungen werden nach 14 Tagen gelöscht. Aufträge und Anfragen sind darin nicht enthalten.
+
+## 13. Keine automatisierte Entscheidung
+Passende Files werden automatisch gesucht. Jeder Auftrag wird jedoch von uns geprüft und manuell freigegeben oder abgelehnt. Eine ausschließlich automatisierte Entscheidung im Sinne von Art. 22 DSGVO findet nicht statt.
+
+## 14. Pflicht zur Angabe
+Ohne Upload der Datei können wir keine Leistung erbringen. Bei Anfragen benötigen wir die Fahrzeugdaten. Kontaktangaben sind freiwillig.
+
+## 15. Ihre Rechte
+Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21). Wenden Sie sich dazu an die oben genannten Kontaktdaten und nennen Sie, falls vorhanden, Ihre Auftragsnummer oder den Dateinamen.
+Sie können sich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO), z. B. beim Landesbeauftragten für den Datenschutz und die Informationsfreiheit Rheinland-Pfalz, Hintere Bleiche 34, 55116 Mainz.
