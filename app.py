@@ -1338,27 +1338,35 @@ def _gruppe_auswerten(stapel: dict, gid: int):
 
 
 def eingang_anlegen(dateien: list, quelle: str) -> dict:
-    """Lose Dateien [(name, inhalt)] als Stapel zum Sortieren ablegen und automatisch gruppieren."""
-    dateien = [(n, d) for n, d in dateien if len(d) >= 1024][:3000]
-    abdruecke = [block_abdruck(d) for _, d in dateien]
-    gruppen = gruppieren(abdruecke)
+    """Lose Dateien [(name, inhalt)] als Stapel zum Sortieren ablegen und automatisch gruppieren.
+    inhalt darf auch eine Funktion sein, die die Bytes erst liefert: so liegt beim ZIP-Import
+    immer nur eine Datei im Arbeitsspeicher, egal wie gross das ZIP ist."""
     oris, mods = archiv_kennt()
     sid = uuid.uuid4().hex
     ordner = EINGANG / sid
     ordner.mkdir(parents=True)
-    eintraege = []
-    for (name, daten), gid in zip(dateien, gruppen):
+    eintraege, abdruecke = [], []
+    for name, daten in dateien:
+        if len(eintraege) >= 3000:
+            break
+        daten = daten() if callable(daten) else daten
+        if len(daten) < 1024:
+            continue
         fid = uuid.uuid4().hex[:12]
         (ordner / f"{fid}.bin").write_bytes(daten)
         info = oneclick.erkenne(daten)
+        abdruecke.append(block_abdruck(daten))
         eintraege.append({"id": fid, "name": PurePosixPath(name).name[:150], "groesse": len(daten), "sha": sha(daten),
-                          "gruppe": gid, "ecu": ", ".join(info["ecu"]) or "?",
+                          "ecu": ", ".join(info["ecu"]) or "?",
                           "software": ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"})
+        del daten
+    for e, gid in zip(eintraege, gruppieren(abdruecke)):
+        e["gruppe"] = gid
     stapel = {"id": sid, "quelle": PurePosixPath(quelle or "ZIP").name[:120],
               "zeit": datetime.now().isoformat(timespec="seconds"), "dateien": eintraege}
     json_speichern(ordner / "stapel.json", stapel)
     bekannt = sum(1 for e in eintraege if e["sha"] in oris or e["sha"] in mods)
-    return {"id": sid, "dateien": len(eintraege), "gruppen": len(set(gruppen)), "bekannt": bekannt}
+    return {"id": sid, "dateien": len(eintraege), "gruppen": len({e["gruppe"] for e in eintraege}), "bekannt": bekannt}
 
 
 def rolle_lesen(wert: str) -> str:
@@ -1510,7 +1518,7 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
     """ZIP ins Archiv. Was sich nicht automatisch zuordnen laesst (oder alles, wenn alles_sortieren),
     landet unter Archiv -> Sortieren, wo der Admin Original / Stage 1 / ... selbst festlegt."""
     meldungen, ok, ergaenzt, doppelt, abgas = [], 0, 0, 0, 0
-    zum_sortieren = []   # (Dateiname, Inhalt)
+    zum_sortieren = []   # (Dateiname, ZipInfo) -> spaeter Ergebnis von eingang_anlegen
     with zipfile.ZipFile(stream) as z:
         gruppen = {}
         for info in z.infolist():
@@ -1530,7 +1538,7 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
             namen = {PurePosixPath(i.filename).name: i for i in infos}
             ori_name, optionen = oneclick.klassifiziere(list(namen))
             if alles_sortieren or not ori_name:
-                zum_sortieren += [(PurePosixPath(i.filename).name, z.read(i)) for i in infos]
+                zum_sortieren += [(PurePosixPath(i.filename).name, i) for i in infos]
                 continue
             ori = z.read(namen[ori_name])
             passend = {opt: z.read(namen[n]) for opt, n in optionen.items()}
@@ -1555,13 +1563,15 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
                 doppelt += 1
             if not erg["neu"] or erg["anderswo"]:
                 meldungen += [x for x in archiv_meldungen(erg, schluessel) if "nichts geändert" not in x]
+        if zum_sortieren:   # noch im with-Block: Dateien werden einzeln aus dem ZIP gelesen
+            zum_sortieren = eingang_anlegen([(n, lambda i=i: z.read(i)) for n, i in zum_sortieren], quelle)
     with index_sperre:
         oneclick.baue_index()
     if abgas:
         meldungen.append(f"{abgas} Datei(en) mit Abschaltung der Abgasreinigung im Namen (DPF, AGR/EGR, AdBlue/SCR, NOx, "
                          "Lambda, Kat …) wurden nicht übernommen.")
     if zum_sortieren:
-        erg = eingang_anlegen(zum_sortieren, quelle)
+        erg = zum_sortieren
         meldungen.insert(0, f"{erg['dateien']} Datei(en) in {erg['gruppen']} Gruppe(n) warten unter „Sortieren“ darauf, "
                             "dass du Original, Stage 1 usw. zuordnest."
                             + (f" {erg['bekannt']} davon sind schon im Archiv." if erg["bekannt"] else ""))
