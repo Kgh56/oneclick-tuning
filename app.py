@@ -17,6 +17,7 @@ Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den A
 import getpass
 import hashlib
 import hmac
+import io
 import html
 import json
 import os
@@ -46,6 +47,7 @@ import oneclick
 BASE = Path(__file__).resolve().parent
 AUFTRAEGE = BASE / "auftraege"
 EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
+EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
@@ -1585,6 +1587,68 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
     return [zeile] + meldungen
 
 
+@app.route("/admin/eigenes-file", methods=["GET", "POST"])
+@admin_noetig
+def eigenes_file():
+    """Admin laedt selbst ein File hoch und bekommt die Treffer aus dem Archiv kostenlos -
+    ohne Auftrag, ohne Zahlung, ohne Telegram."""
+    if request.method == "GET":
+        return render_template("eigenes.html", e=None)
+    datei = request.files.get("datei")
+    if not datei or not datei.filename:
+        flash("Bitte ein File auswählen.")
+        return redirect(url_for("eigenes_file"))
+    daten = datei.read()
+    if len(daten) < 1024:
+        flash("Die Datei ist zu klein für ein ECU-File.")
+        return redirect(url_for("eigenes_file"))
+    jetzt = time.time()
+    if EIGENE.exists():   # alte Vorgaenge (> 24 h) wegraeumen
+        for alt in EIGENE.iterdir():
+            if alt.is_dir() and jetzt - alt.stat().st_mtime > 86400:
+                shutil.rmtree(alt, ignore_errors=True)
+    info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
+    eid = uuid.uuid4().hex
+    ordner = EIGENE / eid
+    ordner.mkdir(parents=True)
+    (ordner / "ori.bin").write_bytes(daten)
+    for opt, l in loesungen.items():
+        (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
+    e = {"id": eid, "datei": PurePosixPath(datei.filename.replace("\\", "/")).name[:150] or "datei.bin",
+         "ecu": ", ".join(info["ecu"]) or "?", "software": ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?",
+         "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
+                     for opt, l in sorted(loesungen.items(), key=lambda t: oneclick.reihen_index(t[0]))}}
+    json_speichern(ordner / "info.json", e)
+    return render_template("eigenes.html", e=e, namen=option_namen())
+
+
+@app.route("/admin/eigenes-file/<eid>", methods=["POST"])
+@admin_noetig
+def eigenes_file_download(eid):
+    if not re.fullmatch(r"[0-9a-f]{32}", eid) or not (EIGENE / eid / "info.json").exists():
+        flash("Das File ist nicht mehr da (älter als 24 Stunden). Bitte nochmal hochladen.")
+        return redirect(url_for("eigenes_file"))
+    ordner = EIGENE / eid
+    e = json.loads((ordner / "info.json").read_text())
+    auswahl = [o for o in e["angebot"] if o in request.form.getlist("option")]
+    if not auswahl:
+        flash("Bitte mindestens eine Lösung auswählen.")
+        return render_template("eigenes.html", e=e, namen=option_namen())
+    if oneclick.ORIGINAL in auswahl and len(auswahl) > 1:
+        flash(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
+        return render_template("eigenes.html", e=e, namen=option_namen())
+    if len(auswahl) == 1:
+        daten = (ordner / f"loesung_{auswahl[0]}.bin").read_bytes()
+    else:
+        daten = oneclick.kombiniere((ordner / "ori.bin").read_bytes(),
+                                    [(ordner / f"loesung_{o}.bin").read_bytes() for o in auswahl])
+        if daten is None:
+            flash("Diese Kombination geht nicht, weil sich die Lösungen überschneiden. Bitte anders wählen.")
+            return render_template("eigenes.html", e=e, namen=option_namen())
+    return send_file(io.BytesIO(daten), as_attachment=True, mimetype="application/octet-stream",
+                     download_name=f"{Path(e['datei']).stem}_{'+'.join(auswahl)}.bin")
+
+
 @app.route("/admin/archiv")
 @admin_noetig
 def admin_archiv():
@@ -2164,6 +2228,7 @@ table:not(.liste-tab) th{white-space:normal;padding-left:0}
 <nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}">Aufträge</a>
 <a href="{{ url_for('admin_archiv') }}">Archiv</a>
+<a href="{{ url_for('eigenes_file') }}">Eigenes File</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}">Sortieren ({{ zu_sortieren }})</a>{% endif %}
 <a href="{{ url_for('einstellungen') }}">Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
@@ -2458,6 +2523,27 @@ async function kennt(){
 </script>
 {% endblock %}""",
 
+"eigenes.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>Eigenes File</h1>
+<p class="leise">Für dich selbst: File hochladen, passende Lösung aus dem Archiv wählen und kostenlos herunterladen.
+Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p>
+<form method="post" action="{{ url_for('eigenes_file') }}" enctype="multipart/form-data">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<label class="drop"><input type="file" name="datei" required onchange="this.form.submit()">
+<div><b>File hierher ziehen</b><br>oder klicken zum Auswählen</div></label>
+</form></div>
+{% if e %}<div class="karte"><h2 style="overflow-wrap:anywhere">{{ e.datei }}</h2>
+<p class="leise" style="margin-top:-6px">ECU: {{ e.ecu }} · Software: {{ e.software }}</p>
+{% if e.angebot %}<form method="post" action="{{ url_for('eigenes_file_download', eid=e.id) }}">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+{% for opt, a in e.angebot.items() %}<label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0;cursor:pointer">
+<input type="checkbox" name="option" value="{{ opt }}" style="margin-top:3px"{{ ' checked' if loop.length == 1 }}>
+<span><b>{{ namen[opt] }}</b><br><span class="leise" style="font-size:13px;overflow-wrap:anywhere">aus {{ a.quelle }} · {{ a.art }}</span></span></label>{% endfor %}
+<button class="btn">Kostenlos herunterladen</button>
+<div class="hinweis">Mehrere Häkchen = Lösungen werden in einem File kombiniert (wie beim Kunden). Das File bleibt 24 Stunden hier.</div>
+</form>{% else %}<p>Für dieses File gibt es im Archiv noch keine passende Lösung.</p>{% endif %}
+</div>{% endif %}
+{% endblock %}""",
 "sortieren.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Sortieren</h1>
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –

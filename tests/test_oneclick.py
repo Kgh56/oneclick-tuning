@@ -11,6 +11,7 @@ import io
 import json
 import os
 import random
+import re
 import sys
 import tempfile
 import time
@@ -42,6 +43,7 @@ class Basis(unittest.TestCase):
         oneclick.OPTIONEN_DATEI = d / "optionen.json"
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
         A.EINGANG = d / "eingang"
+        A.EIGENE = d / "eigene"
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
         self.telegram = []
@@ -292,6 +294,27 @@ class WebTests(Basis):
         d = self.laden(aid)
         self.assertEqual(d.status_code, 200)
         self.assertEqual(d.data, bytes(self.startstopp))
+
+    def test_eigenes_file_kostenlos_fuer_admin(self):
+        a = self.admin()
+        self.assertEqual(self.kunde.get("/admin/eigenes-file").status_code, 302)   # nur Admin
+        r = a.post("/admin/eigenes-file", data={"csrf": a.csrf, "datei": (io.BytesIO(bytes(self.golf)), "mein.bin")},
+                   content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Stage 1", r.text)
+        eid = re.search(r"/admin/eigenes-file/([0-9a-f]{32})", r.text).group(1)
+        d = a.post(f"/admin/eigenes-file/{eid}", data={"csrf": a.csrf, "option": ["stage1", "startstopp"]})
+        self.assertEqual(d.status_code, 200)
+        erwartet = bytearray(self.stage1)
+        erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]
+        self.assertEqual(d.data, bytes(erwartet))
+        self.assertIn("mein_stage1+startstopp.bin", d.headers["Content-Disposition"])
+        self.assertEqual(self.telegram, [])        # keine Meldung
+        self.assertEqual(list(A.AUFTRAEGE.glob("*/auftrag.json")), [])   # kein Auftrag
+        self.assertEqual(self.kunde.post(f"/admin/eigenes-file/{eid}", data={"csrf": self.kunde.csrf,
+                                         "option": "stage1"}).status_code, 302)   # Kunde kommt nicht ran
+        self.assertIn("nicht mehr da", a.post("/admin/eigenes-file/" + "0" * 32, data={"csrf": a.csrf},
+                                              follow_redirects=True).text)
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
