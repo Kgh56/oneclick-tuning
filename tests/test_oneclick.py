@@ -837,6 +837,34 @@ class SortierenTests(WebTests):
         text = html.unescape(a.post("/admin/sortieren/automatisch", data={"csrf": a.csrf}, follow_redirects=True).text)
         self.assertIn("Automatisch erledigt: 0 Gruppe(n)", text)
 
+    def test_abgas_files_werden_ignoriert(self):
+        a = self.admin()
+        audi, seat = bytes(zufall(GROESSE, 91)), bytes(zufall(GROESSE, 92))
+        # Wie ein schon hochgeladener Stapel (neue Importe lassen solche Files gar nicht erst rein, siehe unten)
+        A.eingang_anlegen([("audi ori.bin", audi), ("audi stage1.bin", self.tuning(audi, 1)),
+                           ("audi dpf off.bin", self.tuning(audi, 2)), ("audi stage1 egr.bin", self.tuning(audi, 3)),
+                           ("seat.bin", seat), ("seat AdBlue off.bin", self.tuning(seat, 4)), ("seat nox.bin", self.tuning(seat, 5))], "alt.zip")
+        seite = html.unescape(a.get("/admin/sortieren").text)
+        self.assertEqual(seite.count("Abgasreinigung – wird nicht übernommen"), 4)
+        # Von Hand: Abgas-File als Stage 1 geht nicht
+        s = self.stapel(); ids = {d["name"]: d["id"] for d in s["dateien"]}
+        g = self.gruppe_von("audi ori.bin")
+        text = html.unescape(a.post(f"/admin/sortieren/{s['id']}/{g}", data={"csrf": a.csrf, "aktion": "uebernehmen", "name": "Audi",
+            f"rolle_{ids['audi ori.bin']}": "original", f"rolle_{ids['audi stage1.bin']}": "stage1",
+            f"rolle_{ids['audi dpf off.bin']}": "stage2", f"rolle_{ids['audi stage1 egr.bin']}": "ignorieren"}, follow_redirects=True).text)
+        self.assertIn("Abschaltung der Abgasreinigung", text)
+        # Automatisch: Audi mit Stage 1, Seat als reines Original (Mitte der Gruppe), Abgas-Files weg
+        text = html.unescape(a.post("/admin/sortieren/automatisch", data={"csrf": a.csrf}, follow_redirects=True).text)
+        self.assertIn("Automatisch erledigt: 2 Gruppe(n)", text)
+        e = {x["name"]: x for x in oneclick.lade_index()["eintraege"]}
+        self.assertEqual(set(e[next(n for n in e if n.lower().startswith("audi"))]["optionen"]), {"stage1"})
+        self.assertEqual(A.alle_stapel(), [])
+        # Neue ZIP-Importe (mit und ohne Sortieren) uebernehmen sie gar nicht erst
+        self.zip_hochladen(a, {"Polo/polo_ori.bin": seat, "Polo/polo_dpf.bin": self.tuning(seat, 6)}, sortieren="")
+        self.assertIn("1 Datei(en) mit Abschaltung der Abgasreinigung", html.unescape(a.get("/admin/archiv").text))
+        self.zip_hochladen(a, {"x_egr.bin": self.tuning(seat, 7), "x_stage1.bin": self.tuning(seat, 8)})
+        self.assertEqual([d["name"] for d in self.stapel()["dateien"]], ["x_stage1.bin"])
+
     def test_automatisch_und_rest_zum_sortieren(self):
         a = self.admin()
         neu = bytes(zufall(GROESSE, 51))

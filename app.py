@@ -1212,17 +1212,24 @@ def _gruppe_auswerten(stapel: dict, gid: int):
             or (d["sha"] in mods_bekannt and "{} bei „{}“".format(option_namen()[mods_bekannt[d['sha']][1]], mods_bekannt[d['sha']][0])) or ""
     # Original: 1. schon im Archiv als Original, 2. Dateiname, 3. "Mitte" der Gruppe (ab 3 Files)
     ori_name, rollen = oneclick.klassifiziere([d["name"] for d in dateien])
-    ori = next((d for d in dateien if d["sha"] in oris), None)
+    for d in dateien:
+        d["abgas"] = oneclick.abgas_datei(d["name"])
+    kandidaten = [d for d in dateien if not d["abgas"]]
+    ori = next((d for d in kandidaten if d["sha"] in oris), None)
     ori_grund = "archiv" if ori else None
     if ori is None:
-        ori = next((d for d in dateien if d["name"] == ori_name), None)
+        ori = next((d for d in kandidaten if d["name"] == ori_name), None)
         ori_grund = "name" if ori else None
-    if ori is None and len(dateien) >= 3:
+    if ori is None and len(dateien) >= 3 and kandidaten:
+        # "Mitte" der Gruppe: das File, das allen anderen am aehnlichsten ist (auch Abgas-Files zaehlen als Vergleich,
+        # koennen aber selbst kein Original sein)
         summen = sorted(((sum(aehnlichkeit(abdruck[d["id"]], abdruck[x["id"]]) for x in dateien if x is not d), n)
                          for n, d in enumerate(dateien)), reverse=True)
-        ori = dateien[summen[0][1]]
-        # eindeutig nur, wenn das "mittlere" File klar aehnlicher zu allen anderen ist als das zweitbeste
-        ori_grund = "mitte" if summen[0][0] - summen[1][0] >= 0.03 * (len(dateien) - 1) else "mitte-unsicher"
+        mitte = dateien[summen[0][1]]
+        if not mitte["abgas"]:
+            ori = mitte
+            # eindeutig nur, wenn das "mittlere" File klar aehnlicher zu allen anderen ist als das zweitbeste
+            ori_grund = "mitte" if summen[0][0] - summen[1][0] >= 0.03 * (len(dateien) - 1) else "mitte-unsicher"
     # Passt die Gruppe zu einem Original im Archiv?
     archiv = None
     if ori is None or ori["sha"] not in oris:
@@ -1237,7 +1244,7 @@ def _gruppe_auswerten(stapel: dict, gid: int):
                     archiv = (e["name"], a)
     namen_rolle = {n: k for k, n in rollen.items()}
     for d in dateien:
-        if d["bekannt"] and not (ori and d is ori):
+        if d["abgas"] or (d["bekannt"] and not (ori and d is ori)):
             d["vorschlag"] = "ignorieren"
         elif ori and d is ori:
             d["vorschlag"] = oneclick.ORIGINAL
@@ -1308,6 +1315,10 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
     ordner = EINGANG / sid
     lesen = lambda f: (ordner / f"{f}.bin").read_bytes()
     rolle = {f: rolle_lesen(rollen.get(f, "")) for f in dateien}
+    abgas = [dateien[f]["name"] for f, r in rolle.items() if r != "ignorieren" and oneclick.abgas_datei(dateien[f]["name"])]
+    if abgas:
+        raise Abgelehnt(f"{', '.join(abgas[:3])}: laut Dateiname mit Abschaltung der Abgasreinigung – solche Files werden "
+                        "nicht übernommen. Bitte auf „Ignorieren“ lassen.")
     offen = [dateien[f]["name"] for f, r in rolle.items() if not r]
     if offen:
         raise Abgelehnt(f"Bitte für jede Datei auswählen, was sie ist (oder „Ignorieren“): {', '.join(offen[:5])}")
@@ -1415,7 +1426,7 @@ def stapel_sichern(stapel: dict):
 def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -> list:
     """ZIP ins Archiv. Was sich nicht automatisch zuordnen laesst (oder alles, wenn alles_sortieren),
     landet unter Archiv -> Sortieren, wo der Admin Original / Stage 1 / ... selbst festlegt."""
-    meldungen, ok, ergaenzt, doppelt = [], 0, 0, 0
+    meldungen, ok, ergaenzt, doppelt, abgas = [], 0, 0, 0, 0
     zum_sortieren = []   # (Dateiname, Inhalt)
     with zipfile.ZipFile(stream) as z:
         gruppen = {}
@@ -1424,6 +1435,9 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
             if info.is_dir() or any(t.startswith(".") or t == "__MACOSX" for t in pfad.parts):
                 continue
             if not oneclick.ist_ecu_datei(pfad.name) or info.file_size > 32 * 1024 * 1024:
+                continue
+            if oneclick.abgas_datei(pfad.name):
+                abgas += 1
                 continue
             ordner = str(pfad.parent)
             schluessel = ordner if ordner not in ("", ".") else flache_gruppe(pfad.name)
@@ -1460,6 +1474,9 @@ def importiere_zip(stream, alles_sortieren: bool = False, quelle: str = "ZIP") -
                 meldungen += [x for x in archiv_meldungen(erg, schluessel) if "nichts geändert" not in x]
     with index_sperre:
         oneclick.baue_index()
+    if abgas:
+        meldungen.append(f"{abgas} Datei(en) mit Abschaltung der Abgasreinigung im Namen (DPF, AGR/EGR, AdBlue/SCR, NOx, "
+                         "Lambda, Kat …) wurden nicht übernommen.")
     if zum_sortieren:
         erg = eingang_anlegen(zum_sortieren, quelle)
         meldungen.insert(0, f"{erg['dateien']} Datei(en) in {erg['gruppen']} Gruppe(n) warten unter „Sortieren“ darauf, "
@@ -2343,16 +2360,18 @@ werden die Tuning-Files dort ergänzt.</p>{% endif %}
 Sind es <b>mehrere Autos</b>, einfach jedes Original als „Original“ markieren und benennen: Jedes Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist.</p>
 <div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
 {% for d in g.dateien %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
-{% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}</td>
+{% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}
+{% if d.abgas %}<br><span class="status s-ABGELEHNT">Abgasreinigung – wird nicht übernommen</span>{% endif %}</td>
 <td class="leise">{{ d.ecu }}<br>{{ d.software }}</td>
 <td>{% if d.abweichung is none %}{% if d.vorschlag == original %}<span class="status s-FREIGEGEBEN">Original?</span>{% else %}–{% endif %}{% else %}{{ d.abweichung|string|replace('.', ',') }} %{% endif %}</td>
-<td><div class="rollen" data-feld="rolle_{{ d.id }}">
+<td>{% if d.abgas %}<input type="hidden" name="rolle_{{ d.id }}" value="ignorieren"><span class="leise">Ignoriert</span>
+{% else %}<div class="rollen" data-feld="rolle_{{ d.id }}">
 <input type="hidden" name="rolle_{{ d.id }}" value="{{ d.vorschlag }}">
 <button type="button" class="chip ori" data-w="{{ original }}">Original</button>
 {% for key, titel in archiv_optionen.items() %}<button type="button" class="chip" data-w="{{ key }}">{{ titel }}</button>{% endfor %}
 <button type="button" class="chip weg" data-w="ignorieren">Ignorieren</button>
 <input type="text" class="ori-name" name="name_{{ d.id }}" placeholder="Name dieses Fahrzeugs"
- value="{{ g.name if d.vorschlag == original else d.name_vorschlag }}" autocomplete="off" list="archivnamen"></div></td>
+ value="{{ g.name if d.vorschlag == original else d.name_vorschlag }}" autocomplete="off" list="archivnamen"></div>{% endif %}</td>
 <td><select name="ziel_{{ d.id }}" class="ziel" title="In eine andere Gruppe verschieben">
 {% for g2 in s.gruppen %}<option value="{{ g2.id }}" {{ 'selected' if g2.id == g.id }}>{{ g2.id }}</option>{% endfor %}<option value="neu">neue Gruppe</option></select></td></tr>
 {% endfor %}</table></div>

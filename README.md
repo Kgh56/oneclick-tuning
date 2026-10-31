@@ -77,6 +77,9 @@ anhaken. Dateien, die der normale Import nicht zuordnen kann, landen ebenfalls d
   kombiniert wie „stage1_pops“). Dateien, die schon im Archiv sind, werden aufgeräumt. Der Rest bleibt mit Grund stehen
   („Original nicht sicher erkennbar“ / „Lösung nicht aus dem Dateinamen erkennbar“). Namen ohne Buchstaben (z. B.
   „1001.bin“) werden durch Steuergerät + Software ersetzt.
+- Files, deren Name eine Abschaltung der Abgasreinigung nennt (DPF, AGR/EGR, AdBlue/SCR, NOx, Lambda, Kat …), werden
+  nicht übernommen: Der ZIP-Import überspringt sie (mit Meldung), schon liegende stehen fest auf „Ignorieren“, und das
+  restliche Fahrzeug (Original, Stage 1 …) wird normal zugeordnet.
 - Fehler beim Übernehmen löschen nichts: Dateien bleiben unter „Sortieren“, bis sie übernommen oder verworfen werden.
   Dateien lassen sich in andere Gruppen verschieben und zum Prüfen herunterladen. Doppelte werden erkannt.
 

@@ -308,6 +308,12 @@ def kombi_schluessel(teile) -> str:
     return "+".join(k for k in reihenfolge if k in teile)
 
 
+def abgas_datei(name: str) -> bool:
+    """Nennt der Dateiname eine Abschaltung der Abgasreinigung (DPF, AGR/EGR, AdBlue/SCR, NOx, Lambda, Kat ...)?
+    Solche Files werden nicht ins Archiv uebernommen."""
+    return bool(GESPERRT.search(Path(name).stem.lower()))
+
+
 def loesung_aus_name(name: str):
     """Loesung(en), die der Dateiname eindeutig nennt: 'Golf_stage1_pops.bin' -> 'stage1+popsbangs', sonst None.
     Raet nicht: ohne Hinweis im Namen kommt None zurueck."""
