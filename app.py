@@ -1309,7 +1309,8 @@ def rolle_lesen(wert: str) -> str:
     return oneclick.kombi_schluessel(teile)
 
 
-def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: dict = None, index: bool = True) -> list:
+def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: dict = None, index: bool = True,
+                       zu: dict = None) -> list:
     """Rollen {Datei-ID: Formularwert} pruefen und ins Archiv uebernehmen.
     Mehrere Originale = mehrere Fahrzeuge: jedes Tuning-File kommt zum Original, dem es am aehnlichsten ist.
     Ein File kann mehrere Loesungen enthalten (z. B. Stage 1 + Pops & Bangs)."""
@@ -1338,7 +1339,11 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
     if ori_ids:
         abdruck = {f: block_abdruck(lesen(f)) for f in ori_ids + tuning}
         zuordnung = {o: [] for o in ori_ids}
+        zu = zu or {}
         for f in tuning:
+            if zu.get(f) in ori_ids:   # vom Admin festgelegt: "gehoert zu Original ..."
+                zuordnung[zu[f]].append(f)
+                continue
             bester = max(ori_ids, key=lambda o: aehnlichkeit(abdruck[f], abdruck[o]))
             if aehnlichkeit(abdruck[f], abdruck[bester]) < AEHNLICH:
                 raise Abgelehnt(f"{dateien[f]['name']} passt zu keinem der markierten Originale. "
@@ -1350,7 +1355,11 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
                 raise Abgelehnt(f"Bitte einen Namen für das Fahrzeug mit Original {dateien[o]['name']} eingeben.")
             if n in fahrzeuge:
                 raise Abgelehnt(f"Der Name „{n}“ ist zweimal vergeben. Jedes Fahrzeug braucht einen eigenen Namen.")
-            fahrzeuge[n] = (lesen(o), zuordnung[o])
+            inhalt = lesen(o)
+            frei = freier_archivname(n, inhalt)   # Name schon mit anderem Original belegt -> _2, _3 ...
+            while frei in fahrzeuge:
+                frei = freier_archivname(f"{frei}_x", inhalt)
+            fahrzeuge[frei] = (inhalt, zuordnung[o])
     elif tuning:   # Original liegt schon im Archiv (nur Tuning-Files in der Gruppe)
         n = sicherer_name(name or "")
         e = next((e for e in oneclick.lade_index()["eintraege"] if e["name"] == n), None)
@@ -1367,7 +1376,8 @@ def gruppe_uebernehmen(sid: str, gid: int, name: str, rollen: dict, namen_ori: d
             r, d = rolle[f], lesen(f)
             if r in mods:
                 raise Abgelehnt(f"„{namen[r]}“ ist bei „{n}“ zweimal ausgewählt ({dateien[f]['name']}). "
-                                "Gehören die Files zu verschiedenen Autos, jedes Original als „Original“ markieren.")
+                                "Gehören die Files zu verschiedenen Autos: jedes Original als „Original“ markieren und "
+                                "bei den Tuning-Files unter „gehört zu“ das richtige Original wählen.")
             if len(d) != len(ori):
                 raise Abgelehnt(f"{dateien[f]['name']}: andere Dateigröße als das Original.")
             if d == ori:
@@ -1700,8 +1710,9 @@ def sortieren_gruppe(sid, gid):
     if aktion == "uebernehmen":
         rollen = {k[6:]: v for k, v in request.form.items() if k.startswith("rolle_")}
         namen_ori = {k[5:]: v for k, v in request.form.items() if k.startswith("name_")}
+        zu = {k[3:]: v for k, v in request.form.items() if k.startswith("zu_") and v}
         try:
-            for m in gruppe_uebernehmen(sid, gid, request.form.get("name", ""), rollen, namen_ori):
+            for m in gruppe_uebernehmen(sid, gid, request.form.get("name", ""), rollen, namen_ori, zu=zu):
                 flash(m)
         except Abgelehnt as e:
             flash(f"Gruppe {gid}: {e}")
@@ -2389,7 +2400,8 @@ werden die Tuning-Files dort ergänzt.</p>{% endif %}
 <label class="feld">Name, wenn kein Original in der Gruppe ist (dann werden die Tuning-Files bei diesem Archiv-Eintrag ergänzt)</label>
 <input type="text" name="name" value="{{ g.name }}" list="archivnamen" autocomplete="off">
 <p class="hinweis" style="margin-top:-4px">Pro Datei auswählen, was sie ist – <b>auch mehreres</b> (z. B. Stage 1 + Pops &amp; Bangs in einem File).
-Sind es <b>mehrere Autos</b>, einfach jedes Original als „Original“ markieren und benennen: Jedes Tuning-File kommt automatisch zu dem Original, dem es am ähnlichsten ist.</p>
+Sind es <b>mehrere Autos</b>: jedes Original als „Original“ markieren und benennen. Bei den Tuning-Files erscheint dann
+„gehört zu“ – dort das richtige Original wählen (oder auf „automatisch“ lassen, dann nimmt die Seite das ähnlichste).</p>
 <div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
 {% for d in g.dateien if not d.abgas %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
 {% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}
@@ -2403,7 +2415,8 @@ Sind es <b>mehrere Autos</b>, einfach jedes Original als „Original“ markiere
 {% for key, titel in archiv_optionen.items() %}<button type="button" class="chip" data-w="{{ key }}">{{ titel }}</button>{% endfor %}
 <button type="button" class="chip weg" data-w="ignorieren">Ignorieren</button>
 <input type="text" class="ori-name" name="name_{{ d.id }}" placeholder="Name dieses Fahrzeugs"
- value="{{ g.name if d.vorschlag == original else d.name_vorschlag }}" autocomplete="off" list="archivnamen"></div>{% endif %}</td>
+ value="{{ g.name if d.vorschlag == original else d.name_vorschlag }}" autocomplete="off" list="archivnamen">
+<label class="zu-wahl">gehört zu <select name="zu_{{ d.id }}" class="zu" data-datei="{{ d.name }}"><option value="">automatisch (ähnlichstes Original)</option></select></label></div>{% endif %}</td>
 <td><select name="ziel_{{ d.id }}" class="ziel" title="In eine andere Gruppe verschieben">
 {% for g2 in s.gruppen %}<option value="{{ g2.id }}" {{ 'selected' if g2.id == g.id }}>{{ g2.id }}</option>{% endfor %}<option value="neu">neue Gruppe</option></select></td></tr>
 {% endfor %}</table></div>
@@ -2424,6 +2437,9 @@ background:rgba(255,255,255,.05);border:1px solid var(--rand2);transition:all .1
 .rollen .chip.weg.an{background:#48484a}
 .rollen .ori-name{display:none;margin:4px 0 0;flex-basis:100%;padding:8px 12px;font-size:14px}
 .rollen.ist-ori .ori-name{display:block}
+.rollen .zu-wahl{display:none;flex-basis:100%;margin-top:4px;font-size:13px;color:var(--leise);align-items:center;gap:8px}
+.rollen.zeige-zu .zu-wahl{display:flex}
+.rollen .zu-wahl select{flex:1;min-width:0;font-size:13px;padding:6px 8px}
 td:has(.rollen){white-space:normal}</style>
 <script>
 // Gruppe aendern = sofort verschieben
@@ -2444,9 +2460,30 @@ document.querySelectorAll('.rollen').forEach(function(box){
       werte=werte.filter(function(x){return x!=='{{ original }}'&&x!=='ignorieren';});
       var i=werte.indexOf(w); if(i>=0) werte.splice(i,1); else werte.push(w);
     }
-    feld.value=werte.join(','); malen();
+    feld.value=werte.join(','); malen(); zuAuffrischen(box.closest('form'));
   });});
   malen();
+});
+// "gehört zu": bei 2+ Originalen in einer Gruppe kann jedes Tuning-File seinem Original zugewiesen werden
+function zuAuffrischen(form){
+  var boxen=[].slice.call(form.querySelectorAll('.rollen'));
+  var oris=boxen.filter(function(b){return b.classList.contains('ist-ori');}).map(function(b){
+    var fid=b.dataset.feld.slice(6), n=b.querySelector('.ori-name');
+    return {fid:fid, name:(n&&n.value)||fid};});
+  boxen.forEach(function(b){
+    var feld=b.querySelector('input[type=hidden]'), sel=b.querySelector('select.zu');
+    if(!sel) return;
+    var tuning=feld.value && feld.value!=='{{ original }}' && feld.value!=='ignorieren';
+    b.classList.toggle('zeige-zu', tuning && oris.length>=2);
+    var alt=sel.value; sel.length=1;
+    oris.forEach(function(o){var op=document.createElement('option');op.value=o.fid;op.textContent=o.name;sel.appendChild(op);});
+    sel.value=oris.some(function(o){return o.fid===alt;})?alt:'';
+  });
+}
+document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(f){
+  if(!f.querySelector('.rollen')) return;
+  zuAuffrischen(f);
+  f.querySelectorAll('.ori-name').forEach(function(i){i.addEventListener('input',function(){zuAuffrischen(f);});});
 });
 </script>
 {% endblock %}""",

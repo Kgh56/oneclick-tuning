@@ -795,6 +795,7 @@ class SortierenTests(WebTests):
         text = senden(rollen, {"k1.bin": "Auto Eins", "k2.bin": "Auto Zwei"})
         self.assertIn("„Auto-Eins“ angelegt mit Stage 1, Stage 1 + Pops & Bangs", text)
         self.assertIn("„Auto-Zwei“ angelegt mit Stage 1", text)
+        self.assertNotIn("_2", text)
         self.assertEqual(A.alle_stapel(), [])
         self.assertTrue((oneclick.ARCHIV / "Auto-Eins" / "stage1+popsbangs.bin").exists())
         # Kunde: Kombi-File wird als eigene Loesung angeboten, Preis = Summe der Teile
@@ -880,6 +881,29 @@ class SortierenTests(WebTests):
         self.assertIn("1 Datei(en) mit Abschaltung der Abgasreinigung", html.unescape(a.get("/admin/archiv").text))
         self.zip_hochladen(a, {"x_egr.bin": self.tuning(seat, 7), "x_stage1.bin": self.tuning(seat, 8)})
         self.assertEqual([d["name"] for d in self.stapel()["dateien"]], ["x_stage1.bin"])
+
+    def test_zwei_originale_selbst_zuordnen_und_namenskonflikt(self):
+        """'gehört zu' ueberstimmt die automatische Zuordnung; belegter Name -> _2 statt Fehler."""
+        a = self.admin()
+        o1 = bytes(zufall(GROESSE, 101))
+        o2 = bytearray(o1)
+        for off in range(0x60000, 0x62000):
+            o2[off] ^= 0x5A
+        o2 = bytes(o2)
+        st_a, st_b = self.tuning(o1, 21), self.tuning(o2, 22)
+        A.eingang_anlegen([("a.bin", o1), ("b.bin", o2), ("a_st.bin", st_a), ("b_st.bin", st_b)], "zwei.zip")
+        s = self.stapel(); ids = {d["name"]: d["id"] for d in s["dateien"]}; gid = s["dateien"][0]["gruppe"]
+        self.assertEqual(len({d["gruppe"] for d in s["dateien"]}), 1)
+        # "gehört zu" absichtlich vertauscht -> so wird es gespeichert (Admin hat das letzte Wort)
+        text = html.unescape(a.post(f"/admin/sortieren/{s['id']}/{gid}", data={"csrf": a.csrf, "aktion": "uebernehmen", "name": "",
+            f"rolle_{ids['a.bin']}": "original", f"rolle_{ids['b.bin']}": "original",
+            f"rolle_{ids['a_st.bin']}": "stage1", f"rolle_{ids['b_st.bin']}": "stage1",
+            f"name_{ids['a.bin']}": "BMW", f"name_{ids['b.bin']}": "Wagen B",           # "BMW" gibt es schon (anderes Original)
+            f"zu_{ids['a_st.bin']}": ids["b.bin"], f"zu_{ids['b_st.bin']}": ids["a.bin"]}, follow_redirects=True).text)
+        self.assertIn("„BMW_2“ angelegt mit Stage 1", text)
+        self.assertIn("„Wagen-B“ angelegt mit Stage 1", text)
+        self.assertEqual((oneclick.ARCHIV / "BMW_2" / "stage1.bin").read_bytes(), st_b)
+        self.assertEqual((oneclick.ARCHIV / "BMW" / "ori.bin").read_bytes(), bytes(self.bmw))   # altes BMW unberuehrt
 
     def test_automatisch_und_rest_zum_sortieren(self):
         a = self.admin()
