@@ -19,7 +19,7 @@ button,input{font:inherit;color:inherit}
 input{user-select:text}
 
 /* ---------- Animierter Hintergrund ---------- */
-.aurora{position:fixed;inset:-20%;z-index:0;filter:blur(90px) saturate(140%);opacity:.75;pointer-events:none}
+.aurora{position:fixed;inset:-20%;z-index:0;filter:blur(90px) saturate(140%);opacity:.75;pointer-events:none;overflow:hidden}
 .aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen}
 .aurora i:nth-child(1){width:46vw;height:46vw;left:5%;top:0;background:radial-gradient(circle,#ff375f88,transparent 65%);animation:wandern1 22s ease-in-out infinite alternate}
 .aurora i:nth-child(2){width:50vw;height:50vw;right:0;top:10%;background:radial-gradient(circle,#0a84ff66,transparent 65%);animation:wandern2 26s ease-in-out infinite alternate}
@@ -181,9 +181,12 @@ select.feld option{background:#1c1c1e}
 #zahl-dialog{position:fixed;inset:0;z-index:48;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.6);
   backdrop-filter:blur(10px);opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
 #zahl-dialog.offen{opacity:1;visibility:visible}
-#zahl-dialog .karte{width:min(480px,100%);transform:scale(.95);transition:transform .35s var(--feder);animation:none}
+#zahl-dialog .karte{box-sizing:border-box;max-height:calc(100vh - 32px);overflow-y:auto;width:min(480px,100%);transform:scale(.95);transition:transform .35s var(--feder);animation:none}
 #zahl-dialog.offen .karte{transform:none}
 #zahl-dialog .betrag{font-size:34px;font-weight:700;letter-spacing:-.03em;margin:6px 0 4px}
+#zahl-dialog label span{min-width:0;overflow-wrap:anywhere}
+#zahl-dialog .knoepfe{flex-wrap:wrap}#zahl-dialog .knoepfe .btn{flex:1 1 auto;padding-left:18px;padding-right:18px}
+@media (max-width:520px){#zahl-dialog .karte{padding:20px;border-radius:20px}#zahl-dialog .betrag{font-size:28px}}
 #zahl-dialog label{display:flex;gap:12px;align-items:flex-start;margin-top:16px;font-size:13.5px;color:var(--leise);cursor:pointer;user-select:auto}
 #zahl-dialog input[type=checkbox]{flex:none;width:20px;height:20px;margin-top:1px;accent-color:#ff9f0a}
 .hilfe{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:99px;font-size:12.5px;font-weight:600;
@@ -309,10 +312,10 @@ select.feld option{background:#1c1c1e}
 .auftrag.neu{animation:rein-rechts .55s var(--feder) both,aufleuchten 2.4s .3s}
 @keyframes aufleuchten{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 2px var(--ok),0 0 40px rgba(48,209,88,.45)}}
 .a-kopf{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.a-datei{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a-datei{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .a-info{font-size:12.5px;color:var(--leise);margin-top:2px}
 .a-fuss{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap}
-.aktionen{display:flex;align-items:center;gap:6px;margin-left:auto}
+.aktionen{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
 .pille{flex:none;display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:600}
 .pille.WARTET{background:rgba(255,214,10,.12);color:var(--warn)}
 .pille.WARTET i{width:7px;height:7px;border-radius:50%;background:var(--warn);animation:blinken 1.4s ease-in-out infinite}
@@ -337,7 +340,7 @@ select.feld option{background:#1c1c1e}
 #konfetti{position:fixed;inset:0;z-index:60;pointer-events:none}
 
 /* Kleine Fenster: weniger Deko, damit alles passt (am Ende, damit diese Regeln gewinnen) */
-@media (max-width:980px){main{grid-template-columns:1fr;overflow:auto}.hero{flex-wrap:wrap}}
+@media (max-width:980px){main{grid-template-columns:minmax(0,1fr);overflow:auto}main>*{min-width:0}.hero{flex-wrap:wrap}}
 @media (max-width:640px){.stats{display:none}.marke{font-size:17px;gap:10px;line-height:1.2}.marke .logo{width:30px;height:30px}
   header{gap:12px}.verbindung{flex:none}}
 @media (max-height:860px){.schritte{display:none}}
@@ -345,6 +348,7 @@ select.feld option{background:#1c1c1e}
 /* Grosse Monitore: alles mitvergroessern, damit nichts verloren wirkt */
 @media (min-width:1800px) and (min-height:950px){.app{zoom:1.15;height:calc(100vh / 1.15)}}
 @media (min-width:2200px) and (min-height:1150px){.app{zoom:1.35;height:calc(100vh / 1.35)}}
+@media (min-width:2500px) and (min-height:1350px){.app{zoom:1.5;height:calc(100vh / 1.5)}}
 @media (min-width:3000px) and (min-height:1600px){.app{zoom:1.75;height:calc(100vh / 1.75)}}
 /* Handy / Tablet: normal scrollende Seite statt festem Fenster */
 @media (max-width:980px){
@@ -352,7 +356,7 @@ select.feld option{background:#1c1c1e}
   body{overflow-x:hidden;overflow-y:auto;user-select:auto}
   .app{height:auto;min-height:100vh}
   header,.hero{padding-left:16px;padding-right:16px}
-  main{grid-template-columns:1fr;overflow:visible;padding:14px 16px 12px;gap:16px;align-content:start}
+  main{grid-template-columns:minmax(0,1fr);overflow:visible;padding:14px 16px 12px;gap:16px;align-content:start}
   .links,.links>.karte{min-height:0;flex:none}
   .buehne{flex:none}
   .ansicht{position:absolute;top:0;left:0;right:0}
@@ -990,8 +994,9 @@ function listeMalen(hervorheben) {
     const el = document.createElement("div");
     el.className = "auftrag" + (a.id === hervorheben ? " neu" : "");
     el.style.animationDelay = (i * 0.04) + "s";
-    el.innerHTML = `<div class="a-kopf"><div style="min-width:0"><div class="a-datei"></div><div class="a-info"></div></div>
+    el.innerHTML = `<div class="a-kopf"><div class="a-datei"></div>
       <span class="pille ${a.zahlung === "offen" ? "WARTET" : a.status}">${a.status === "WARTET" || a.zahlung === "offen" ? "<i></i>" : ""}<span></span></span></div>
+      <div class="a-info"></div>
       <div class="a-fuss"><span class="leise" style="font-size:12.5px"></span><span class="aktionen"></span></div>`;
     el.querySelector(".a-datei").textContent = a.datei;
     el.querySelector(".a-info").textContent = (a.option_name || "–") + (a.fahrzeug ? " · " + a.fahrzeug : "") + " · " + datum(a.zeit);

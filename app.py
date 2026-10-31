@@ -2026,6 +2026,7 @@ TEMPLATES = {
 @media (min-width:1500px){:root{--breite:1280px}}
 @media (min-width:1900px){:root{--breite:1480px}}
 @media (min-width:2200px){html{zoom:1.3}}
+@media (min-width:2500px){html{zoom:1.45}}
 @media (min-width:3000px){html{zoom:1.6}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark}
 input[type=file]{font-family:inherit;font-size:12.5px;color:var(--leise)}
@@ -2122,7 +2123,7 @@ label.datei.pflicht{border-color:rgba(255,55,95,.55)}
 label.datei.gewaehlt{border-style:solid;border-color:var(--ok);background:rgba(48,209,88,.08)}
 label.datei input{font-size:12px;color:var(--leise);max-width:100%}
 footer{max-width:calc(var(--breite) + 32px);margin:0 auto;padding:10px 16px 40px;font-size:12.5px;color:#6e6e73}
-footer a{color:#6e6e73;margin-right:18px;text-decoration:none}footer a:hover{color:var(--text)}
+footer{display:flex;flex-wrap:wrap;gap:6px 18px}footer a{color:#6e6e73;text-decoration:none}footer a:hover{color:var(--text)}
 @media (max-width:600px){.karte{padding:20px;border-radius:18px}main{padding:22px 14px}h1{font-size:25px}.hero{padding:16px 0 20px}}
 /* Handy: Menue in einer Zeile (wischbar), Kacheln 2x2, Listen als Karten mit Beschriftung */
 @media (max-width:720px){
@@ -2141,6 +2142,9 @@ padding:8px 0;border-bottom:1px solid var(--rand);overflow-wrap:anywhere}
 .liste-tab td::before{content:attr(data-label);flex:none;color:var(--leise);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;text-align:left}
 .liste-tab td[data-label=""]::before{display:none}
 .liste-tab td .status,.liste-tab td .btn{flex:none;white-space:nowrap}
+.liste-tab td:has(.rollen){display:block;text-align:left}
+.liste-tab td:has(.rollen)::before{display:block;margin-bottom:8px}
+.rollen{max-width:none!important}
 .liste-tab td[data-label=""]{justify-content:flex-end;flex-wrap:wrap}
 .tabelle{overflow:visible}
 table:not(.liste-tab) th{white-space:normal;padding-left:0}
