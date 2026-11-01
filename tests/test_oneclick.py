@@ -44,6 +44,8 @@ class Basis(unittest.TestCase):
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
         A.EINGANG = d / "eingang"
         A.EIGENE = d / "eigene"
+        A.SICHERUNGEN = d / "sicherungen"
+        A.neuaufbau.update(laeuft=False, text="")
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
         self.telegram = []
@@ -315,6 +317,50 @@ class WebTests(Basis):
                                          "option": "stage1"}).status_code, 302)   # Kunde kommt nicht ran
         self.assertIn("nicht mehr da", a.post("/admin/eigenes-file/" + "0" * 32, data={"csrf": a.csrf},
                                               follow_redirects=True).text)
+
+    def test_ganzes_archiv_neu_sortieren_und_zurueckholen(self):
+        a = self.admin()
+        vorher = sorted(e["name"] for e in oneclick.lade_index()["eintraege"])
+        self.assertTrue(vorher)
+        dateien = sum(1 for p in oneclick.ARCHIV.rglob("*") if p.is_file())
+
+        def warten():
+            for _ in range(200):
+                if not A.neuaufbau["laeuft"]:
+                    return
+                time.sleep(0.05)
+
+        # ohne Bestaetigung passiert nichts
+        a.post("/admin/archiv/alles", data={"csrf": a.csrf, "aktion": "loeschen", "bestaetigung": "ja"})
+        warten()
+        self.assertEqual(sorted(e["name"] for e in oneclick.lade_index()["eintraege"]), vorher)
+
+        a.post("/admin/archiv/alles", data={"csrf": a.csrf, "aktion": "sortieren", "bestaetigung": "alles"})
+        warten()
+        self.assertEqual(oneclick.lade_index()["eintraege"], [])
+        stapel = A.alle_stapel()
+        namen = [d["name"] for s in stapel for d in s["dateien"]]
+        self.assertEqual(len(namen), dateien)
+        self.assertTrue(all("__" in n for n in namen))
+        self.assertIn("unter „Sortieren“", a.get("/admin/archiv").text)
+        sich = A.sicherungen()
+        self.assertEqual(len(sich), 1)
+
+        # Kunde bekommt jetzt nichts mehr, Admin holt die Sicherung zurueck
+        r = a.post(f"/admin/sicherung/{sich[0]['name']}", data={"csrf": a.csrf, "aktion": "zurueck"}, follow_redirects=True)
+        self.assertIn("zurückgeholt", r.text)
+        self.assertEqual(sorted(e["name"] for e in oneclick.lade_index()["eintraege"]), vorher)
+        self.assertEqual(A.sicherungen(), [])   # leeres Archiv wird nicht extra gesichert
+
+        # Alles loeschen + Sicherung loeschen
+        a.post("/admin/archiv/alles", data={"csrf": a.csrf, "aktion": "loeschen", "bestaetigung": "ALLES"})
+        warten()
+        self.assertEqual(oneclick.lade_index()["eintraege"], [])
+        name = A.sicherungen()[0]["name"]
+        a.post(f"/admin/sicherung/{name}", data={"csrf": a.csrf, "aktion": "loeschen"})
+        self.assertEqual(A.sicherungen(), [])
+        self.assertEqual(self.kunde.post("/admin/archiv/alles", data={"csrf": self.kunde.csrf, "aktion": "loeschen",
+                                                                      "bestaetigung": "ALLES"}).status_code, 302)
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")

@@ -48,6 +48,7 @@ BASE = Path(__file__).resolve().parent
 AUFTRAEGE = BASE / "auftraege"
 EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
 EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
+SICHERUNGEN = BASE / "sicherungen"   # Archiv-Stand vor "Alles löschen" / "Alles neu sortieren"
 BENUTZER_DATEI = BASE / "benutzer.json"
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
@@ -1652,6 +1653,9 @@ def eigenes_file_download(eid):
 @app.route("/admin/archiv")
 @admin_noetig
 def admin_archiv():
+    status = dict(neuaufbau)
+    if not neuaufbau["laeuft"]:
+        neuaufbau["text"] = ""   # Ergebnis nur einmal anzeigen
     eintraege = oneclick.lade_index()["eintraege"]
     zaehler = {}
     for e in eintraege:
@@ -1659,7 +1663,8 @@ def admin_archiv():
     doppelt = {n: [x for x in namen if x != n] for namen in zaehler.values() if len(namen) > 1 for n in namen}
     return render_template("archiv.html", eintraege=eintraege, doppelt=doppelt, preise=preise(),
                            zahlung=zahlung_aktiv(), euro=euro,
-                           eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen())
+                           eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen(),
+                           sicherungen=sicherungen(), neuaufbau=status)
 
 
 @app.route("/admin/loesungen", methods=["POST"])
@@ -1921,6 +1926,124 @@ def archiv_backup():
                 z.write(p, str(rel))
     return send_file(tmp, as_attachment=True,
                      download_name=f"tuning-archiv_{datetime.now():%Y-%m-%d}.zip")
+
+
+# ---------------------------------------------------------------------------
+# Admin: ganzes Archiv leeren oder komplett neu sortieren (mit Sicherung)
+# ---------------------------------------------------------------------------
+
+neuaufbau = {"laeuft": False, "text": ""}
+
+
+def sicherungen() -> list:
+    if not SICHERUNGEN.exists():
+        return []
+    liste = []
+    for p in sorted(SICHERUNGEN.iterdir(), reverse=True):
+        if p.is_dir() and re.fullmatch(r"archiv_\d{8}-\d{6}", p.name):
+            liste.append({"name": p.name, "fahrzeuge": sum(1 for x in p.iterdir() if x.is_dir()),
+                          "zeit": datetime.strptime(p.name[7:], "%Y%m%d-%H%M%S").strftime("%d.%m.%Y %H:%M")})
+    return liste
+
+
+def archiv_wegsichern() -> Path:
+    """Aktuelles Archiv in einen Sicherungsordner verschieben (sofort, ohne Kopie) und leer neu anlegen."""
+    SICHERUNGEN.mkdir(parents=True, exist_ok=True)
+    ziel = SICHERUNGEN / f"archiv_{datetime.now():%Y%m%d-%H%M%S}"
+    while ziel.exists():
+        time.sleep(1)
+        ziel = SICHERUNGEN / f"archiv_{datetime.now():%Y%m%d-%H%M%S}"
+    if oneclick.ARCHIV.exists():
+        oneclick.ARCHIV.replace(ziel)
+    else:
+        ziel.mkdir()
+    oneclick.ARCHIV.mkdir(parents=True, exist_ok=True)
+    oneclick.baue_index()
+    return ziel
+
+
+def zum_sortieren_aus(quelle: Path) -> int:
+    """Alle Files einer Sicherung als Stapel unter "Sortieren" ablegen (Fahrzeugname bleibt im Dateinamen).
+    Die Sicherung selbst bleibt unveraendert liegen."""
+    fahrzeuge = sorted(p for p in quelle.iterdir() if p.is_dir() and not p.name.startswith("."))
+    paket, anzahl, teil = [], 0, 1
+
+    def ablegen():
+        nonlocal paket, teil
+        if paket:
+            eingang_anlegen(paket, f"Archiv neu sortieren ({teil})")
+            paket, teil = [], teil + 1
+
+    for ordner in fahrzeuge:
+        dateien = sorted(p for p in ordner.iterdir() if p.is_file() and not p.name.startswith("."))
+        if len(paket) + len(dateien) > 2500:   # ein Fahrzeug nie auf zwei Stapel verteilen
+            ablegen()
+        paket += [(f"{ordner.name}__{d.name}", d.read_bytes) for d in dateien]
+        anzahl += len(dateien)
+    ablegen()
+    return anzahl
+
+
+def archiv_neu_aufbauen(aktion: str):
+    try:
+        with index_sperre:
+            ziel = archiv_wegsichern()
+        if aktion == "sortieren":
+            neuaufbau["text"] = "Files werden zum Sortieren vorbereitet …"
+            with eingang_sperre:
+                n = zum_sortieren_aus(ziel)
+            neuaufbau["text"] = (f"Fertig: Archiv geleert, {n} Files liegen unter „Sortieren“. "
+                                 f"Sicherung: {ziel.name}")
+        else:
+            neuaufbau["text"] = f"Fertig: Archiv geleert. Sicherung: {ziel.name}"
+    except Exception as e:   # Hintergrund darf nie sterben
+        neuaufbau["text"] = f"Fehler: {e}"
+        print(f"Neuaufbau-Fehler: {e}", file=sys.stderr)
+    finally:
+        neuaufbau["laeuft"] = False
+
+
+@app.route("/admin/archiv/alles", methods=["POST"])
+@admin_noetig
+def archiv_alles():
+    aktion = request.form.get("aktion")
+    if aktion not in ("sortieren", "loeschen"):
+        abort(400)
+    if request.form.get("bestaetigung", "").strip().upper() != "ALLES":
+        flash("Nicht ausgeführt – bitte zur Bestätigung ALLES eintippen.")
+        return redirect(url_for("admin_archiv") + "#alles")
+    if neuaufbau["laeuft"]:
+        flash("Läuft schon – bitte warten.")
+        return redirect(url_for("admin_archiv"))
+    neuaufbau.update(laeuft=True, text="Archiv wird gesichert …")
+    threading.Thread(target=archiv_neu_aufbauen, args=(aktion,), daemon=True).start()
+    time.sleep(1.5)   # kleine Archive sind dann meist schon fertig
+    return redirect(url_for("admin_archiv"))
+
+
+@app.route("/admin/sicherung/<name>", methods=["POST"])
+@admin_noetig
+def sicherung_aktion(name):
+    quelle = SICHERUNGEN / name
+    if not re.fullmatch(r"archiv_\d{8}-\d{6}", name) or not quelle.is_dir():
+        abort(404)
+    if neuaufbau["laeuft"]:
+        flash("Bitte warten, bis der Neuaufbau fertig ist.")
+    elif request.form.get("aktion") == "loeschen":
+        shutil.rmtree(quelle, ignore_errors=True)
+        flash("Sicherung gelöscht.")
+    elif request.form.get("aktion") == "zurueck":
+        with index_sperre:
+            if any(p.is_dir() for p in oneclick.ARCHIV.iterdir()):
+                archiv_wegsichern()   # aktuellen Stand nicht verlieren
+                time.sleep(1)
+            shutil.rmtree(oneclick.ARCHIV, ignore_errors=True)
+            quelle.replace(oneclick.ARCHIV)
+            oneclick.baue_index()
+        flash("Sicherung zurückgeholt – das Archiv ist wieder auf diesem Stand.")
+    else:
+        abort(400)
+    return redirect(url_for("admin_archiv") + "#alles")
 
 
 # ---------------------------------------------------------------------------
@@ -2407,6 +2530,9 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 {% endblock %}""",
 
 "archiv.html": """{% extends "basis.html" %}{% block inhalt %}
+{% if neuaufbau.laeuft or neuaufbau.text %}<div class="karte" style="border-color:rgba(10,132,255,.45)"><h2>{{ '⏳ Läuft …' if neuaufbau.laeuft else 'Archiv' }}</h2>
+<p style="margin:0">{{ neuaufbau.text }}</p>{% if neuaufbau.laeuft %}<p class="leise">Die Seite lädt sich alle 5 Sekunden neu.</p>
+<script>setTimeout(()=>location.reload(),5000)</script>{% endif %}</div>{% endif %}
 {% if zu_sortieren %}<div class="karte" style="border-color:rgba(255,214,10,.4)"><h2>{{ zu_sortieren }} Datei(en) warten aufs Sortieren</h2>
 <p class="leise" style="margin-top:-6px">Lege fest, was Original, Stage 1 usw. ist – dann kommen sie ins Archiv.</p>
 <a class="btn" href="{{ url_for('sortieren') }}">Jetzt sortieren</a></div>{% endif %}
@@ -2521,6 +2647,29 @@ async function kennt(){
   box.innerHTML=z.join('<br>'); box.style.display=z.length?'block':'none';
 }
 </script>
+<div class="karte" id="alles" style="border-color:rgba(255,69,58,.4)"><h2>Ganzes Archiv</h2>
+<p class="leise" style="margin-top:-6px">Vorher wird automatisch eine Sicherung angelegt – du kannst sie unten jederzeit zurückholen.</p>
+<form method="post" action="{{ url_for('archiv_alles') }}" onsubmit="return confirm(this.aktion.value==='sortieren' ? 'Wirklich ALLE Fahrzeuge aus dem Archiv nehmen und zum Sortieren legen?' : 'Wirklich das GANZE Archiv leeren?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;cursor:pointer"><input type="radio" name="aktion" value="sortieren" checked style="margin-top:4px">
+<span><b>Alles neu sortieren</b><br><span class="leise" style="font-size:13px">Archiv wird geleert, alle Files kommen unter „Sortieren“ – nichts neu hochladen.
+Der Fahrzeugname bleibt im Dateinamen, damit die automatische Zuordnung hilft.</span></span></label>
+<label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;cursor:pointer"><input type="radio" name="aktion" value="loeschen" style="margin-top:4px">
+<span><b>Alles löschen</b><br><span class="leise" style="font-size:13px">Archiv wird komplett geleert (die Sicherung bleibt).</span></span></label>
+<label class="feld">Zur Bestätigung <b>ALLES</b> eintippen</label>
+<input type="text" name="bestaetigung" autocomplete="off" style="max-width:220px">
+<button class="btn" style="background:linear-gradient(135deg,#ff453a,#ff9f0a)"{{ ' disabled' if neuaufbau.laeuft }}>Ausführen</button>
+</form>
+{% if sicherungen %}<h3 style="margin-top:22px">Sicherungen</h3>
+<table class="liste-tab"><tr><th>Stand</th><th>Fahrzeuge</th><th></th></tr>
+{% for s in sicherungen %}<tr><td>{{ s.zeit }}</td><td>{{ s.fahrzeuge }}</td><td style="white-space:nowrap">
+<form method="post" action="{{ url_for('sicherung_aktion', name=s.name) }}" class="inline" onsubmit="return confirm('Archiv auf den Stand vom {{ s.zeit }} zurücksetzen? Der aktuelle Stand wird vorher gesichert.')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="zurueck"><button class="btn grau">Zurückholen</button></form>
+<form method="post" action="{{ url_for('sicherung_aktion', name=s.name) }}" class="inline" onsubmit="return confirm('Sicherung vom {{ s.zeit }} endgültig löschen?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="loeschen"><button class="btn grau">Löschen</button></form>
+</td></tr>{% endfor %}</table>
+<p class="leise" style="font-size:13px">Sicherungen brauchen Speicherplatz auf dem Server. Wenn alles neu sortiert ist und passt, kannst du alte löschen.</p>{% endif %}
+</div>
 {% endblock %}""",
 
 "eigenes.html": """{% extends "basis.html" %}{% block inhalt %}
