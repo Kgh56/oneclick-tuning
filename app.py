@@ -2246,7 +2246,8 @@ TEMPLATES = {
 @media (min-width:2200px){html{zoom:1.3}}
 @media (min-width:2500px){html{zoom:1.45}}
 @media (min-width:3000px){html{zoom:1.6}}
-*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark;overflow-x:hidden;overscroll-behavior-x:none}
+body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100vw}
 input[type=file]{font-family:inherit;font-size:12.5px;color:var(--leise)}
 input[type=file]::file-selector-button{font:inherit;font-weight:600;color:var(--text);background:rgba(255,255,255,.1);
 border:1px solid var(--rand2);border-radius:980px;padding:6px 14px;margin-right:10px;cursor:pointer;transition:background .2s}
@@ -2387,7 +2388,8 @@ background-image:radial-gradient(1100px 600px at 12% -12%,rgba(0,229,255,.16),tr
 radial-gradient(900px 600px at 100% 0%,rgba(255,43,214,.13),transparent 60%),
 radial-gradient(900px 700px at 50% 120%,rgba(124,92,255,.14),transparent 60%)}
 /* Raster-Boden + Scanlines */
-body::before{content:"";position:fixed;left:-50%;right:-50%;bottom:-10vh;height:60vh;z-index:-1;pointer-events:none;
+.deko{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;contain:strict}
+.deko .boden{position:absolute;left:-50%;right:-50%;bottom:-10vh;height:60vh;
 background-image:linear-gradient(rgba(0,229,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.22) 1px,transparent 1px);
 background-size:64px 64px;transform:perspective(420px) rotateX(62deg);transform-origin:50% 100%;
 -webkit-mask-image:linear-gradient(to top,#000 0%,transparent 85%);mask-image:linear-gradient(to top,#000 0%,transparent 85%);
@@ -2490,8 +2492,8 @@ main>*{animation:neo-rein .6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes neo-rein{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 @media (max-width:720px){.karte{padding:20px;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
 h1{font-size:21px}.liste-tab tr{border-radius:0;border-color:var(--rand);background:rgba(0,10,22,.55)}
-.liste-tab td::before{font-family:var(--mono);color:var(--neon);opacity:.75}body::before{height:40vh}}
-@media (prefers-reduced-motion:reduce){body::before,.logo::before,.drop::before{animation:none}}
+.liste-tab td::before{font-family:var(--mono);color:var(--neon);opacity:.75}.deko .boden{height:40vh}}
+@media (prefers-reduced-motion:reduce){.deko .boden,.logo::before,.drop::before{animation:none}}
 .zahl{font-family:"Chakra Petch",sans-serif;font-weight:700;font-size:clamp(30px,3vw,42px);white-space:nowrap}
 @media (max-width:520px){.btn{letter-spacing:.08em;padding:12px 18px}}
 td a,p a,.hinweis a{color:var(--text);text-decoration-color:rgba(0,229,255,.5);text-underline-offset:3px}
@@ -2563,13 +2565,14 @@ background-position:0 0,0 0,0 100%,0 0,100% 0;border-color:transparent;animation
 .logo span{animation:logo-flacker 7s steps(1) infinite}
 @keyframes logo-flacker{0%,96%,100%{opacity:1;transform:none}97%{opacity:.6;transform:translateX(2px) skewX(-8deg)}98%{opacity:1;transform:translateX(-2px)}}
 /* Horizont-Leuchten unten */
-html::before{content:"";position:fixed;left:0;right:0;bottom:-20vh;height:40vh;z-index:-1;pointer-events:none;
+.deko .horizont{position:absolute;left:0;right:0;bottom:-20vh;height:40vh;
 background:radial-gradient(60% 50% at 50% 100%,rgba(255,43,214,.22),transparent 70%);animation:horizont 6s ease-in-out infinite}
 @keyframes horizont{50%{opacity:.55;transform:scaleX(1.15)}}
 @media (hover:none),(max-width:720px){ #neo-licht{display:none}.btn::after{animation-duration:6s}}
-@media (prefers-reduced-motion:reduce){.karte::after,.btn::after,.s-FREIGEGEBEN::after,html::before{display:none}
+@media (prefers-reduced-motion:reduce){.karte::after,.btn::after,.s-FREIGEGEBEN::after,.deko .horizont{display:none}
 .karte.warte{opacity:1;transform:none;filter:none}*{animation:none!important}}
 </style></head><body>
+<div class="deko" aria-hidden="true"><i class="boden"></i><i class="horizont"></i></div>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>

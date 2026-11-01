@@ -514,6 +514,12 @@ select.feld option{background:#06101f}
 .stat b,.gesamt b,#zahl-dialog .betrag{font-family:"Chakra Petch",sans-serif;font-weight:700;letter-spacing:.02em}
 .knoepfe{flex-wrap:wrap}.btn{white-space:nowrap}
 @media (max-width:520px){.btn{letter-spacing:.08em;padding:12px 18px;font-size:11.5px}.knoepfe .btn{flex:1 1 auto}}
+/* Handy: nur hoch und runter scrollen, nie seitlich */
+.deko{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;contain:strict}
+html{overflow-x:hidden;overscroll-behavior-x:none}
+body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100vw}
+.buehne{overflow-x:clip}
+#toasts{width:min(340px,calc(100vw - 36px))}
 @media (max-width:420px){#intro .logo-gross{font-size:22px;letter-spacing:.04em}.fuss{letter-spacing:.03em}.fuss span{flex-wrap:wrap}}
 
 /* ===================== NEO: Animationen & Effekte ===================== */
@@ -577,18 +583,18 @@ body.maus #neo-licht{opacity:1}
 .feld:focus,.suche input:focus{animation:fokus-puls 1.8s ease-in-out infinite}
 @keyframes fokus-puls{50%{box-shadow:inset 0 0 0 1px var(--a1),inset 0 0 34px rgba(0,229,255,.32)}}
 /* Horizont-Leuchten */
-.app::before{content:"";position:fixed;left:0;right:0;bottom:-22vh;height:44vh;z-index:-1;pointer-events:none;
+.deko .horizont{position:absolute;left:0;right:0;bottom:-22vh;height:44vh;pointer-events:none;
   background:radial-gradient(60% 50% at 50% 100%,rgba(255,43,214,.22),transparent 70%);animation:horizont 6s ease-in-out infinite}
 @keyframes horizont{50%{opacity:.5;transform:scaleX(1.15)}}
 .entschluesseln::after{content:"_";color:var(--a2);-webkit-text-fill-color:var(--a2);animation:blinken .6s steps(1) infinite}
 @media (hover:none),(max-width:980px){#neo-licht{display:none}}
-@media (prefers-reduced-motion:reduce){.zonen-scan,.scanstrahl,.app::before,#neo-licht{display:none}}
+@media (prefers-reduced-motion:reduce){.zonen-scan,.scanstrahl,.deko .horizont,#neo-licht{display:none}}
 </style>
 </head>
 <body>
-<div class="aurora"><i></i><i></i><i></i></div>
+<div class="deko" aria-hidden="true"><div class="aurora"><i></i><i></i><i></i></div>
 <canvas id="netz"></canvas>
-<div class="raster"></div>
+<div class="raster"></div><i class="horizont"></i></div>
 <div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
 <div id="zahl-dialog"><div class="karte">
   <h2>Jetzt bezahlen</h2>
