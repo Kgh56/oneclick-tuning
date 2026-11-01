@@ -1510,7 +1510,7 @@ init();
   let aktiv = null;
   document.addEventListener("pointermove", e => {
     const k = e.target.closest(".loesung,.stat,.schritt-karte");
-    if (aktiv && aktiv !== k) { aktiv.style.transform = ""; aktiv.classList.remove("kippt"); aktiv = null; }
+    if (aktiv && aktiv !== k) { aktiv.style.transform = "none"; aktiv.classList.remove("kippt"); aktiv = null; }
     if (!k) return; aktiv = k; k.classList.add("kippt"); k.style.animation = "none"; k.style.opacity = "1";
     const r = k.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
     k.style.transform = `perspective(600px) rotateX(${-py * 10}deg) rotateY(${px * 12}deg) translateZ(4px)`;

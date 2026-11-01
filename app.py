@@ -2625,10 +2625,10 @@ document.querySelectorAll('table').forEach(function(t){
   });
   // Zahlen hochzaehlen
   document.querySelectorAll('.zahl').forEach(function(el){
-    var txt=el.textContent.trim(), m=txt.match(/^([\d.]+)(,(\d+))?(.*)$/); if(!m) return;
-    var ganz=parseInt(m[1].replace(/\./g,''),10), nk=m[3]||'', ziel=ganz+(nk?parseInt(nk,10)/Math.pow(10,nk.length):0), rest=m[4];
+    var txt=el.textContent.trim(), m=txt.match(/^([\\d.]+)(,(\\d+))?(.*)$/); if(!m) return;
+    var ganz=parseInt(m[1].replace(/\\./g,''),10), nk=m[3]||'', ziel=ganz+(nk?parseInt(nk,10)/Math.pow(10,nk.length):0), rest=m[4];
     if(!(ziel>0)) return; var t0=null, dauer=1200;
-    function fmt(v){var s=v.toFixed(nk.length).split('.');s[0]=s[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');return s.join(',')+rest;}
+    function fmt(v){var s=v.toFixed(nk.length).split('.');s[0]=s[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');return s.join(',')+rest;}
     function lauf(t){if(!t0)t0=t;var p=Math.min(1,(t-t0)/dauer),e=1-Math.pow(1-p,4);el.textContent=fmt(ziel*e);if(p<1)requestAnimationFrame(lauf);}
     el.textContent=fmt(0); setTimeout(function(){requestAnimationFrame(lauf)},250);
   });
