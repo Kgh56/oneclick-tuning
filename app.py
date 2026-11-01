@@ -2496,6 +2496,79 @@ h1{font-size:21px}.liste-tab tr{border-radius:0;border-color:var(--rand);backgro
 @media (max-width:520px){.btn{letter-spacing:.08em;padding:12px 18px}}
 td a,p a,.hinweis a{color:var(--text);text-decoration-color:rgba(0,229,255,.5);text-underline-offset:3px}
 td a:hover,p a:hover{color:var(--neon);text-shadow:0 0 10px rgba(0,229,255,.5)}
+
+/* ===================== NEO: Animationen & Effekte ===================== */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:vt-raus .28s cubic-bezier(.4,0,1,1) both}
+::view-transition-new(root){animation:vt-rein .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes vt-raus{to{opacity:0;filter:blur(6px);transform:scale(.985)}}
+@keyframes vt-rein{from{opacity:0;filter:blur(8px);transform:scale(1.015)}}
+/* Lichtschein, der der Maus folgt */
+#neo-licht{position:fixed;left:0;top:0;width:520px;height:520px;margin:-260px 0 0 -260px;z-index:-1;pointer-events:none;border-radius:50%;
+background:radial-gradient(circle,rgba(0,229,255,.13),rgba(124,92,255,.06) 40%,transparent 68%);opacity:0;transition:opacity .6s;will-change:transform}
+body.maus #neo-licht{opacity:1}
+/* Scan-Strahl laeuft beim Erscheinen einmal ueber jede Karte */
+.karte::after{content:"";position:absolute;left:0;right:0;top:-80px;height:80px;pointer-events:none;
+background:linear-gradient(180deg,transparent,rgba(0,229,255,.16) 70%,rgba(0,229,255,.55) 98%,transparent);opacity:0}
+.karte.scan::after{animation:scan-durch 1.3s cubic-bezier(.3,.6,.3,1) .15s 1 both}
+@keyframes scan-durch{0%{opacity:1;transform:translateY(0)}85%{opacity:1}100%{opacity:0;transform:translateY(calc(var(--h,600px) + 120px))}}
+/* Karten erscheinen beim Scrollen */
+.karte.warte{opacity:0;transform:translateY(34px) scale(.985);filter:blur(6px);animation:none}
+.karte.sicht{opacity:1;transform:none;filter:none;transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1),filter .7s}
+/* Kacheln kippen mit der Maus */
+.raster .karte{transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .3s;transform-style:preserve-3d;will-change:transform}
+.raster .karte:hover{border-color:var(--rand2)}
+/* Knoepfe: Glanz + Klick-Welle + Glitch beim Hover */
+.btn{position:relative;overflow:hidden}
+.btn::after{content:"";position:absolute;top:0;bottom:0;left:-70%;width:45%;transform:skewX(-22deg);pointer-events:none;
+background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:glanz-lauf 4.5s ease-in-out infinite}
+.btn.grau::after{background:linear-gradient(90deg,transparent,rgba(0,229,255,.35),transparent)}
+@keyframes glanz-lauf{0%,70%{left:-70%}100%{left:140%}}
+.btn:hover{animation:btn-glitch .35s steps(2) 1}
+@keyframes btn-glitch{0%{text-shadow:2px 0 #ff2bd6,-2px 0 #00e5ff}50%{text-shadow:-2px 0 #ff2bd6,2px 0 #00e5ff}100%{text-shadow:none}}
+.welle{position:absolute;border-radius:50%;background:rgba(255,255,255,.5);transform:scale(0);pointer-events:none;animation:welle .65s ease-out forwards}
+@keyframes welle{to{transform:scale(4);opacity:0}}
+.btn.laedt{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.18) 0 10px,transparent 10px 20px),var(--verlauf);background-size:28px 28px,200% 100%;animation:laden-streifen .6s linear infinite}
+@keyframes laden-streifen{to{background-position:28px 0,0 0}}
+/* Ueberschriften: Glitch beim Hover, Cursor-Strich beim Entschluesseln */
+h1:hover{animation:glitch .45s steps(3) 1}
+@keyframes glitch{0%{transform:translate(0);filter:drop-shadow(2px 0 #ff2bd6) drop-shadow(-2px 0 #00e5ff)}
+33%{transform:translate(-2px,1px) skewX(-4deg)}66%{transform:translate(2px,-1px) skewX(3deg);filter:drop-shadow(-2px 0 #ff2bd6) drop-shadow(2px 0 #00e5ff)}100%{transform:none;filter:none}}
+.entschluesseln::after{content:"_";margin-left:2px;color:var(--neon2);animation:blink .6s steps(1) infinite}
+/* Status-Pillen leben */
+.s-WARTET{animation:warte-puls 2.2s ease-in-out infinite}
+@keyframes warte-puls{50%{background:rgba(255,225,77,.24);text-shadow:0 0 16px rgba(255,225,77,.9)}}
+.s-FREIGEGEBEN{position:relative;overflow:hidden}
+.s-FREIGEGEBEN::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(57,255,136,.35),transparent);transform:translateX(-100%);animation:pille-glanz 3.5s ease-in-out infinite}
+@keyframes pille-glanz{60%,100%{transform:translateX(100%)}}
+/* Tabellenzeilen kommen nacheinander */
+.liste-tab tr.rein{animation:zeile-rein .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes zeile-rein{from{opacity:0;transform:translateX(-14px)}}
+.liste-tab tr:not(:first-child){position:relative}
+.liste-tab tr:not(:first-child):hover{box-shadow:inset 3px 0 0 var(--neon)}
+/* Eingaben: Fokus pulsiert */
+input:focus,textarea:focus,select:focus{animation:fokus-puls 1.8s ease-in-out infinite}
+@keyframes fokus-puls{50%{box-shadow:0 0 0 1px var(--neon),0 0 34px rgba(0,229,255,.45)}}
+/* Upload-Feld: laufender Rand */
+.drop{background-image:repeating-linear-gradient(45deg,rgba(0,229,255,.025) 0 12px,transparent 12px 24px),
+linear-gradient(90deg,var(--neon) 50%,transparent 0),linear-gradient(90deg,var(--neon) 50%,transparent 0),
+linear-gradient(0deg,var(--neon) 50%,transparent 0),linear-gradient(0deg,var(--neon) 50%,transparent 0);
+background-repeat:repeat,repeat-x,repeat-x,repeat-y,repeat-y;background-size:auto,16px 1px,16px 1px,1px 16px,1px 16px;
+background-position:0 0,0 0,0 100%,0 0,100% 0;border-color:transparent;animation:ameisen 1.2s linear infinite}
+@keyframes ameisen{to{background-position:0 0,16px 0,-16px 100%,0 -16px,100% 16px}}
+/* Meldungen gleiten rein */
+.meldung{animation:meldung-rein .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes meldung-rein{from{opacity:0;transform:translateX(-24px);clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+/* Logo-Glitch ab und zu */
+.logo span{animation:logo-flacker 7s steps(1) infinite}
+@keyframes logo-flacker{0%,96%,100%{opacity:1;transform:none}97%{opacity:.6;transform:translateX(2px) skewX(-8deg)}98%{opacity:1;transform:translateX(-2px)}}
+/* Horizont-Leuchten unten */
+html::before{content:"";position:fixed;left:0;right:0;bottom:-20vh;height:40vh;z-index:-1;pointer-events:none;
+background:radial-gradient(60% 50% at 50% 100%,rgba(255,43,214,.22),transparent 70%);animation:horizont 6s ease-in-out infinite}
+@keyframes horizont{50%{opacity:.55;transform:scaleX(1.15)}}
+@media (hover:none),(max-width:720px){ #neo-licht{display:none}.btn::after{animation-duration:6s}}
+@media (prefers-reduced-motion:reduce){.karte::after,.btn::after,.s-FREIGEGEBEN::after,html::before{display:none}
+.karte.warte{opacity:1;transform:none;filter:none}*{animation:none!important}}
 </style></head><body>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
@@ -2519,6 +2592,66 @@ document.querySelectorAll('table').forEach(function(t){
   for(var r=1;r<t.rows.length;r++) for(var c=0;c<t.rows[r].cells.length;c++)
     t.rows[r].cells[c].setAttribute('data-label',(kopf.cells[c]||{}).textContent||'');
 });
+
+// ===================== NEO: Animationen =====================
+(function(){
+  var ruhig=matchMedia('(prefers-reduced-motion: reduce)').matches, maus=matchMedia('(hover:hover) and (pointer:fine)').matches;
+  if(ruhig) return;
+  var karten=[].slice.call(document.querySelectorAll('main .karte'));
+  // Scan-Strahl + Erscheinen beim Scrollen
+  var io='IntersectionObserver' in window ? new IntersectionObserver(function(es){es.forEach(function(e){
+    if(!e.isIntersecting) return; var k=e.target; io.unobserve(k);
+    k.style.setProperty('--h',k.offsetHeight+'px'); k.classList.remove('warte'); k.classList.add('sicht','scan');
+  })},{threshold:.08}) : null;
+  karten.forEach(function(k,i){
+    var r=k.getBoundingClientRect();
+    if(io && r.top>innerHeight){k.classList.add('warte'); io.observe(k);}
+    else {k.style.setProperty('--h',k.offsetHeight+'px'); setTimeout(function(){k.classList.add('scan')},i*90);}
+  });
+  // Tabellenzeilen nacheinander
+  document.querySelectorAll('.liste-tab').forEach(function(t){
+    for(var r=1;r<t.rows.length && r<40;r++){t.rows[r].classList.add('rein');t.rows[r].style.animationDelay=(0.15+r*0.045)+'s';}
+  });
+  // Ueberschriften entschluesseln (nur reiner Text)
+  var Z='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&<>/*+=';
+  document.querySelectorAll('main h1, main h2').forEach(function(el,idx){
+    if(el.children.length||!el.textContent.trim()||el.textContent.length>60) return;
+    var ziel=el.textContent, n=0, schritt=Math.max(1,ziel.length/16);
+    el.classList.add('entschluesseln');
+    setTimeout(function(){var t=setInterval(function(){
+      var s='';for(var i=0;i<ziel.length;i++) s+=(i<n||ziel[i]===' ')?ziel[i]:Z[Math.random()*Z.length|0];
+      el.textContent=s; n+=schritt; if(n>=ziel.length){clearInterval(t);el.textContent=ziel;el.classList.remove('entschluesseln');}
+    },30)},120+idx*110);
+  });
+  // Zahlen hochzaehlen
+  document.querySelectorAll('.zahl').forEach(function(el){
+    var txt=el.textContent.trim(), m=txt.match(/^([\d.]+)(,(\d+))?(.*)$/); if(!m) return;
+    var ganz=parseInt(m[1].replace(/\./g,''),10), nk=m[3]||'', ziel=ganz+(nk?parseInt(nk,10)/Math.pow(10,nk.length):0), rest=m[4];
+    if(!(ziel>0)) return; var t0=null, dauer=1200;
+    function fmt(v){var s=v.toFixed(nk.length).split('.');s[0]=s[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');return s.join(',')+rest;}
+    function lauf(t){if(!t0)t0=t;var p=Math.min(1,(t-t0)/dauer),e=1-Math.pow(1-p,4);el.textContent=fmt(ziel*e);if(p<1)requestAnimationFrame(lauf);}
+    el.textContent=fmt(0); setTimeout(function(){requestAnimationFrame(lauf)},250);
+  });
+  // Klick-Welle auf Knoepfen + Lade-Streifen beim Absenden
+  document.addEventListener('pointerdown',function(e){
+    var b=e.target.closest('.btn'); if(!b) return; var r=b.getBoundingClientRect(), w=document.createElement('span'), d=Math.max(r.width,r.height);
+    w.className='welle'; w.style.cssText='width:'+d+'px;height:'+d+'px;left:'+(e.clientX-r.left-d/2)+'px;top:'+(e.clientY-r.top-d/2)+'px';
+    b.appendChild(w); setTimeout(function(){w.remove()},700);
+  });
+  document.addEventListener('submit',function(e){var b=e.target.querySelector('button.btn:not(.grau)');if(b)b.classList.add('laedt');});
+  if(!maus) return;
+  // Lichtschein folgt der Maus (weich nachgezogen)
+  var licht=document.createElement('div'); licht.id='neo-licht'; document.body.appendChild(licht);
+  var zx=innerWidth/2, zy=innerHeight/2, x=zx, y=zy;
+  addEventListener('pointermove',function(e){zx=e.clientX;zy=e.clientY;document.body.classList.add('maus');},{passive:true});
+  (function tick(){x+=(zx-x)*.12;y+=(zy-y)*.12;licht.style.transform='translate3d('+x+'px,'+y+'px,0)';requestAnimationFrame(tick);})();
+  // Kacheln kippen
+  document.querySelectorAll('.raster .karte').forEach(function(k){
+    k.addEventListener('pointermove',function(e){var r=k.getBoundingClientRect(),px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
+      k.style.transform='perspective(700px) rotateX('+(-py*9)+'deg) rotateY('+(px*11)+'deg) translateZ(6px)';});
+    k.addEventListener('pointerleave',function(){k.style.transform='';});
+  });
+})();
 </script>
 </body></html>""",
 
