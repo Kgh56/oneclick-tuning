@@ -1700,19 +1700,30 @@ def loesungen_verwalten():
     return redirect(url_for("admin_archiv"))
 
 
+def auto_name(ori: bytes, dateiname: str) -> str:
+    """Archivname ohne Eingabe: ECU + Software-/Teilenummer, sonst der Dateiname."""
+    info = oneclick.erkenne(ori)
+    teile = info["ecu"][:1] + (info["bosch_sw"] + info["vag_teilenr"])[:1]
+    if not teile:
+        stamm = Path(dateiname or "").stem
+        for muster in [oneclick.MUSTER_ORI, re.compile(r"orginal|serie|stock")]:
+            stamm = muster.sub(" ", stamm.lower()) if muster.search(stamm.lower()) else stamm
+        teile = [stamm]
+    return sicherer_name("_".join(teile))
+
+
 @app.route("/admin/archiv/neu", methods=["POST"])
 @admin_noetig
 def archiv_neu():
     """Ein Fahrzeug ohne ZIP anlegen, oder einem vorhandenen weitere Optionen hinzufuegen."""
     eingabe = request.form.get("name", "").strip()
     datei = request.files.get("ori")
-    if not eingabe:
-        flash("Bitte einen Namen für das Fahrzeug eingeben.")
-        return redirect(url_for("admin_archiv"))
     if not datei or not datei.filename:
         flash("Bitte das Original auswählen.")
         return redirect(url_for("admin_archiv"))
     ori = datei.read()
+    if not eingabe:   # Name ist optional: vorhandenes Fahrzeug weiter nutzen oder aus ECU/Software bilden
+        eingabe = archiv_kennt()[0].get(sha(ori)) or freier_archivname(auto_name(ori, datei.filename), ori)
     namen = option_namen()
     mods = {opt: request.files[opt].read() for opt in oneclick.optionen()
             if request.files.get(opt) and request.files[opt].filename}
@@ -2540,7 +2551,8 @@ setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j
 <p class="leise">Je mehr Original/Tuning-Paare im Archiv liegen, desto mehr Kunden bekommen sofort einen Treffer.</p>
 <form method="post" action="{{ url_for('archiv_neu') }}" enctype="multipart/form-data" id="nf">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
-<label class="feld">Name (z. B. Golf7_2.0TDI_03L906018JL). Einen vorhandenen Namen wählen, um dort weitere Optionen hinzuzufügen.</label>
+<label class="feld">Name <span class="leise">(freiwillig)</span> – leer lassen, dann wird er aus Steuergerät und Softwarenummer gebildet (z. B. EDC17C46_03L906018JL).
+Ist das Original schon im Archiv, wird automatisch dort ergänzt.</label>
 <input type="text" name="name" list="namen" autocomplete="off">
 <datalist id="namen">{% for e in eintraege %}<option value="{{ e.name }}">{% endfor %}</datalist>
 <div class="dateien">

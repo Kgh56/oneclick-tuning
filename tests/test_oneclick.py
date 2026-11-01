@@ -605,6 +605,23 @@ class WebTests(Basis):
         r = a.post("/admin/archiv/neu", data=daten, content_type="multipart/form-data", follow_redirects=True)
         return r.text
 
+    def test_fahrzeug_ohne_namen(self):
+        a = self.admin()
+        neu = zufall(GROESSE, 12)
+        st1 = bytearray(neu); st1[0x6000:0x6008] = bytes(8)
+        daten = {"csrf": a.csrf, "name": "", "ori": (io.BytesIO(bytes(neu)), "Passat_ORI.bin"),
+                 "stage1": (io.BytesIO(bytes(st1)), "s.bin")}
+        a.post("/admin/archiv/neu", data=daten, content_type="multipart/form-data")
+        namen = {e["name"]: e for e in oneclick.lade_index()["eintraege"]}
+        self.assertIn("passat", namen)                       # ohne ECU-Kennung: Dateiname ohne "ORI"
+        self.assertEqual(list(namen["passat"]["optionen"]), ["stage1"])
+        vmax = bytearray(neu); vmax[0x9000:0x9004] = bytes(4)
+        a.post("/admin/archiv/neu", data={"csrf": a.csrf, "name": "", "ori": (io.BytesIO(bytes(neu)), "x.bin"),
+                                          "vmax": (io.BytesIO(bytes(vmax)), "v.bin")}, content_type="multipart/form-data")
+        namen = {e["name"]: e for e in oneclick.lade_index()["eintraege"]}
+        self.assertEqual(sorted(namen["passat"]["optionen"]), ["stage1", "vmax"])   # gleiches Original -> ergaenzt
+        self.assertEqual(A.auto_name(bytes(self.golf), "egal.bin").split("_")[0], "EDC17C46")
+
     def test_fahrzeug_ohne_zip_anlegen(self):
         a = self.admin()
         neu = zufall(GROESSE, 11)
