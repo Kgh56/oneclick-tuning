@@ -473,6 +473,16 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/fonts/<name>")
+def schrift(name):
+    """Schriften liegen auf dem eigenen Server (keine Verbindung zu Google & Co. - DSGVO)."""
+    if not re.fullmatch(r"[a-z0-9-]+\.woff2", name) or not (BASE / "web" / "fonts" / name).is_file():
+        abort(404)
+    antwort = send_file(BASE / "web" / "fonts" / name, mimetype="font/woff2", max_age=31536000)
+    antwort.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return antwort
+
+
 @app.route("/")
 def start():
     """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
@@ -2225,7 +2235,7 @@ TEMPLATES = {
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ firma }}</title>
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#03040a">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmMmQ1NSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2ZmOWYwYSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGIwYjBmIi8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMWMxYzIyIi8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNmZmY0ZGMiLz48L3N2Zz4=">
 <style>
 :root{--bg:#000;--glas:rgba(255,255,255,.045);--glas2:rgba(255,255,255,.075);--rand:rgba(255,255,255,.09);
@@ -2357,14 +2367,143 @@ padding:8px 0;border-bottom:1px solid var(--rand);overflow-wrap:anywhere}
 .tabelle{overflow:visible}
 table:not(.liste-tab) th{white-space:normal;padding-left:0}
 }
+
+/* ===================== NEO: futuristisches Design ===================== */
+@font-face{font-family:"Orbitron";font-weight:700;font-display:swap;src:url(/fonts/orbitron-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Orbitron";font-weight:900;font-display:swap;src:url(/fonts/orbitron-latin-900-normal.woff2) format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:400;font-display:swap;src:url(/fonts/chakra-petch-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:500;font-display:swap;src:url(/fonts/chakra-petch-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:600;font-display:swap;src:url(/fonts/chakra-petch-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:700;font-display:swap;src:url(/fonts/chakra-petch-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400;font-display:swap;src:url(/fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:600;font-display:swap;src:url(/fonts/jetbrains-mono-latin-600-normal.woff2) format("woff2")}
+:root{--bg:#03040a;--neon:#00e5ff;--neon2:#ff2bd6;--violett:#7c5cff;--akzent:#00e5ff;--akzent2:#ff2bd6;--blau:#00e5ff;
+--ok:#39ff88;--warn:#ffe14d;--text:#e9f6ff;--leise:#8aa0b8;--rand:rgba(0,229,255,.16);--rand2:rgba(0,229,255,.34);
+--glas:rgba(6,12,26,.72);--glas2:rgba(0,229,255,.08);--verlauf:linear-gradient(100deg,#00e5ff,#7c5cff 55%,#ff2bd6);
+--mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--kopf:"Orbitron","Chakra Petch",sans-serif;
+--ecke:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
+body{font-family:"Chakra Petch",system-ui,"Segoe UI",sans-serif;font-size:15.5px;letter-spacing:.01em;background-color:var(--bg);
+background-image:radial-gradient(1100px 600px at 12% -12%,rgba(0,229,255,.16),transparent 60%),
+radial-gradient(900px 600px at 100% 0%,rgba(255,43,214,.13),transparent 60%),
+radial-gradient(900px 700px at 50% 120%,rgba(124,92,255,.14),transparent 60%)}
+/* Raster-Boden + Scanlines */
+body::before{content:"";position:fixed;left:-50%;right:-50%;bottom:-10vh;height:60vh;z-index:-1;pointer-events:none;
+background-image:linear-gradient(rgba(0,229,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.22) 1px,transparent 1px);
+background-size:64px 64px;transform:perspective(420px) rotateX(62deg);transform-origin:50% 100%;
+-webkit-mask-image:linear-gradient(to top,#000 0%,transparent 85%);mask-image:linear-gradient(to top,#000 0%,transparent 85%);
+animation:boden 6s linear infinite;opacity:.55}
+@keyframes boden{to{background-position:0 64px,0 0}}
+body::after{content:"";position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.07;
+background:repeating-linear-gradient(0deg,rgba(255,255,255,.35) 0 1px,transparent 1px 3px)}
+::selection{background:rgba(255,43,214,.4)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:#05070f}
+::-webkit-scrollbar-thumb{background:linear-gradient(#00e5ff55,#ff2bd655);border-radius:0}
+/* Kopfzeile */
+header{background:rgba(3,5,12,.72);border-bottom:1px solid transparent;
+border-image:linear-gradient(90deg,transparent,#00e5ff,#ff2bd6,transparent) 1;box-shadow:0 10px 40px rgba(0,229,255,.06)}
+.logo{font-family:var(--kopf);font-weight:900;font-size:17px;letter-spacing:.08em;text-transform:uppercase}
+.logo span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent;
+filter:drop-shadow(0 0 10px rgba(0,229,255,.55))}
+.logo::before{content:"";display:inline-block;width:9px;height:9px;margin-right:10px;vertical-align:1px;background:var(--neon);
+box-shadow:0 0 12px var(--neon);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);animation:blink 2.4s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35;box-shadow:none}}
+nav a{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--leise);position:relative;padding:4px 0}
+nav a::after{content:"";position:absolute;left:0;right:100%;bottom:-2px;height:1px;background:var(--neon);box-shadow:0 0 8px var(--neon);transition:right .3s}
+nav a:hover{color:var(--neon);text-shadow:0 0 12px rgba(0,229,255,.6)}nav a:hover::after,nav a.an::after{right:0}
+nav a.an{color:var(--text)}
+/* Karten: abgeschnittene Ecken + HUD-Klammern */
+.karte{position:relative;border-radius:0;clip-path:var(--ecke);border:1px solid var(--rand);padding:30px;
+background:
+linear-gradient(var(--neon),var(--neon)) left 0 top 0/16px 2px no-repeat,linear-gradient(var(--neon),var(--neon)) left 0 top 0/2px 16px no-repeat,
+linear-gradient(var(--neon2),var(--neon2)) right 0 bottom 0/16px 2px no-repeat,linear-gradient(var(--neon2),var(--neon2)) right 0 bottom 0/2px 16px no-repeat,
+linear-gradient(180deg,rgba(10,20,40,.78),rgba(4,8,18,.82));
+box-shadow:inset 0 0 0 1px rgba(0,229,255,.05),inset 0 40px 80px -60px rgba(0,229,255,.25)}
+.karte:hover{border-color:var(--rand2)}
+h1,h2,h3{font-family:var(--kopf);text-transform:uppercase;letter-spacing:.06em}
+h1{font-size:26px;font-weight:900;background:linear-gradient(90deg,#fff,#bff7ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:15.5px;font-weight:700;color:var(--neon);text-shadow:0 0 14px rgba(0,229,255,.45)}
+h2::before{content:"// ";color:var(--neon2);text-shadow:0 0 10px rgba(255,43,214,.6)}
+h3{font-size:13px;color:var(--leise)}
+.hero h1{font-size:clamp(30px,6vw,56px);letter-spacing:.04em}
+.hero h1 span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
+.leise,.hinweis{color:var(--leise)}
+/* Knoepfe */
+.btn{font-family:var(--kopf);font-weight:700;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;border-radius:0;padding:13px 26px;
+clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+background:var(--verlauf);background-size:200% 100%;color:#02040a;box-shadow:none;filter:drop-shadow(0 0 14px rgba(0,229,255,.45));
+transition:background-position .4s,filter .25s,transform .15s}
+.btn:hover{background-position:100% 0;filter:drop-shadow(0 0 22px rgba(255,43,214,.6));transform:translateY(-1px);box-shadow:none}
+.btn.grau{background:rgba(0,229,255,.07);color:var(--neon);border:1px solid var(--rand2);filter:none}
+.btn.grau:hover{background:rgba(0,229,255,.16);filter:drop-shadow(0 0 12px rgba(0,229,255,.4))}
+.btn.gruen{background:linear-gradient(100deg,#39ff88,#00e5ff);color:#02040a;filter:drop-shadow(0 0 14px rgba(57,255,136,.45))}
+.btn.klein{padding:8px 14px;font-size:11px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+/* Eingaben */
+input[type=text],input[type=password],input[type=number],input[type=email],textarea,select{border-radius:0;background:rgba(0,10,22,.7);
+border:1px solid var(--rand);color:var(--text);font-family:"Chakra Petch",sans-serif;
+clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%)}
+input:focus,textarea:focus,select:focus{border-color:var(--neon);box-shadow:0 0 0 1px var(--neon),0 0 24px rgba(0,229,255,.3)}
+input::placeholder,textarea::placeholder{color:#4f6378}
+input[type=checkbox],input[type=radio]{accent-color:var(--neon)}
+input[type=file]::file-selector-button{border-radius:0;font-family:var(--mono);text-transform:uppercase;font-size:11px;letter-spacing:.1em;
+background:rgba(0,229,255,.1);color:var(--neon);border:1px solid var(--rand2)}
+label.feld{font-size:13.5px;color:#a9bfd4}
+/* Upload-Feld */
+.drop{border-radius:0;border:1px dashed var(--rand2);background:
+repeating-linear-gradient(45deg,rgba(0,229,255,.025) 0 12px,transparent 12px 24px),rgba(0,10,22,.5);clip-path:var(--ecke)}
+.drop::before{border-radius:0;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--verlauf);color:#02040a;
+box-shadow:none;filter:drop-shadow(0 0 16px rgba(0,229,255,.6));animation:schweben 3s ease-in-out infinite}
+@keyframes schweben{50%{transform:translateY(-6px)}}
+.drop.aktiv,.drop:hover{border-color:var(--neon);background-color:rgba(0,229,255,.06);box-shadow:inset 0 0 40px rgba(0,229,255,.12)}
+.drop b{font-family:var(--kopf);letter-spacing:.08em;text-transform:uppercase;font-size:15px}
+label.datei{border-radius:0;border-color:var(--rand2);background:rgba(0,10,22,.55);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
+label.datei.pflicht{border-color:rgba(255,43,214,.6)}
+label.datei.gewaehlt{border-color:var(--ok);background:rgba(57,255,136,.07);box-shadow:inset 0 0 30px rgba(57,255,136,.08)}
+.optionen label{border-radius:0;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
+.optionen label:has(input:checked){background:rgba(0,229,255,.1);border:1px solid var(--neon);box-shadow:inset 0 0 30px rgba(0,229,255,.18)}
+/* Tabellen */
+th{font-family:var(--mono);color:var(--neon);opacity:.8;font-size:11px;letter-spacing:.14em}
+td,th{border-bottom:1px solid rgba(0,229,255,.1)}
+.liste-tab tr{transition:background .2s}
+.liste-tab tr:hover td{background:rgba(0,229,255,.035)}
+td code,code,pre{font-family:var(--mono);border-radius:0;background:rgba(0,229,255,.07);color:#bff7ff}
+/* Status */
+.status{border-radius:0;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;
+clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%);border:0}
+.s-FREIGEGEBEN,.a-AUTOMATISCH{background:rgba(57,255,136,.14);color:var(--ok);text-shadow:0 0 10px rgba(57,255,136,.5)}
+.s-ENTWURF{background:rgba(0,229,255,.12);color:var(--neon)}
+.s-WARTET{background:rgba(255,225,77,.12);color:var(--warn);text-shadow:0 0 10px rgba(255,225,77,.5)}
+.s-ABGELEHNT,.a-MANUELL{background:rgba(255,43,214,.13);color:#ff6be4}
+/* Meldungen */
+.meldung{border-radius:0;background:rgba(0,229,255,.07);border:0;border-left:3px solid var(--neon);font-family:var(--mono);font-size:13px;
+box-shadow:inset 30px 0 60px -40px rgba(0,229,255,.4)}
+/* Kennzahlen */
+.zahl{font-family:var(--kopf);font-weight:900;letter-spacing:.02em;background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent;
+filter:drop-shadow(0 0 16px rgba(0,229,255,.35))}
+.raster .karte{background:
+linear-gradient(var(--neon),var(--neon)) left 0 top 0/16px 2px no-repeat,linear-gradient(var(--neon),var(--neon)) left 0 top 0/2px 16px no-repeat,
+linear-gradient(180deg,rgba(10,22,44,.85),rgba(4,8,18,.85))}
+.warten{border-radius:0;background:rgba(255,225,77,.06);border:1px solid rgba(255,225,77,.3)}
+.kreis{border-radius:0;border-width:2px;animation:dreh 1.2s linear infinite}
+footer,footer a{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#4f6378}
+footer a:hover{color:var(--neon)}
+main>*{animation:neo-rein .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes neo-rein{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+@media (max-width:720px){.karte{padding:20px;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+h1{font-size:21px}.liste-tab tr{border-radius:0;border-color:var(--rand);background:rgba(0,10,22,.55)}
+.liste-tab td::before{font-family:var(--mono);color:var(--neon);opacity:.75}body::before{height:40vh}}
+@media (prefers-reduced-motion:reduce){body::before,.logo::before,.drop::before{animation:none}}
+.zahl{font-family:"Chakra Petch",sans-serif;font-weight:700;font-size:clamp(30px,3vw,42px);white-space:nowrap}
+@media (max-width:520px){.btn{letter-spacing:.08em;padding:12px 18px}}
+td a,p a,.hinweis a{color:var(--text);text-decoration-color:rgba(0,229,255,.5);text-underline-offset:3px}
+td a:hover,p a:hover{color:var(--neon);text-shadow:0 0 10px rgba(0,229,255,.5)}
 </style></head><body>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
-<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
-<a href="{{ url_for('admin') }}">Aufträge</a>
-<a href="{{ url_for('admin_archiv') }}">Archiv</a>
-<a href="{{ url_for('eigenes_file') }}">Eigenes File</a>
-{% if zu_sortieren %}<a href="{{ url_for('sortieren') }}">Sortieren ({{ zu_sortieren }})</a>{% endif %}
-<a href="{{ url_for('einstellungen') }}">Einstellungen</a>
+{% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
+<a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
+<a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
+<a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
+{% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}>Sortieren ({{ zu_sortieren }})</a>{% endif %}
+<a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}>Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
 <main>
 {% for m in get_flashed_messages() %}<div class="meldung">{{ m }}</div>{% endfor %}
