@@ -126,27 +126,27 @@ def dateiname_aus(kopf: str, standard: str = "file.bin") -> str:
 
 class Bruecke:
     def __init__(self):
-        self.fenster = None
-        self.gross = False
+        self._fenster = None
+        self._gross = False
 
     def version(self):
         return VERSION
 
     def minimieren(self):
-        self.fenster.minimize()
+        self._fenster.minimize()
 
     def maximieren(self):
-        if self.gross:
-            self.fenster.restore()
+        if self._gross:
+            self._fenster.restore()
         else:
-            self.fenster.maximize()
-        self.gross = not self.gross
+            self._fenster.maximize()
+        self._gross = not self._gross
 
     def schliessen(self):
-        self.fenster.destroy()
+        self._fenster.destroy()
 
     def neu_laden(self):
-        self.fenster.load_url(SERVER + "/")
+        self._fenster.load_url(SERVER + "/")
 
     def speichern(self, url: str):
         """File vom Server holen und ueber 'Speichern unter ...' ablegen. Nur Adressen unseres Servers."""
@@ -165,7 +165,7 @@ class Bruecke:
             return {"fehler": text or f"Server-Fehler ({e.code})."}
         except (urllib.error.URLError, OSError):
             return {"fehler": "Keine Verbindung zum Server. Bitte Internetverbindung prüfen."}
-        ziel = self.fenster.create_file_dialog(webview.SAVE_DIALOG, directory=str(Path.home() / "Downloads"),
+        ziel = self._fenster.create_file_dialog(webview.SAVE_DIALOG, directory=str(Path.home() / "Downloads"),
                                                save_filename=name, file_types=DATEI_TYPEN)
         if not ziel:
             return {"abgebrochen": True}
@@ -237,7 +237,7 @@ def main():
         start = {"html": OFFLINE}
     fenster = webview.create_window("OneClick Tuning", js_api=bruecke, width=1440, height=900, min_size=(1100, 700),
                                     frameless=True, easy_drag=False, background_color="#0d0f14", **start)
-    bruecke.fenster = fenster
+    bruecke._fenster = fenster
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     # private_mode=False + eigener Ordner: "Meine Auftraege" bleiben nach dem Schliessen erhalten
     if test:
