@@ -656,6 +656,30 @@ class WebTests(Basis):
                 return
             time.sleep(0.02)
 
+    def test_anfrage_steuergeraet_vom_kunden(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        # nicht erkannt -> Angabe des Kunden wird gespeichert und gekennzeichnet
+        aid = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(zufall(GROESSE, 31))), "x.bin")},
+                              content_type="multipart/form-data").json["id"]
+        self.assertEqual(self.anfrage(aid, ecu="  EDC17C64 <script> ").json["status"], "WARTET")
+        a = A.finde_auftrag(aid)
+        self.assertEqual((a["ecu"], a["ecu_kunde"]), ("?", "EDC17C64 script"))
+        self.assertIn("EDC17C64 script (vom Kunden angegeben)", html.unescape(self.admin().get(f"/auftrag/{aid}").text))
+        self.warte_telegram(1); time.sleep(0.1)
+        self.assertIn("(vom Kunden angegeben)", self.telegram[-1][1]["text"])
+        # erkannt -> Angabe des Kunden wird ignoriert
+        neu = zufall(GROESSE, 32); neu[0x100:0x120] = b"EDC17C46  1037999999 03L906018XX"
+        aid2 = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(neu)), "y.bin")},
+                               content_type="multipart/form-data").json["id"]
+        self.anfrage(aid2, ecu="MED17")
+        b = A.finde_auftrag(aid2)
+        self.assertEqual((b["ecu"], b.get("ecu_kunde")), ("EDC17C46", None))
+        # ohne Angabe: alles wie bisher
+        aid3 = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(zufall(GROESSE, 33))), "z.bin")},
+                               content_type="multipart/form-data").json["id"]
+        self.anfrage(aid3)
+        self.assertNotIn("ecu_kunde", A.finde_auftrag(aid3))
+
     def test_anfrage_kompletter_ablauf(self):
         A.speichere_config({"telegram_chat_id": "1"})
         neu = zufall(GROESSE, 7)

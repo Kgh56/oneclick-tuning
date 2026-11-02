@@ -1283,6 +1283,7 @@ button.hilfe svg{width:15px;height:15px}
           <div class="chips" id="af-chips" style="margin-top:12px"></div>
           <h2 style="margin-top:20px">Fahrzeug</h2>
           <div class="fz-raster" id="af-felder"></div>
+          <datalist id="af-ecu-liste"><option value="EDC15P+"><option value="EDC15VM+"><option value="EDC15C2"><option value="EDC16U1"><option value="EDC16U34"><option value="EDC16C34"><option value="EDC16C39"><option value="EDC16CP34"><option value="EDC17C46"><option value="EDC17C54"><option value="EDC17C64"><option value="EDC17C74"><option value="EDC17CP14"><option value="EDC17CP20"><option value="EDC17CP44"><option value="EDC17CP54"><option value="EDC17U01"><option value="MD1CS004"><option value="MD1CP004"><option value="MG1CS001"><option value="MG1CS002"><option value="MG1CS011"><option value="MG1CS111"><option value="ME7.1.1"><option value="ME7.5"><option value="ME9.1"><option value="MED9.1"><option value="MED9.5.10"><option value="MED17.1"><option value="MED17.5"><option value="MED17.5.2"><option value="MED17.5.25"><option value="MEVD17.2.9"><option value="ME17.9.20"><option value="SIMOS8.5"><option value="SIMOS10"><option value="SIMOS12"><option value="SIMOS18.1"><option value="SIMOS18.10"><option value="SIMOS19"><option value="PCR2.1"><option value="PPD1.2"><option value="SID201"><option value="SID206"><option value="SID807"><option value="SID208"><option value="DCM3.5"><option value="DCM6.2"><option value="IAW 6F"><option value="MJD 6JF"><option value="EMS3120"></datalist>
           <h2 style="margin-top:22px">Was brauchst du? <span class="leise" style="font-weight:400;font-size:13px">– eine oder mehrere</span></h2>
           <div class="loesungen" id="af-wunsch" style="margin-top:10px"></div>
           <textarea class="feld" id="af-nachricht" maxlength="1000" placeholder="Nachricht an uns (optional), z. B. Umbauten, Wünsche …"></textarea>
@@ -1477,10 +1478,10 @@ const WEB = {
       return {auftrag: a, auftraege: lokal.merken(a)};
     } catch (e) { return {fehler: e.message}; }
   },
-  async anfrage(aid, fahrzeug, wunsch, nachricht, kontakt) {
+  async anfrage(aid, fahrzeug, wunsch, nachricht, kontakt, ecu) {
     kontakt = lokal.kontakt(kontakt);
     try {
-      const {daten: a} = await server(`/api/auftrag/${encodeURIComponent(aid)}/anfrage`, json("POST", {fahrzeug, wunsch, nachricht, kontakt}));
+      const {daten: a} = await server(`/api/auftrag/${encodeURIComponent(aid)}/anfrage`, json("POST", {fahrzeug, wunsch, nachricht, kontakt, ecu: ecu || ""}));
       return {auftrag: a, auftraege: lokal.merken(a)};
     } catch (e) { return {fehler: e.message}; }
   },
@@ -2116,6 +2117,16 @@ function anfrageZeigen() {
     feld.addEventListener("input", () => feld.classList.remove("fehlt"));
     l.appendChild(feld); felder.appendChild(l);
   });
+  // Steuergeraet nicht erkannt? Dann darf der Kunde es selbst angeben (optional, mit Vorschlaegen)
+  if (!e.ecu || e.ecu === "?") {
+    const l = document.createElement("label"); l.className = "af-ecu";
+    l.innerHTML = '<span>Steuergerät <i class="leise" style="font-style:normal;font-weight:400">(optional)</i></span>';
+    l.title = "Wir konnten das Steuergerät im File nicht erkennen. Wenn du es weißt, trag es hier ein.";
+    const feld = document.createElement("input"); feld.className = "feld"; feld.id = "af-ecu"; feld.maxLength = 40;
+    feld.placeholder = "z. B. EDC17C64"; feld.setAttribute("list", "af-ecu-liste"); feld.autocomplete = "off";
+    feld.value = alt.__ecu || ""; feld.dataset.key = "__ecu";
+    l.appendChild(feld); felder.appendChild(l);
+  }
   const wunsch = $("#af-wunsch"); wunsch.innerHTML = "";
   zustand.wunsch = new Set();
   zustand.optionen.forEach((o, i) => {
@@ -2141,6 +2152,7 @@ function anfrageZeigen() {
 async function anfrageSenden() {
   const fahrzeug = {}; let fehlt = null;
   document.querySelectorAll("#af-felder .feld").forEach(f => {
+    if (f.dataset.key === "__ecu") return;
     fahrzeug[f.dataset.key] = f.value.trim();
     if (f.dataset.pflicht && !f.value.trim()) { f.classList.add("fehlt"); fehlt = fehlt || f; }
   });
@@ -2148,7 +2160,8 @@ async function anfrageSenden() {
   const wunsch = zustand.optionen.map(o => o.key).filter(k => zustand.wunsch.has(k));
   if (!wunsch.length) return toast("fehler", "Was brauchst du?", "Bitte mindestens eine Lösung auswählen.", 6000);
   const b = $("#af-senden"); b.disabled = true; b.textContent = "Wird gesendet …";
-  const erg = await rufe("anfrage", zustand.entwurf.id, fahrzeug, wunsch, $("#af-nachricht").value, $("#af-kontakt").value);
+  const erg = await rufe("anfrage", zustand.entwurf.id, fahrzeug, wunsch, $("#af-nachricht").value, $("#af-kontakt").value,
+                        $("#af-ecu") ? $("#af-ecu").value.trim() : "");
   if (erg.fehler || !erg.auftrag) {
     b.disabled = false; b.textContent = "Anfrage senden";
     return toast("fehler", "Nicht gesendet", erg.fehler || "Unerwartete Antwort. Bitte nochmal versuchen.", 8000);

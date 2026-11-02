@@ -247,7 +247,7 @@ def telegram_text_anfrage(a: dict) -> str:
     fz = a.get("fahrzeug") or {}
     fahrzeug = " ".join(x for x in (fz.get("marke"), fz.get("modell"), fz.get("baujahr"), fz.get("motor")) if x)
     zeilen = [f"📩 <b>Neue Anfrage: {e(option_namen()[a['option']])}</b>",
-              f"Fahrzeug: {e(fahrzeug)}", f"ECU: {e(a['ecu'])}", f"Software: {e(a['software'])}"]
+              f"Fahrzeug: {e(fahrzeug)}", f"ECU: {e(ecu_text(a))}", f"Software: {e(a['software'])}"]
     if a["status"] == "WARTET":
         zeilen.append("\nOriginal und alle Angaben im Admin-Bereich. Fertiges File dort hochladen – "
                       "dann bekommt der Kunde es automatisch auf der Seite.")
@@ -586,7 +586,20 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     return auftrag
 
 
-def anfrage_abschicken(aid: str, fahrzeug: dict, wunsch: list, nachricht: str, kontakt: str) -> dict:
+def ecu_kunde_pruefen(text) -> str:
+    """Steuergeraet, das der Kunde selbst angibt (nur wenn es im File nicht erkannt wurde)."""
+    text = re.sub(r"[^A-Za-z0-9 ._+/-]", "", " ".join(str(text or "").split()))[:40].strip()
+    return text
+
+
+def ecu_text(a: dict) -> str:
+    """ECU fuer Anzeige/Telegram: erkannt, sonst die Angabe des Kunden (gekennzeichnet)."""
+    if a.get("ecu") in (None, "", "?") and a.get("ecu_kunde"):
+        return f"{a['ecu_kunde']} (vom Kunden angegeben)"
+    return a.get("ecu") or "?"
+
+
+def anfrage_abschicken(aid: str, fahrzeug: dict, wunsch: list, nachricht: str, kontakt: str, ecu_kunde: str = "") -> dict:
     """Ticket: Kunde bittet um ein File, das es im Archiv noch nicht gibt. Das Original liegt schon auf
     dem Server (vom Pruefen). Der Admin laedt spaeter das fertige File hoch oder lehnt ab."""
     fz = {}
@@ -611,6 +624,8 @@ def anfrage_abschicken(aid: str, fahrzeug: dict, wunsch: list, nachricht: str, k
         ordner = AUFTRAEGE / aid
         for rest in ordner.glob("loesung_*.bin"):
             rest.unlink()
+        if auftrag.get("ecu") in (None, "", "?") and ecu_kunde_pruefen(ecu_kunde):
+            auftrag["ecu_kunde"] = ecu_kunde_pruefen(ecu_kunde)
         auftrag.update(typ="anfrage", option="+".join(wunsch), status="WARTET", art="anfrage", quelle="",
                        preis=preis_von(wunsch),
                        fahrzeug=fz, nachricht=str(nachricht or "").strip()[:1000],
@@ -922,7 +937,7 @@ def api_anfrage(aid):
     wunsch = [str(o) for o in daten.get("wunsch")] if isinstance(daten.get("wunsch"), list) else []
     try:
         auftrag = anfrage_abschicken(aid, fahrzeug, wunsch, str(daten.get("nachricht") or ""),
-                                     str(daten.get("kontakt") or ""))
+                                     str(daten.get("kontakt") or ""), str(daten.get("ecu") or ""))
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
     return jsonify(api_auftrag(auftrag))
@@ -2790,7 +2805,7 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% if a.typ == 'anfrage' %}{% for feld, titel, _ in fahrzeug_felder %}<tr><th>{{ titel }}</th><td>{{ a.fahrzeug.get(feld) or '–' }}</td></tr>{% endfor %}
 <tr><th>Gewünscht</th><td><b>{{ optionen[a.option] }}</b></td></tr>
 {% if a.nachricht %}<tr><th>Nachricht</th><td style="white-space:pre-wrap">{{ a.nachricht }}</td></tr>{% endif %}{% endif %}
-<tr><th>ECU</th><td>{{ a.ecu }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
+<tr><th>ECU</th><td>{{ ecu_text(a) }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
 <tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
 {% if a.art and a.typ != 'anfrage' %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 {% if a.typ != 'anfrage' %}<tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>{% endif %}
@@ -2875,7 +2890,7 @@ Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Bro
 {% if wartend %}<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>ECU</th><th>Treffer</th><th></th></tr>
 {% for a in wartend %}<tr><td>{{ a.zeit[8:10] }}.{{ a.zeit[5:7] }}. {{ a.zeit[11:16] }}</td><td>{{ a.kunde }}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
-<td>{{ a.ecu }}</td><td class="leise">{% if a.typ == 'anfrage' %}<span class="status s-WARTET">📩 Anfrage</span>
+<td>{{ ecu_text(a) }}</td><td class="leise">{% if a.typ == 'anfrage' %}<span class="status s-WARTET">📩 Anfrage</span>
 {{ a.fahrzeug.marke }} {{ a.fahrzeug.modell }}{% else %}{{ art_text.get(a.art, a.art) }}{% endif %}</td>
 <td>{% if a.typ == 'anfrage' %}<a class="btn klein" href="{{ url_for('auftrag_ansicht', aid=a.id) }}">Bearbeiten</a>{% else %}<form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
@@ -3242,7 +3257,7 @@ pruefen(); setInterval(pruefen,8000);})();
 <h1>Ticket #{{ t.kurz }} · {{ t.thema_text }}</h1>
 <p class="leise" style="margin-top:-8px">Status: <span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span>
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
-{% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ auftrag.ecu }}, #{{ auftrag.id[:8] }}){% endif %}</p>
+{% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ ecu_text(auftrag) }}, #{{ auftrag.id[:8] }}){% endif %}</p>
 <div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
 <div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ url_for('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ [1, (n.datei.groesse / 1024)|round|int]|max }} KB</a>{% endif %}</div>{% endfor %}</div>
 <form method="post" enctype="multipart/form-data" id="antwort-form" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
@@ -3523,7 +3538,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
             "firma": lade_config().get("firmenname") or PROGRAMM_NAME,
-            "im_programm": ist_programm(), "programm_name": PROGRAMM_NAME,
+            "im_programm": ist_programm(), "programm_name": PROGRAMM_NAME, "ecu_text": ecu_text,
             "zu_sortieren": eingang_anzahl() if session.get("admin") else 0,
             "tickets_offen": sum(1 for t in alle_tickets() if t["status"] == "OFFEN") if session.get("admin") else 0}
 
