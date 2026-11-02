@@ -10,7 +10,7 @@ Diese AGB gelten für alle Leistungen von Luisa Neuer, GH-MAPPING, Hachenburgers
 
 ## § 3 Vertragsschluss
 (1) Die Anzeige der für eine Datei verfügbaren Leistungen im Programm ist kein bindendes Angebot. Mit dem Absenden eines Auftrags oder einer Anfrage gibt der Kunde ein Angebot ab.
-(2) Der Vertrag kommt zustande, wenn GH-MAPPING den Auftrag bzw. die Anfrage im Programm freigibt. Der Kunde wird darüber im Programm informiert. GH-MAPPING kann Aufträge und Anfragen ohne Angabe von Gründen ablehnen; dann entstehen dem Kunden keine Kosten.
+(2) Bei Lösungen, die im Programm sofort zum Kauf angeboten werden (Files aus dem Archiv von GH-MAPPING), kommt der Vertrag zustande, sobald der Kunde den Kauf abschließt und die Zahlung erfolgreich ist. Bei Anfragen (und soweit im Programm angegeben, bei Aufträgen, die GH-MAPPING vorher prüft) kommt der Vertrag zustande, wenn GH-MAPPING sie im Programm freigibt; der Kunde wird darüber im Programm informiert. Anfragen kann GH-MAPPING ohne Angabe von Gründen ablehnen; dann entstehen dem Kunden keine Kosten.
 (3) Der Vertragstext wird nicht gesondert gespeichert. Auftragsdaten sind im Programm unter „Meine Aufträge“ abrufbar, solange der Auftrag gespeichert ist.
 
 ## § 4 Mitwirkung des Kunden
@@ -18,7 +18,7 @@ Der Kunde stellt eine vollständige, unveränderte Originaldatei sowie korrekte 
 
 ## § 5 Preise und Zahlung
 (1) Es gelten die bei Auftragserteilung im Programm angezeigten Preise; bei Anfragen der Preis, den GH-MAPPING mit der Freigabe nennt. Bei mehreren Leistungen in einem File werden die Preise addiert.
-(2) Die Bezahlung erfolgt nach der Freigabe online über den Zahlungsdienstleister Stripe. Erst nach erfolgreicher Zahlung kann das File heruntergeladen werden. Die Rechnung erhält der Kunde per E-Mail.
+(2) Die Bezahlung erfolgt online über den Zahlungsdienstleister Stripe – bei Files aus dem Archiv direkt beim Kauf, bei Anfragen nach der Freigabe. Erst nach erfolgreicher Zahlung kann das File heruntergeladen werden. Die Rechnung erhält der Kunde per E-Mail.
 (3) Als Kleinunternehmer im Sinne des § 19 UStG wird keine Umsatzsteuer berechnet und nicht ausgewiesen.
 
 ## § 6 Lieferung

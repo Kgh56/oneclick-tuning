@@ -10,7 +10,7 @@ Start:
 
 Kunden arbeiten auf der Startseite (web/kunde.html), die ueber /api/... mit
 diesem Server spricht: Original hochladen -> 100-%-Treffer im Archiv -> nur die verfuegbaren
-Loesungen werden angeboten -> Auftrag -> Download erst nach Freigabe durch den Admin
+Loesungen aus dem Archiv: sofort bezahlen + laden; Anfragen (und Rueckruesten ueber Softwarenummer) erst nach Freigabe
 (Telegram-Knopf oder Admin-Bereich). Nichts Passendes: Anfrage (Ticket) mit Fahrzeugdaten.
 """
 
@@ -501,6 +501,14 @@ def nur_ueber_programm():
         return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
 
 
+@app.route("/favicon.ico")
+def favicon():
+    """Blaues OneClick-Logo fuer Browser, die das Symbol selbst abfragen."""
+    antwort = send_file(BASE / "web" / "favicon.ico", mimetype="image/x-icon", max_age=86400)
+    antwort.headers["Cache-Control"] = "public, max-age=86400"
+    return antwort
+
+
 @app.route("/bilder/<name>")
 def bild(name):
     if not re.fullmatch(r"[a-z0-9-]+\.webp", name) or not (BASE / "web" / "bilder" / name).is_file():
@@ -650,6 +658,11 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
                        quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
                        art=art,
                        zeit=datetime.now().isoformat(timespec="seconds"))
+        if art != "softwarenummer" and lade_config().get("archiv_sofort", True) is not False:
+            # File aus dem Archiv (Byte fuer Byte nachgewiesen): sofort freigegeben -> Kunde bezahlt und laedt direkt.
+            # Rueckruesten nur ueber die Softwarenummer bleibt bei der Freigabe durch den Admin.
+            auftrag.update(status="FREIGEGEBEN", entschieden=datetime.now().isoformat(timespec="seconds"),
+                           entschieden_von="automatisch (Archiv)")
         speichere_auftrag(auftrag)
     threading.Thread(target=benachrichtigen, args=(auftrag,), daemon=True).start()
     return auftrag
@@ -851,7 +864,8 @@ def api_auftrag(a: dict) -> dict:
         "id": a["id"], "datei": a["datei"], "ecu": a["ecu"], "software": a["software"],
         "zeit": a["zeit"], "status": a["status"], "status_text": STATUS_TEXT[a["status"]],
         "option": a.get("option"), "option_name": namen[a["option"]] if a.get("option") else None,
-        "angebot": [{"key": o, "name": namen[o]} for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
+        "angebot": [{"key": o, "name": namen[o], "sofort": a["angebot"][o].get("art") != "softwarenummer"}
+                    for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
         "grund": a.get("grund", ""),
         "typ": a.get("typ", "auftrag"), "fahrzeug": fahrzeug_text(a),
         "preis": a.get("preis", 0) if zahlung_aktiv() else 0,
@@ -2864,7 +2878,7 @@ dann gelten diese Preise.</p>{% endif %}
 {% if zahlung and original not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>
 </div>
 <button class="btn">Preise speichern</button>
-<div class="hinweis">Bei mehreren Lösungen werden die Preise addiert. Bezahlt wird erst nach deiner Freigabe.
+<div class="hinweis">Bei mehreren Lösungen werden die Preise addiert. Files aus dem Archiv kaufen Kunden sofort; Anfragen bezahlen sie nach deiner Freigabe.
 Für einzelne Aufträge kannst du den Preis beim Freigeben ändern.</div></form>
 <div class="hinweis">„Original (Rückrüsten)“ gibt es automatisch: Lädt ein Kunde ein getuntes File hoch, das zu einem Tuning-File im Archiv passt, kann er das Original bekommen.
 Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
@@ -2962,8 +2976,10 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ firma }} – Windows-Programm</title>
-<meta name="description" content="OneClick Solutions: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, nach Freigabe bezahlen und herunterladen. Kein Abo.">
+<meta name="description" content="OneClick Solutions: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, sofort bezahlen und herunterladen. Kein Abo.">
 <meta name="theme-color" content="#0d0f14">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
+<link rel="alternate icon" href="/favicon.ico">
 <style>
 @font-face{font-family:"Montserrat";font-weight:500;font-display:swap;src:url(/fonts/montserrat-latin-500-normal.woff2) format("woff2")}
 @font-face{font-family:"Montserrat";font-weight:600;font-display:swap;src:url(/fonts/montserrat-latin-600-normal.woff2) format("woff2")}
@@ -3037,7 +3053,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <div>
   <span class="kicker"><i></i>WINDOWS-PROGRAMM · KOSTENLOS</span>
   <h1>Dein Chiptuning-File <span>mit einem Klick.</span></h1>
-  <p>Original laden, Lösung wählen, nach unserer Freigabe bezahlen und herunterladen – alles in einem Programm.
+  <p>Original laden, Lösung wählen, sofort bezahlen und herunterladen – alles in einem Programm.
   <b>Kein Abo:</b> du zahlst nur für das File, das du wirklich brauchst.</p>
   <div class="knoepfe pc"><a class="btn" href="{{ download }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> Programm herunterladen</a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
   <div class="handy-hinweis">Das Programm läuft auf Windows-PCs und Laptops. Öffne diese Seite einfach am PC, um es herunterzuladen.</div>
@@ -3050,7 +3066,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <div class="raster">
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg></div><b>Sofort-Check</b><span>Original laden – das Programm erkennt Steuergerät und Software und zeigt sofort, welche Lösungen es gibt.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></div><b>Einzeln kaufen, kein Abo</b><span>Keine Monatsgebühr, keine Credits. Du bezahlst nur das File, das du bestellst.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><b>Jedes File geprüft</b><span>Kein Download ohne unsere Freigabe. Bezahlt wird erst, wenn wir dein File geprüft haben.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><b>Geprüfte Files, sofort</b><span>Alles im Archiv haben wir selbst erstellt und geprüft – darum kaufst und lädst du es ohne Wartezeit.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg></div><b>Sicher bezahlen</b><span>Bezahlung über Stripe mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></div><b>Anfrage, wenn nichts passt</b><span>Fahrzeugdaten eintragen, Anfrage senden – wir erstellen dein File und melden uns im Programm.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
@@ -3068,7 +3084,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen und starten. Fertig – keine Installation nötig.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und Auftrag senden.</span></div>
-  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Nach unserer Freigabe bezahlen und das File herunterladen.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Sofort bezahlen und das File herunterladen. Anfragen nach unserer Freigabe.</span></div>
  </div>
  <div class="hinweis"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
  Dann auf <b>„Weitere Informationen“</b> und <b>„Trotzdem ausführen“</b> klicken – das passiert nur beim ersten Mal.</div>

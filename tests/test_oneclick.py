@@ -56,6 +56,7 @@ class Basis(unittest.TestCase):
         A.EINGANG = d / "eingang"
         A.EIGENE = d / "eigene"
         A.TICKETS = d / "tickets"
+        A.speichere_config({"archiv_sofort": False})   # alte Tests pruefen den Ablauf mit Freigabe; Sofort-Kauf siehe test_sofort_kauf_*
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
         A.AUFTRAEGE.mkdir()
@@ -395,6 +396,9 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
         self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)
         self.assertNotIn("nur_programm", a.get("/admin/einstellungen").text)  # kein Schalter mehr
+        self.assertIn('rel="icon"', self.kunde.get("/", headers=pc).text)        # Werbeseite mit blauem Logo
+        r = self.kunde.get("/favicon.ico", headers=pc)
+        self.assertEqual((r.status_code, r.mimetype), (200, "image/x-icon"))
 
     def test_support_tickets(self):
         A.speichere_config({"telegram_chat_id": "1"})
@@ -452,6 +456,29 @@ class WebTests(Basis):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck
             self.assertNotIn("Zurück zum Programm", self.kunde.get(url, headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
+
+    def test_sofort_kauf_aus_dem_archiv(self):
+        A.speichere_config({"archiv_sofort": True})
+        aid = self.hochladen(self.golf)
+        self.assertTrue(all(o["sofort"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]))
+        self.bestellen(aid, "startstopp")
+        a = self.auftrag(aid)
+        self.assertEqual((a["status"], a["entschieden_von"]), ("FREIGEGEBEN", "automatisch (Archiv)"))
+        d = self.laden(aid)                                   # ohne Zahlung aktiv: sofort herunterladen
+        self.assertEqual((d.status_code, d.data), (200, bytes(self.startstopp)))
+        self.assertNotIn(aid[:8], self.admin().get("/admin/wartend").text)   # landet nicht in "Warten auf Freigabe"
+
+    def test_rueckruesten_ueber_softwarenummer_bleibt_bei_freigabe(self):
+        A.speichere_config({"archiv_sofort": True})
+        mazda = zufall(GROESSE, 32)
+        mazda[0x100:0x120] = b"EDC17CP42 1037311111 0281011111 "
+        self.fahrzeug(self.admin(), "Mazda6", mazda)          # nur Original im Archiv
+        fremd = bytearray(mazda)
+        fremd[0x20000:0x20400] = bytes(1024)                  # fremdes Tuning, gleiche Software
+        aid = self.hochladen(fremd, "mazda_mod.bin")
+        self.assertEqual([o["sofort"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]], [False])
+        self.bestellen(aid, "original")
+        self.assertEqual(self.auftrag(aid)["status"], "WARTET")    # ohne Byte-Nachweis: erst deine Freigabe
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
@@ -1164,6 +1191,16 @@ class ZahlungTests(WebTests):
         self.bestellen(aid, *optionen)
         A.entscheide(aid, True)
         return aid
+
+    def test_sofort_kauf_mit_bezahlung(self):
+        A.speichere_config({"archiv_sofort": True, "preise": {"stage1": 19900}})
+        aid = self.hochladen(self.golf)
+        self.bestellen(aid, "stage1")
+        info = self.kunde.get(f"/api/auftrag/{aid}").json
+        self.assertEqual((info["status"], info["zahlung"]), ("FREIGEGEBEN", "offen"))   # sofort bezahlbar
+        self.assertEqual(self.laden(aid).status_code, 402)                               # aber erst nach Zahlung laden
+        url = self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True}).json["url"]
+        self.assertTrue(url.startswith("https://checkout.stripe.test"))
 
     def test_preise_und_ablauf(self):
         info = self.kunde.get("/api/info").json
