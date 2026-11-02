@@ -2711,12 +2711,15 @@ document.querySelectorAll('table').forEach(function(t){
   var io='IntersectionObserver' in window ? new IntersectionObserver(function(es){es.forEach(function(e){
     if(!e.isIntersecting) return; var k=e.target; io.unobserve(k);
     k.style.setProperty('--h',k.offsetHeight+'px'); k.classList.remove('warte'); k.classList.add('sicht','scan');
-  })},{threshold:.08}) : null;
+  })},{threshold:0, rootMargin:'0px 0px -40px 0px'}) : null;
   karten.forEach(function(k,i){
     var r=k.getBoundingClientRect();
-    if(io && r.top>innerHeight){k.classList.add('warte'); io.observe(k);}
+    // nur normale Karten einblenden - lange Listen (Archiv, Auftraege) sind immer sofort sichtbar
+    if(io && r.top>innerHeight && r.height<innerHeight*1.5){k.classList.add('warte'); io.observe(k);}
     else {k.style.setProperty('--h',k.offsetHeight+'px'); setTimeout(function(){k.classList.add('scan')},i*90);}
   });
+  // Sicherheitsnetz: spaetestens nach 4 s ist jede Karte sichtbar, egal was passiert
+  setTimeout(function(){document.querySelectorAll('.karte.warte').forEach(function(k){k.classList.remove('warte');k.classList.add('sicht');});},4000);
   // Tabellenzeilen nacheinander
   document.querySelectorAll('.liste-tab').forEach(function(t){
     for(var r=1;r<t.rows.length && r<40;r++){t.rows[r].classList.add('rein');t.rows[r].style.animationDelay=(0.15+r*0.045)+'s';}
