@@ -1062,6 +1062,7 @@ a.btn{text-decoration:none}
 #seite-support .nx-zwei{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}
 #tk-liste-karte{display:flex;flex-direction:column;min-height:0}#tk-liste{flex:1;min-height:0}
 #tk-rechts{display:flex;flex-direction:column;min-height:0}
+.ticket.still{animation:none}
 .ticket{cursor:pointer;border-left-color:#3a4357}.ticket.aktiv{border-color:var(--nx-blau);border-left-color:var(--nx-blau);background:rgba(47,123,255,.1)}
 .ticket.ungelesen{border-left-color:var(--nx-blau2)}.ticket.ungelesen .a-datei::after{content:"";display:inline-block;width:8px;height:8px;margin-left:8px;border-radius:50%;background:var(--nx-blau2);box-shadow:0 0 8px var(--nx-blau2)}
 .tk-vorschau{margin-top:6px;font-size:12.5px;color:#aab3c5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2182,14 +2183,20 @@ const ungelesen = t => t.nachrichten.length > (t.gesehen || 0) && t.nachrichten[
 function tkStatusKlasse(st) { return {OFFEN: "WARTET", BEANTWORTET: "FREIGEGEBEN", GESCHLOSSEN: "ABGELEHNT"}[st] || ""; }
 function zeitKurz(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " · " + d.toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"}); }
 function tkBereich(welcher) { ["#tk-leer", "#tk-form", "#tk-detail"].forEach(x => $(x).hidden = x !== welcher); }
+let tkListeStand = "", tkListeIds = new Set();
 function tkListeMalen() {
-  const l = $("#tk-liste"); l.innerHTML = "";
+  const l = $("#tk-liste");
   const n = tickets.filter(ungelesen).length, b = $("#sn-support-badge");
   b.textContent = n || ""; b.classList.toggle("null", !n);
+  // nur neu zeichnen, wenn sich wirklich etwas geaendert hat (kein Flackern beim Nachladen)
+  const stand = JSON.stringify([tkAktiv, tickets.map(t => [t.id, t.status, t.nachrichten.length, ungelesen(t)])]);
+  if (stand === tkListeStand && l.childElementCount) return;
+  tkListeStand = stand; l.innerHTML = "";
+  const bekannt = tkListeIds; tkListeIds = new Set(tickets.map(t => t.id));
   if (!tickets.length) { l.innerHTML = '<div class="leer" style="height:100%"><div>Noch keine Tickets</div></div>'; return; }
   tickets.forEach(t => {
     const el = document.createElement("div"), letzte = t.nachrichten[t.nachrichten.length - 1] || {text: "", zeit: t.zeit, von: "kunde"};
-    el.className = "auftrag ticket" + (t.id === tkAktiv ? " aktiv" : "") + (ungelesen(t) ? " ungelesen" : "");
+    el.className = "auftrag ticket" + (t.id === tkAktiv ? " aktiv" : "") + (ungelesen(t) ? " ungelesen" : "") + (bekannt.has(t.id) ? " still" : "");
     el.innerHTML = `<div class="a-kopf"><div class="a-datei"></div><span class="pille ${tkStatusKlasse(t.status)}"><span></span></span></div><div class="a-info"></div><div class="tk-vorschau"></div>`;
     el.querySelector(".a-datei").textContent = "#" + t.kurz + " · " + t.thema_text;
     el.querySelector(".pille span").textContent = ungelesen(t) ? "Neue Antwort" : t.status_text;
