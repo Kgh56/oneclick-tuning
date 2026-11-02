@@ -55,6 +55,7 @@ class Basis(unittest.TestCase):
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
         A.EINGANG = d / "eingang"
         A.EIGENE = d / "eigene"
+        A.TICKETS = d / "tickets"
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
         A.AUFTRAEGE.mkdir()
@@ -394,6 +395,53 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
         self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)
         self.assertNotIn("nur_programm", a.get("/admin/einstellungen").text)  # kein Schalter mehr
+
+    def test_support_tickets(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        aid = self.hochladen(self.golf)
+        self.bestellen(aid, "stage1")
+        k = self.kunde
+        # neues Ticket zum Auftrag
+        r = k.post("/api/ticket", json={"thema": "auto", "text": "Motorleuchte an, P0299", "auftrag": aid, "kontakt": "Max 0171"})
+        self.assertEqual(r.status_code, 200)
+        t = r.json
+        self.assertEqual((t["status"], t["thema_text"], t["auftrag"]), ("OFFEN", "Fehler am Auto nach dem Aufspielen", aid))
+        self.assertEqual(k.get(f"/api/ticket/{t['id']}").json["nachrichten"][0]["text"], "Motorleuchte an, P0299")
+        # Telegram: nur Nummer + Thema, kein Text, kein Kontakt
+        for _ in range(50):   # Meldung laeuft im Hintergrund
+            tg = [d["text"] for m, d in self.telegram if m == "sendMessage" and "Ticket" in d["text"]]
+            if tg:
+                break
+            time.sleep(0.05)
+        self.assertTrue(tg)
+        self.assertFalse(any("P0299" in x or "Max" in x for x in tg))
+        # Pruefungen
+        self.assertEqual(k.post("/api/ticket", json={"thema": "x", "text": "hallo"}).status_code, 422)
+        self.assertEqual(k.post("/api/ticket", json={"thema": "file", "text": ""}).status_code, 422)
+        self.assertEqual(k.get("/api/ticket/" + "0" * 32).status_code, 404)
+        self.assertEqual(k.get("/api/ticket/../x").status_code, 404)
+        self.assertEqual(k.post("/api/ticket", json={"thema": "file", "text": "hallo"},
+                                headers={"User-Agent": "Mozilla/5.0 Chrome"}).status_code, 403)   # nur das Programm
+        # Admin sieht und antwortet
+        a = self.admin()
+        self.assertIn("#" + t["kurz"], a.get("/admin/tickets").text)
+        self.assertIn("Tickets (1)", a.get("/admin").text)
+        seite = a.get(f"/admin/ticket/{t['id']}").text
+        self.assertIn("Motorleuchte an", seite)
+        self.assertIn("Max 0171", seite)
+        a.post(f"/admin/ticket/{t['id']}", data={"csrf": a.csrf, "aktion": "antworten", "text": "Bitte Fehlerspeicher löschen."})
+        neu = k.get(f"/api/ticket/{t['id']}").json
+        self.assertEqual((neu["status"], neu["nachrichten"][-1]["von"]), ("BEANTWORTET", "admin"))
+        # Kunde antwortet -> wieder offen; schliessen
+        self.assertEqual(k.post(f"/api/ticket/{t['id']}/nachricht", json={"text": "Danke, geht wieder."}).json["status"], "OFFEN")
+        a.post(f"/admin/ticket/{t['id']}", data={"csrf": a.csrf, "aktion": "schliessen"})
+        self.assertEqual(k.get(f"/api/ticket/{t['id']}").json["status"], "GESCHLOSSEN")
+        self.assertEqual(self.kunde.get(f"/admin/ticket/{t['id']}", headers={"User-Agent": "x"}).status_code, 302)   # nur Admin
+        # Aufraeumen nach der Frist
+        A.speichere_config({"aufbewahrung_tage": 1})
+        alt = A.finde_ticket(t["id"]); alt["nachrichten"][-1]["zeit"] = "2020-01-01T00:00:00"; A.speichere_ticket(alt)
+        A.aufraeumen()
+        self.assertIsNone(A.finde_ticket(t["id"]))
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")

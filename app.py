@@ -46,6 +46,7 @@ import oneclick
 
 BASE = Path(__file__).resolve().parent
 AUFTRAEGE = BASE / "auftraege"
+TICKETS = BASE / "tickets"   # Support-Tickets aus dem Programm (bleiben auf dem Server, nie ins Repository)
 EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
 EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
 SICHERUNGEN = BASE / "sicherungen"   # Archiv-Stand vor "Alles löschen" / "Alles neu sortieren"
@@ -999,6 +1000,164 @@ def auftrag_suche():
     return redirect(url_for("admin"))
 
 
+# ---------------------------------------------------------------------------
+# Support-Tickets: Kunde schreibt aus dem Programm, Admin antwortet im Admin-Bereich
+# ---------------------------------------------------------------------------
+
+TICKET_THEMEN = {"file": "Problem mit einem File", "auto": "Fehler am Auto nach dem Aufspielen",
+                 "bestellung": "Frage zu Bestellung / Zahlung", "sonstiges": "Sonstiges"}
+TICKET_STATUS = {"OFFEN": "Offen", "BEANTWORTET": "Beantwortet", "GESCHLOSSEN": "Geschlossen"}
+ticket_sperre = threading.Lock()
+
+
+def finde_ticket(tid: str):
+    if not re.fullmatch(r"[0-9a-f]{32}", tid or ""):
+        return None
+    pfad = TICKETS / f"{tid}.json"
+    return json.loads(pfad.read_text()) if pfad.exists() else None
+
+
+def speichere_ticket(t: dict):
+    TICKETS.mkdir(parents=True, exist_ok=True)
+    json_speichern(TICKETS / f"{t['id']}.json", t)
+
+
+def alle_tickets() -> list:
+    if not TICKETS.exists():
+        return []
+    liste = []
+    for p in TICKETS.glob("*.json"):
+        try:
+            liste.append(json.loads(p.read_text()))
+        except (OSError, ValueError):
+            continue
+    return sorted(liste, key=lambda t: t["nachrichten"][-1]["zeit"] if t.get("nachrichten") else t["zeit"], reverse=True)
+
+
+def api_ticket(t: dict) -> dict:
+    a = finde_auftrag(t.get("auftrag") or "") if t.get("auftrag") else None
+    return {"id": t["id"], "kurz": t["id"][:6], "thema": t["thema"], "thema_text": TICKET_THEMEN.get(t["thema"], t["thema"]),
+            "status": t["status"], "status_text": TICKET_STATUS.get(t["status"], t["status"]), "zeit": t["zeit"],
+            "auftrag": t.get("auftrag") or "", "datei": (a or {}).get("datei", ""),
+            "nachrichten": [{"von": n["von"], "text": n["text"], "zeit": n["zeit"]} for n in t.get("nachrichten", [])]}
+
+
+def ticket_text(t: dict, neu: bool) -> str:
+    """Datensparsam fuer Telegram: nur Nummer und Thema, kein Nachrichtentext, keine Kontaktdaten."""
+    zeile = f"🎫 <b>{'Neues Support-Ticket' if neu else 'Neue Nachricht im Ticket'}</b> #{t['id'][:6]}\n{TICKET_THEMEN.get(t['thema'], '')}"
+    basis = (lade_config().get("basis_url") or "").rstrip("/")
+    return zeile + (f"\n{basis}/admin/ticket/{t['id']}" if basis else "")
+
+
+def ticket_melden(t: dict, neu: bool):
+    chat = lade_config().get("telegram_chat_id")
+    if chat:
+        telegram_api("sendMessage", {"chat_id": chat, "text": ticket_text(t, neu), "parse_mode": "HTML",
+                                     "disable_web_page_preview": True})
+
+
+def ticket_text_pruefen(text) -> str:
+    text = str(text or "").strip()[:3000]
+    if len(text) < 3:
+        raise Abgelehnt("Bitte beschreibe kurz dein Anliegen.")
+    return text
+
+
+@app.route("/api/ticket", methods=["POST"])
+def api_ticket_neu():
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    try:
+        thema = str(daten.get("thema") or "")
+        if thema not in TICKET_THEMEN:
+            raise Abgelehnt("Bitte ein Thema wählen.")
+        text = ticket_text_pruefen(daten.get("text"))
+        if zu_viele("ticket", 10, 3600):
+            raise Abgelehnt("Zu viele Tickets in kurzer Zeit. Bitte später nochmal versuchen.")
+        merken("ticket")
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
+    aid = str(daten.get("auftrag") or "")
+    jetzt = datetime.now().isoformat(timespec="seconds")
+    t = {"id": uuid.uuid4().hex, "thema": thema, "status": "OFFEN", "zeit": jetzt,
+         "auftrag": aid if finde_auftrag(aid) else "", "kontakt": str(daten.get("kontakt") or "").strip()[:100],
+         "nachrichten": [{"von": "kunde", "text": text, "zeit": jetzt}]}
+    with ticket_sperre:
+        speichere_ticket(t)
+    threading.Thread(target=ticket_melden, args=(t, True), daemon=True).start()
+    return jsonify(api_ticket(t))
+
+
+@app.route("/api/ticket/<tid>")
+def api_ticket_lesen(tid):
+    t = finde_ticket(tid)
+    if t is None:
+        return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
+    return jsonify(api_ticket(t))
+
+
+@app.route("/api/ticket/<tid>/nachricht", methods=["POST"])
+def api_ticket_nachricht(tid):
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    try:
+        text = ticket_text_pruefen(daten.get("text"))
+        if zu_viele("ticketnachricht", 30, 3600):
+            raise Abgelehnt("Zu viele Nachrichten in kurzer Zeit. Bitte kurz warten.")
+        merken("ticketnachricht")
+    except Abgelehnt as e:
+        return jsonify(fehler=str(e)), 422
+    with ticket_sperre:
+        t = finde_ticket(tid)
+        if t is None:
+            return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
+        if len(t["nachrichten"]) >= 200:
+            return jsonify(fehler="Dieses Ticket ist voll. Bitte ein neues Ticket öffnen."), 422
+        t["nachrichten"].append({"von": "kunde", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")})
+        t["status"] = "OFFEN"
+        speichere_ticket(t)
+    threading.Thread(target=ticket_melden, args=(t, False), daemon=True).start()
+    return jsonify(api_ticket(t))
+
+
+@app.route("/admin/tickets")
+@admin_noetig
+def admin_tickets():
+    tickets = alle_tickets()
+    tickets.sort(key=lambda t: t["status"] != "OFFEN")   # offene zuerst (sonst neueste zuerst)
+    return render_template("tickets.html", tickets=[api_ticket(t) | {"kontakt": t.get("kontakt", "")} for t in tickets])
+
+
+@app.route("/admin/ticket/<tid>", methods=["GET", "POST"])
+@admin_noetig
+def admin_ticket(tid):
+    t = finde_ticket(tid)
+    if t is None:
+        abort(404)
+    if request.method == "POST":
+        aktion = request.form.get("aktion")
+        with ticket_sperre:
+            t = finde_ticket(tid)
+            if aktion == "antworten":
+                text = request.form.get("text", "").strip()[:5000]
+                if text:
+                    t["nachrichten"].append({"von": "admin", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")})
+                    t["status"] = "BEANTWORTET"
+                    flash("Antwort gesendet – der Kunde sieht sie im Programm.")
+                else:
+                    flash("Bitte eine Antwort eintippen.")
+            elif aktion == "schliessen":
+                t["status"] = "GESCHLOSSEN"
+                flash("Ticket geschlossen.")
+            elif aktion == "oeffnen":
+                t["status"] = "OFFEN"
+                flash("Ticket wieder geöffnet.")
+            speichere_ticket(t)
+        return redirect(url_for("admin_ticket", tid=tid))
+    return render_template("ticket.html", t=api_ticket(t) | {"kontakt": t.get("kontakt", "")},
+                           auftrag=finde_auftrag(t.get("auftrag") or "") if t.get("auftrag") else None)
+
+
 @app.route("/admin/wartend")
 @admin_noetig
 def admin_wartend():
@@ -1094,6 +1253,10 @@ def aufraeumen() -> int:
                 (a["status"] not in ("WARTET", "ENTWURF") and zeit < grenze):
             shutil.rmtree(AUFTRAEGE / a["id"], ignore_errors=True)
             geloescht += 1
+    for t in alle_tickets():   # Tickets: nach der Aufbewahrungsfrist ab der letzten Nachricht
+        letzte = t["nachrichten"][-1]["zeit"] if t.get("nachrichten") else t["zeit"]
+        if datetime.fromisoformat(letzte) < grenze:
+            (TICKETS / f"{t['id']}.json").unlink(missing_ok=True)
     return geloescht
 
 
@@ -2425,6 +2588,7 @@ main>*{animation:none}
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
+<a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}>Tickets{% if tickets_offen %} ({{ tickets_offen }}){% endif %}</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}>Sortieren ({{ zu_sortieren }})</a>{% endif %}
@@ -2905,6 +3069,37 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
  document.querySelectorAll('.handy-hinweis').forEach(function(e){e.style.display='block'});}
 </script>
 </body></html>""",
+"tickets.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>Support-Tickets</h1>
+<p class="leise" style="margin-top:-8px">Kunden schreiben aus dem Programm. Deine Antwort sehen sie dort, das Programm meldet sich bei ihnen.</p>
+{% if tickets %}<div class="tabelle"><table><tr><th>Nr.</th><th>Thema</th><th>Letzte Nachricht</th><th>Auftrag</th><th>Status</th><th></th></tr>
+{% for t in tickets %}{% set n = t.nachrichten[-1] %}<tr><td><code>#{{ t.kurz }}</code></td><td>{{ t.thema_text }}</td>
+<td><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }}, {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}. {{ n.zeit[11:16] }}:</span> {{ n.text[:80] }}{{ '…' if n.text|length > 80 }}</td>
+<td>{% if t.auftrag %}<a href="{{ url_for('auftrag_ansicht', aid=t.auftrag) }}">{{ t.datei or t.auftrag[:8] }}</a>{% else %}–{% endif %}</td>
+<td><span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span></td>
+<td><a class="btn klein" href="{{ url_for('admin_ticket', tid=t.id) }}">Öffnen</a></td></tr>{% endfor %}</table></div>
+{% else %}<p class="leise">Noch keine Tickets.</p>{% endif %}</div>
+{% endblock %}""",
+
+"ticket.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><p style="margin:0 0 6px"><a href="{{ url_for('admin_tickets') }}">← Alle Tickets</a></p>
+<h1>Ticket #{{ t.kurz }} · {{ t.thema_text }}</h1>
+<p class="leise" style="margin-top:-8px">Status: <span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span>
+{% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
+{% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ auftrag.ecu }}, #{{ auftrag.id[:8] }}){% endif %}</p>
+<div class="verlauf">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
+<div>{{ n.text }}</div></div>{% endfor %}</div>
+<form method="post" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
+<label class="feld">Antwort an den Kunden</label><textarea name="text" required></textarea>
+<button class="btn">Antwort senden</button></form>
+<form method="post" class="inline" style="display:block;margin-top:12px"><input type="hidden" name="csrf" value="{{ session.csrf }}">
+{% if t.status == 'GESCHLOSSEN' %}<input type="hidden" name="aktion" value="oeffnen"><button class="btn grau">Wieder öffnen</button>
+{% else %}<input type="hidden" name="aktion" value="schliessen"><button class="btn grau">Ticket schließen</button>{% endif %}</form>
+</div>
+<style>.verlauf{display:flex;flex-direction:column;gap:10px;margin-top:16px}.nachricht{max-width:78%;padding:10px 14px;border-radius:10px;background:var(--glas2);border:1px solid var(--rand)}
+.nachricht div{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}.nachricht.admin{align-self:flex-end;background:rgba(47,123,255,.14);border-color:rgba(47,123,255,.4)}</style>
+{% endblock %}""",
+
 "sortieren.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Sortieren</h1>
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
@@ -3132,7 +3327,8 @@ app.jinja_loader = DictLoader(TEMPLATES)
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
             "firma": lade_config().get("firmenname") or PROGRAMM_NAME,
-            "zu_sortieren": eingang_anzahl() if session.get("admin") else 0}
+            "zu_sortieren": eingang_anzahl() if session.get("admin") else 0,
+            "tickets_offen": sum(1 for t in alle_tickets() if t["status"] == "OFFEN") if session.get("admin") else 0}
 
 
 # ---------------------------------------------------------------------------

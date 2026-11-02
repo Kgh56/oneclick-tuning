@@ -146,6 +146,13 @@ Kunden nutzen OneClick **nur** über das Windows-Programm **OneClick Solutions**
 - **Browser:** zeigt nur die Werbeseite mit Bildern und Download. Hochladen geht im Browser nicht, die Kunden-Schnittstelle
   (`/api/...`) antwortet nur dem Programm. Im Browser gibt es sonst nur noch den Admin-Bereich (`/login`) und die Rechtstexte.
 
+## Support-Tickets (statt WhatsApp)
+
+Kunden öffnen im Programm unter **Support** ein Ticket (oder über „Problem?“ an einem Auftrag) – mit Thema,
+Nachricht und optional dem Auftrag. Du antwortest im Admin unter **Tickets**; das Programm meldet die Antwort
+beim Kunden. Telegram meldet neue Tickets/Nachrichten nur mit Nummer und Thema (ohne Text, ohne Kontakt).
+Tickets liegen in `tickets/` auf dem Server und werden nach der Aufbewahrungsfrist ab der letzten Nachricht gelöscht.
+
 ## Anfragen (Tickets)
 Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wird? Dann klickt er auf der Seite
 **„Anfrage stellen“**:
