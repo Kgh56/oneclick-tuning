@@ -1,0 +1,89 @@
+# Baut das Mac-Programm für Kunden (programm/oneclick_programm.py) als "OneClick Solutions.app"
+# (eine App für Intel-Macs und Macs mit Apple-Chip), startet es zur Probe auf einem Mac und stellt es
+# unter "Releases" -> "programm" als OneClick-Solutions-Mac.zip zum Download bereit.
+name: Mac-Programm bauen
+
+on:
+  push:
+    branches: [main]
+    paths: ["programm/**", ".github/workflows/mac-programm.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bauen:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python von python.org ist "universal2" (Intel + Apple-Chip) - nur damit wird auch die App universal2
+      - name: Python (universal2) installieren
+        run: |
+          curl -sSLo python.pkg https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg
+          sudo installer -pkg python.pkg -target /
+          /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 -m venv venv
+          venv/bin/python -c "import platform, sys; print(sys.version, platform.machine())"
+
+      - name: Pakete installieren
+        run: venv/bin/pip install pyinstaller==6.11.1 "pywebview>=5.4,<6"
+
+      - name: Versionsnummer festlegen (fortlaufend)
+        run: echo "${{ github.run_number }}" > programm/version.txt
+
+      - name: App-Symbol (.icns) erzeugen
+        run: |
+          mkdir icon.iconset
+          for g in 16 32 128 256 512; do
+            sips -z $g $g programm/icon.png --out icon.iconset/icon_${g}x${g}.png >/dev/null
+            sips -z $((g*2)) $((g*2)) programm/icon.png --out icon.iconset/icon_${g}x${g}@2x.png >/dev/null
+          done
+          iconutil -c icns icon.iconset -o icon.icns
+
+      - name: App bauen
+        run: |
+          venv/bin/pyinstaller --noconfirm --windowed --name "OneClick Solutions" --icon icon.icns \
+            --osx-bundle-identifier de.gh-mapping.oneclick --target-arch universal2 \
+            --add-data "programm/version.txt:." programm/oneclick_programm.py
+          lipo -archs "dist/OneClick Solutions.app/Contents/MacOS/OneClick Solutions"
+          lipo -archs "dist/OneClick Solutions.app/Contents/MacOS/OneClick Solutions" | grep -q x86_64
+          lipo -archs "dist/OneClick Solutions.app/Contents/MacOS/OneClick Solutions" | grep -q arm64
+
+      - name: Selbsttest (fertige App starten, Fenster und Brücke prüfen)
+        run: |
+          export ONECLICK_SELBSTTEST="$PWD/selbsttest.json"
+          "dist/OneClick Solutions.app/Contents/MacOS/OneClick Solutions" &
+          pid=$!
+          for i in $(seq 1 240); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          kill $pid 2>/dev/null || true
+          echo "Ergebnis:"; cat selbsttest.json; echo
+          grep -q '"ui": true' selbsttest.json
+          grep -q '"api": true' selbsttest.json
+          grep -q '"speichern": true' selbsttest.json
+          grep -q '"kennung": true' selbsttest.json
+          grep -q '"update": true' selbsttest.json
+          grep -q '"plattform": "mac"' selbsttest.json
+
+      - name: ZIP und Versionsdatei für das Auto-Update erzeugen
+        run: |
+          ditto -c -k --keepParent "dist/OneClick Solutions.app" dist/OneClick-Solutions-Mac.zip
+          venv/bin/python -c "import hashlib, json; d = open('dist/OneClick-Solutions-Mac.zip', 'rb').read(); json.dump({'version': int(open('programm/version.txt').read()), 'sha256': hashlib.sha256(d).hexdigest(), 'groesse': len(d)}, open('dist/version-mac.json', 'w'))"
+          cat dist/version-mac.json
+          ls -la dist
+
+      - name: Als Download bereitstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view programm >/dev/null 2>&1 || \
+            gh release create programm --title "OneClick Solutions – Programm" \
+              --notes "Programm für Kunden. Updates installiert das Programm danach selbst."
+          # Erst die App, dann die Versionsdatei: Programme sehen die neue Version erst, wenn die App schon da ist
+          gh release upload programm dist/OneClick-Solutions-Mac.zip --clobber
+          gh release upload programm dist/version-mac.json --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OneClick-Solutions-Mac
+          path: dist/OneClick-Solutions-Mac.zip

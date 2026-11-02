@@ -1,9 +1,11 @@
-"""Tests fuer das Windows-Programm (ohne Fenster - das testet der Build auf Windows)."""
+"""Tests fuer das Programm (ohne Fenster - das testen die Builds auf Windows und Mac)."""
 import hashlib
 import json
 import sys
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "programm"))
@@ -58,6 +60,54 @@ class ProgrammTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 u.installieren(kaputt)
             self.assertEqual(exe.read_bytes(), b"alt")   # alte Version bleibt
+
+
+    def test_mac_update(self):
+        def app_zip(inhalt: bytes) -> bytes:
+            puffer = io.BytesIO()
+            with zipfile.ZipFile(puffer, "w") as z:
+                z.writestr("OneClick Solutions.app/Contents/MacOS/OneClick-Solutions", inhalt)
+                z.writestr("OneClick Solutions.app/Contents/Info.plist", "<plist/>")
+                z.writestr("OneClick Solutions.app/Contents/Resources/gross.bin", b"x" * (2 * 1024 * 1024))
+            return puffer.getvalue()
+
+        neu = app_zip(b"NEU")
+        info = {"version": 9, "sha256": hashlib.sha256(neu).hexdigest(), "groesse": len(neu)}
+        abrufe = []
+
+        def holen(url, timeout=0):
+            abrufe.append(url)
+            return json.dumps(info).encode() if P.MAC_VERSION in url else neu
+
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d) / "OneClick Solutions.app"
+            (app / "Contents" / "MacOS").mkdir(parents=True)
+            programm = app / "Contents" / "MacOS" / "OneClick-Solutions"
+            programm.write_bytes(b"ALT")
+            u = P.MacUpdater(app=app, holen=holen, eigene=8)
+            self.assertEqual(u.pruefen()["version"], 9)
+            self.assertTrue(abrufe[0].split("?")[0].endswith("/version-mac.json"))   # eigene Versionsdatei fuer den Mac
+            u.installieren(info)
+            self.assertTrue(abrufe[-1].endswith("/OneClick-Solutions-Mac.zip"))
+            self.assertEqual(programm.read_bytes(), b"NEU")
+            self.assertEqual((u.alte_app / "Contents" / "MacOS" / "OneClick-Solutions").read_bytes(), b"ALT")
+            self.assertFalse((Path(d) / ".oneclick-update").exists())   # Zwischenordner aufgeraeumt
+            u.aufraeumen()
+            self.assertFalse(u.alte_app.exists())
+            # beschaedigter Download: alte Version bleibt
+            with self.assertRaises(RuntimeError):
+                u.installieren(dict(info, sha256="0" * 64))
+            self.assertEqual(programm.read_bytes(), b"NEU")
+            # direkt aus "Downloads" gestartet (macOS verschiebt es dann in einen Schreibschutz-Ordner): klare Meldung
+            fremd = P.MacUpdater(app=Path(d) / "AppTranslocation" / "x" / "OneClick Solutions.app", holen=holen, eigene=8)
+            fremd.app = Path("/private/var/folders/AppTranslocation/ABC/d/OneClick Solutions.app")
+            with self.assertRaises(RuntimeError) as e:
+                fremd.installieren(info)
+            self.assertIn("Programme", str(e.exception))
+
+    def test_plattform(self):
+        self.assertEqual(P.Bruecke().plattform(), "mac" if P.MAC else "windows")
+        self.assertIn("Macintosh" if P.MAC else "Windows", P.USER_AGENT)
 
 
 if __name__ == "__main__":

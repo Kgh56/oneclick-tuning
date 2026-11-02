@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OneClick Solutions - Windows-Programm fuer Kunden
+OneClick Solutions - Programm fuer Kunden (Windows und Mac)
 
 Ein eigenes Programmfenster (ohne Browser-Leisten, mit eigener Titelleiste) fuer das Kunden-Portal.
 Die Oberflaeche kommt live vom Server (web/kunde.html) - Design-Updates sind damit sofort bei allen
@@ -10,14 +10,15 @@ Kunden, ohne neue .exe. Das Programm selbst liefert nur:
   - Auto-Update der .exe (version.json neben der .exe auf GitHub)
   - eine Seite "Keine Verbindung", wenn der Server nicht erreichbar ist
 
-Unter Windows nutzt pywebview Microsoft Edge WebView2 (in Windows 10/11 enthalten).
-Bauen macht GitHub automatisch: .github/workflows/windows-programm.yml
+Unter Windows nutzt pywebview Microsoft Edge WebView2 (in Windows 10/11 enthalten), auf dem Mac WebKit.
+Bauen macht GitHub automatisch: .github/workflows/windows-programm.yml und mac-programm.yml
 """
 
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -31,6 +32,9 @@ SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping
 UPDATE_URL = os.environ.get("ONECLICK_UPDATE_URL", "https://github.com/Kgh56/oneclick-tuning/releases/download/programm")
 PROGRAMM_NAME = "OneClick Solutions"
 EXE_NAME = "OneClick-Solutions.exe"
+MAC = sys.platform == "darwin"
+MAC_ZIP = "OneClick-Solutions-Mac.zip"   # enthaelt "OneClick Solutions.app"
+MAC_VERSION = "version-mac.json"
 # pywebview erlaubt im Filternamen nur Buchstaben, Ziffern und Leerzeichen (sonst bricht der Dialog still ab)
 DATEI_TYPEN = ("ECU Datei (*.bin)", "Alle Dateien (*.*)")
 
@@ -50,14 +54,21 @@ def build_nummer() -> int:
 
 VERSION = f"3.{build_nummer()}"
 # Mit dieser Kennung laesst der Server das Programm auf die Kundenseite (Browser bekommen die Download-Seite)
-USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 "
-              f"Safari/537.36 Edg/130.0.0.0 OneClickProgramm/{VERSION}")
+if MAC:
+    USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                  f"Version/17.0 Safari/605.1.15 OneClickProgramm/{VERSION}")
+else:
+    USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 "
+                  f"Safari/537.36 Edg/130.0.0.0 OneClickProgramm/{VERSION}")
 
 
 def datenordner() -> Path:
     """Hier merkt sich das Fenster seine Daten (u. a. 'Meine Auftraege') - bleibt auch nach Updates."""
-    basis = os.environ.get("APPDATA") or str(Path.home() / ".config")
-    ordner = Path(basis) / "OneClick-Tuning"
+    if MAC:
+        ordner = Path.home() / "Library" / "Application Support" / "OneClick-Solutions"
+    else:
+        basis = os.environ.get("APPDATA") or str(Path.home() / ".config")
+        ordner = Path(basis) / "OneClick-Tuning"
     ordner.mkdir(parents=True, exist_ok=True)
     return ordner
 
@@ -114,6 +125,70 @@ class Updater:
         subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), env=umgebung, close_fds=True, creationflags=flags)
 
 
+class MacUpdater(Updater):
+    """Mac: Das Programm ist ein Ordner "OneClick Solutions.app". Neue Version als ZIP laden, pruefen (SHA-256),
+    daneben entpacken und gegen die laufende tauschen."""
+
+    def __init__(self, basis_url: str = UPDATE_URL, app: Path = None, holen=holen, eigene: int = None):
+        super().__init__(basis_url, exe=Path(sys.executable), holen=holen, eigene=eigene)
+        # .../OneClick Solutions.app/Contents/MacOS/OneClick-Solutions -> .../OneClick Solutions.app
+        self.app = Path(app) if app else Path(sys.executable).resolve().parents[2]
+
+    @property
+    def alte_app(self) -> Path:
+        return self.app.with_name(self.app.stem + ".alt.app")
+
+    def pruefen(self):
+        info = json.loads(self.holen(f"{self.basis_url}/{MAC_VERSION}?t={int(time.time())}", 10))
+        return info if int(info["version"]) > self.eigene else None
+
+    def installieren(self, info: dict) -> Path:
+        if "/AppTranslocation/" in str(self.app) or not os.access(self.app.parent, os.W_OK):
+            raise RuntimeError("Bitte das Programm zuerst in den Ordner „Programme“ ziehen – dann klappen Updates.")
+        daten = self.holen(f"{self.basis_url}/{MAC_ZIP}", 300)
+        if hashlib.sha256(daten).hexdigest() != info["sha256"] or len(daten) < 1024 * 1024:
+            raise RuntimeError("Der Download ist beschädigt.")
+        tmp = self.app.with_name(".oneclick-update")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir()
+        try:
+            (tmp / "neu.zip").write_bytes(daten)
+            entpacken(tmp / "neu.zip", tmp)
+            neu = next(tmp.glob("*.app"), None)
+            if neu is None:
+                raise RuntimeError("Im Download fehlt das Programm.")
+            shutil.rmtree(self.alte_app, ignore_errors=True)
+            self.app.rename(self.alte_app)
+            try:
+                neu.rename(self.app)
+            except OSError:
+                self.alte_app.rename(self.app)   # zurueck, alte Version laeuft weiter
+                raise
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return self.app
+
+    def aufraeumen(self):
+        shutil.rmtree(self.alte_app, ignore_errors=True)
+
+    def neu_starten(self):
+        subprocess.Popen(["open", "-n", str(self.app)], close_fds=True)
+
+
+def entpacken(zip_datei: Path, ziel: Path):
+    """Mac: 'ditto' behaelt Rechte und Verknuepfungen im .app-Ordner (zipfile wuerde sie zerstoeren)."""
+    if MAC:
+        subprocess.run(["ditto", "-x", "-k", str(zip_datei), str(ziel)], check=True)
+    else:
+        import zipfile
+        with zipfile.ZipFile(zip_datei) as z:
+            z.extractall(ziel)
+
+
+def neuer_updater() -> Updater:
+    return MacUpdater() if MAC else Updater()
+
+
 # ---------------------------------------------------------------------------
 # Bruecke: diese Funktionen ruft die Oberflaeche ueber window.pywebview.api auf
 # ---------------------------------------------------------------------------
@@ -133,6 +208,9 @@ class Bruecke:
 
     def version(self):
         return VERSION
+
+    def plattform(self):
+        return "mac" if MAC else "windows"
 
     def minimieren(self):
         self._fenster.minimize()
@@ -156,7 +234,7 @@ class Bruecke:
         if not getattr(sys, "frozen", False):
             return {"version": VERSION, "neu": None}
         try:
-            info = Updater().pruefen()
+            info = neuer_updater().pruefen()
         except Exception:
             return {"version": VERSION, "fehler": "Update-Server gerade nicht erreichbar. Bitte später nochmal versuchen."}
         return {"version": VERSION, "neu": int(info["version"]) if info else None}
@@ -166,7 +244,7 @@ class Bruecke:
         if not getattr(sys, "frozen", False):
             return {"fehler": "Nur im installierten Programm möglich."}
         try:
-            u = Updater()
+            u = neuer_updater()
             info = u.pruefen()
             if not info:
                 return {"aktuell": True}
@@ -238,6 +316,7 @@ def selbsttest(fenster, ergebnis_datei: str):
         erg["speichern"] = bool(fenster.evaluate_js("typeof window.pywebview.api.speichern === 'function'"))
         erg["kennung"] = "OneClickProgramm/" in str(fenster.evaluate_js("navigator.userAgent"))
         erg["update"] = bool(fenster.evaluate_js("typeof window.pywebview.api.update_pruefen === 'function'"))
+        erg["plattform"] = "mac" if MAC else "windows"
         erg["version"] = VERSION
     finally:
         Path(ergebnis_datei).write_text(json.dumps(erg))
@@ -247,7 +326,7 @@ def selbsttest(fenster, ergebnis_datei: str):
 def main():
     import webview
     test = os.environ.get("ONECLICK_SELBSTTEST")
-    updater = Updater()
+    updater = neuer_updater()
     if getattr(sys, "frozen", False) and not test:
         updater.aufraeumen()
         try:
@@ -265,8 +344,9 @@ def main():
         start = {"url": SERVER + "/"}
     else:
         start = {"html": OFFLINE}
+    # Windows: eigenes Fenster ohne Rahmen (Knoepfe in der Oberflaeche); Mac: normale Titelleiste mit Ampel-Knoepfen
     fenster = webview.create_window(PROGRAMM_NAME, js_api=bruecke, width=1440, height=900, min_size=(1100, 700),
-                                    frameless=True, easy_drag=False, background_color="#0d0f14", **start)
+                                    frameless=not MAC, easy_drag=False, background_color="#0d0f14", **start)
     bruecke._fenster = fenster
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     # private_mode=False + eigener Ordner: "Meine Auftraege" bleiben nach dem Schliessen erhalten
