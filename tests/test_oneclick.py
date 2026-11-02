@@ -487,6 +487,33 @@ class WebTests(Basis):
         A.aufraeumen()
         self.assertFalse((A.TICKETS / "anhang" / t["id"]).exists())
 
+    def test_ticket_datei_vom_kunden(self):
+        k, a = self.kunde, self.admin()
+        mp = {"content_type": "multipart/form-data"}
+        # neues Ticket direkt mit Datei
+        t = k.post("/api/ticket", data={"thema": "file", "text": "Hier mein neu ausgelesenes File",
+                                        "datei": (io.BytesIO(b"ORI" * 50), "ausgelesen.bin")}, **mp).json
+        d = t["nachrichten"][0]["datei"]
+        self.assertEqual((d["name"], d["groesse"]), ("ausgelesen.bin", 150))
+        self.assertEqual(a.get(f"/admin/ticket/{t['id']}/datei/{d['id']}").data, b"ORI" * 50)   # Admin laedt es
+        self.assertIn("ausgelesen.bin", a.get(f"/admin/ticket/{t['id']}").text)
+        # Nachricht nur mit Datei (ohne Text) ist erlaubt
+        neu = k.post(f"/api/ticket/{t['id']}/nachricht", data={"text": "", "datei": (io.BytesIO(b"\x89PNG.."), "fehler.png")}, **mp).json
+        self.assertEqual((neu["nachrichten"][-1]["text"], neu["nachrichten"][-1]["datei"]["name"], neu["status"]), ("", "fehler.png", "OFFEN"))
+        # ohne Text und ohne Datei / leer / gesperrter Name -> abgelehnt
+        url = f"/api/ticket/{t['id']}/nachricht"
+        self.assertEqual(k.post(url, data={"text": ""}, **mp).status_code, 422)
+        self.assertEqual(k.post(url, data={"text": "x", "datei": (io.BytesIO(b""), "leer.bin")}, **mp).status_code, 422)
+        self.assertEqual(k.post(url, data={"text": "x", "datei": (io.BytesIO(b"1"), "egr_off.bin")}, **mp).status_code, 422)
+        self.assertEqual(k.post("/api/ticket", data={"thema": "file", "text": "hallo du",
+                                                     "datei": (io.BytesIO(b"1"), "dpf_off.bin")}, **mp).status_code, 422)
+        self.assertEqual(k.post("/api/ticket/" + "0" * 32 + "/nachricht", data={"text": "", "datei": (io.BytesIO(b"1"), "a.bin")}, **mp).status_code, 404)
+        # zu gross (Grenze 16 MB fuer Kunden)
+        self.assertEqual(k.post(url, data={"text": "x", "datei": (io.BytesIO(b"0" * (17 * 1024 * 1024)), "riesig.bin")}, **mp).status_code, 413)
+        # JSON geht weiterhin
+        self.assertEqual(k.post(url, json={"text": "nur Text"}).status_code, 200)
+        self.assertEqual(len(list((A.TICKETS / "anhang" / t["id"]).iterdir())), 2)
+
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck

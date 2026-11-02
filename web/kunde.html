@@ -1078,6 +1078,20 @@ a.btn{text-decoration:none}
 .tk-blase.kunde{align-self:flex-end;background:rgba(47,123,255,.16);border-color:rgba(47,123,255,.45)}
 .tk-blase .tk-wer{display:block;font-size:11.5px;color:var(--nx-leise);margin-bottom:4px}
 .tk-blase div{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.5}
+.tk-anhang-wahl{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:8px}
+.tk-anhang-wahl.kompakt{margin:10px 0 -2px}
+.tk-klammer{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:10px;border:1px dashed rgba(47,123,255,.6);background:rgba(47,123,255,.08);color:inherit;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s}
+.tk-klammer:hover{background:rgba(47,123,255,.2);border-color:#2f7bff}
+.tk-klammer svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tk-klammer.rund{width:44px;height:44px;padding:0;justify-content:center;flex:none;border-style:solid;border-color:var(--nx-rand)}
+.tk-gewaehlt{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:6px 8px 6px 12px;border-radius:10px;background:rgba(47,123,255,.16);border:1px solid rgba(47,123,255,.55);font-size:13px}
+.tk-gewaehlt b{overflow-wrap:anywhere}.tk-gewaehlt i{font-style:normal;color:var(--nx-leise);font-size:12px;white-space:nowrap}
+.tk-weg{width:24px;height:24px;border-radius:7px;border:0;background:rgba(255,255,255,.08);color:inherit;cursor:pointer;flex:none}
+.tk-weg:hover{background:rgba(255,80,80,.35)}
+.tk-hinweis{font-size:12px}
+.tk-detail,.tk-form{position:relative}
+.tk-ablage{position:absolute;inset:0;display:none;place-items:center;border:2px dashed #2f7bff;border-radius:14px;background:rgba(10,20,40,.82);z-index:5;pointer-events:none;font-weight:700;font-size:16px;color:#cfe0ff}
+.ziehen-tk .tk-ablage{display:grid}
 .tk-anhang{display:flex;align-items:center;gap:10px;margin-top:8px;width:100%;min-width:220px;padding:9px 12px;border-radius:10px;border:1px solid rgba(47,123,255,.55);background:rgba(47,123,255,.12);color:inherit;font:inherit;font-size:13.5px;cursor:pointer;text-align:left;transition:background .15s,border-color .15s,transform .15s}
 .tk-blase .tk-anhang:first-of-type{margin-top:4px}
 .tk-anhang:hover{background:rgba(47,123,255,.24);border-color:#2f7bff;transform:translateY(-1px)}
@@ -1351,6 +1365,9 @@ button.hilfe svg{width:15px;height:15px}
             <select class="feld" id="tk-auftrag"><option value="">– kein bestimmter Auftrag –</option></select>
             <label class="nx-label" for="tk-text">Deine Nachricht</label>
             <textarea class="feld" id="tk-text" rows="6" maxlength="3000" placeholder="Was ist passiert? Fehlercodes, Verhalten des Autos, was du schon versucht hast …"></textarea>
+            <div class="tk-anhang-wahl" id="tk-neu-anhang"><button type="button" class="tk-klammer" title="Datei anhängen"><svg viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg><span>Datei anhängen</span></button>
+              <span class="tk-gewaehlt" hidden><b></b><i></i><button type="button" class="tk-weg" title="Entfernen">✕</button></span>
+              <span class="leise tk-hinweis">ausgelesenes File, Screenshot … · max. 16 MB · oder hierher ziehen</span><input type="file" hidden></div>
             <input class="feld" id="tk-kontakt" maxlength="100" placeholder="Name / Telefon (optional, falls wir dich erreichen müssen)">
             <div class="knoepfe"><button class="btn" id="tk-senden" type="submit">Ticket senden</button><button class="btn grau" type="button" id="tk-abbrechen">Abbrechen</button></div>
           </form>
@@ -1358,8 +1375,11 @@ button.hilfe svg{width:15px;height:15px}
             <div class="tk-kopf"><b id="tk-titel"></b><span class="pille" id="tk-status"><span></span></span></div>
             <div class="leise tk-unter" id="tk-unter"></div>
             <div class="tk-verlauf" id="tk-verlauf"></div>
-            <div class="tk-antwort"><textarea class="feld" id="tk-antwort" rows="3" maxlength="3000" placeholder="Antwort schreiben …"></textarea>
+            <div class="tk-anhang-wahl kompakt" id="tk-antwort-anhang" hidden><span class="tk-gewaehlt" hidden><b></b><i></i><button type="button" class="tk-weg" title="Entfernen">✕</button></span><input type="file" hidden></div>
+            <div class="tk-antwort"><button type="button" class="tk-klammer rund" id="tk-antwort-klammer" title="Datei anhängen (oder in den Chat ziehen)"><svg viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg></button>
+              <textarea class="feld" id="tk-antwort" rows="3" maxlength="3000" placeholder="Antwort schreiben … (Dateien einfach hierher ziehen)"></textarea>
               <button type="button" class="btn" id="tk-antwort-senden">Senden</button></div>
+            <div class="tk-ablage" aria-hidden="true"><span>Datei loslassen zum Anhängen</span></div>
           </div>
         </section>
       </div>
@@ -1404,6 +1424,10 @@ const lokal = {
     if (t) t.gesehen = Math.max(t.gesehen || 0, n); else d.tickets.unshift({id, gesehen: n}); d.tickets = d.tickets.slice(0, 100); this.schreiben(d); },
   ticketEntfernen(id) { const d = this.lesen(); d.tickets = d.tickets.filter(x => x.id !== id); this.schreiben(d); },
 };
+function formular(felder, datei) {
+  const f = new FormData(); Object.entries(felder).forEach(([k, v]) => f.append(k, v || "")); f.append("datei", datei, datei.name);
+  return {method: "POST", body: f};
+}
 async function server(pfad, optionen = {}) {
   let r;
   try { r = await fetch(pfad, {cache: "no-store", ...optionen}); }
@@ -1465,16 +1489,16 @@ const WEB = {
     try { const {daten} = await server(`/api/ticket/${encodeURIComponent(id)}`); return {ticket: daten}; }
     catch (e) { return {fehler: e.message}; }
   },
-  async ticketNeu(thema, text, auftrag, kontakt) {
+  async ticketNeu(thema, text, auftrag, kontakt, datei) {
     kontakt = lokal.kontakt(kontakt);
     try {
-      const {daten: t} = await server("/api/ticket", json("POST", {thema, text, auftrag, kontakt}));
+      const {daten: t} = await server("/api/ticket", datei ? formular({thema, text, auftrag, kontakt}, datei) : json("POST", {thema, text, auftrag, kontakt}));
       lokal.ticketGesehen(t.id, t.nachrichten.length); return {ticket: t};
     } catch (e) { return {fehler: e.message}; }
   },
-  async ticketNachricht(id, text) {
+  async ticketNachricht(id, text, datei) {
     try {
-      const {daten: t} = await server(`/api/ticket/${encodeURIComponent(id)}/nachricht`, json("POST", {text}));
+      const {daten: t} = await server(`/api/ticket/${encodeURIComponent(id)}/nachricht`, datei ? formular({text}, datei) : json("POST", {text}));
       lokal.ticketGesehen(t.id, t.nachrichten.length); return {ticket: t};
     } catch (e) { return {fehler: e.message}; }
   },
@@ -2143,9 +2167,10 @@ document.addEventListener("keydown", e => {
 });
 const zone = $("#zone");
 $("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.target.value = ""; });
-["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (aktuelle === "v-upload") zone.classList.add("ziehen"); }));
+const ecuSichtbar = () => aktuelle === "v-upload" && $("#seite-ecu").classList.contains("aktiv");
+["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (ecuSichtbar()) zone.classList.add("ziehen"); }));
 ["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || e.target === zone) zone.classList.remove("ziehen"); }));
-document.addEventListener("drop", e => { if (aktuelle === "v-upload" && e.dataTransfer.files.length) pruefen(e.dataTransfer.files[0]); });
+document.addEventListener("drop", e => { if (ecuSichtbar() && e.dataTransfer.files.length) pruefen(e.dataTransfer.files[0]); });
 $("#senden").addEventListener("click", senden);
 $("#abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#nochmal").addEventListener("click", () => zeige("v-upload"));
@@ -2208,6 +2233,7 @@ function tkListeMalen() {
 }
 function zeigeTicket(id) {
   const t = tickets.find(x => x.id === id); if (!t) return;
+  if (tkAktiv !== id && typeof tkAntwortAnhang !== "undefined") tkAntwortAnhang.setzen(null);   // Anhang gehoert zum vorigen Ticket
   tkAktiv = id; tkBereich("#tk-detail");
   $("#tk-titel").textContent = "Ticket #" + t.kurz + " · " + t.thema_text;
   $("#tk-status").className = "pille " + tkStatusKlasse(t.status); $("#tk-status span").textContent = t.status_text;
@@ -2253,7 +2279,7 @@ function neuesTicket(aid = "", thema = "file") {
   const sel = $("#tk-auftrag"); sel.innerHTML = '<option value="">– kein bestimmter Auftrag –</option>';
   zustand.auftraege.forEach(a => { const o = document.createElement("option"); o.value = a.id; o.textContent = a.datei + " · " + (a.option_name || "–") + " · " + datum(a.zeit); sel.appendChild(o); });
   sel.value = aid; $("#tk-thema").value = thema; $("#tk-text").value = ""; $("#tk-kontakt").value = $("#kontakt").value;
-  tkAktiv = null; tkBereich("#tk-form"); tkListeMalen(); $("#tk-text").focus();
+  tkAktiv = null; tkBereich("#tk-form"); tkNeuAnhang.setzen(null); tkListeMalen(); $("#tk-text").focus();
 }
 async function ticketsLaden(melden) {
   const erg = await rufe("tickets"); if (erg.fehler) return;
@@ -2311,22 +2337,54 @@ setInterval(() => updatePruefen(true), 30 * 60 * 1000);
 $("#sn-support").addEventListener("click", () => { seite("support"); $("#sn-support").classList.add("an"); if (!tkAktiv && $("#tk-form").hidden) tkBereich("#tk-leer"); ticketsLaden(false); });
 ["#tk-neu-knopf", "#tk-neu-knopf2", "#nx-info-support"].forEach(x => $(x).addEventListener("click", () => neuesTicket()));
 $("#tk-abbrechen").addEventListener("click", () => tkBereich("#tk-leer"));
+/* Datei an ein Ticket haengen: Bueroklammer oder Datei in den Bereich ziehen */
+const TK_MAX = 16 * 1024 * 1024;
+function tkAnhangWahl(box, klammer, flaeche) {
+  const input = box.querySelector("input[type=file]"), chip = box.querySelector(".tk-gewaehlt");
+  const w = {datei: null,
+    setzen(d) {
+      if (d && d.size > TK_MAX) { toast("fehler", "Datei zu groß", "Bitte höchstens 16 MB anhängen.", 7000); d = null; }
+      if (d && !d.size) { toast("fehler", "Datei ist leer", d.name, 6000); d = null; }
+      w.datei = d || null; input.value = "";
+      chip.hidden = !w.datei; if (box.classList.contains("kompakt")) box.hidden = !w.datei;
+      klammer.classList.toggle("an", !!w.datei);
+      if (w.datei) { chip.querySelector("b").textContent = w.datei.name; chip.querySelector("i").textContent = groesseText(w.datei.size); }
+    }};
+  klammer.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => w.setzen(input.files[0]));
+  chip.querySelector(".tk-weg").addEventListener("click", () => w.setzen(null));
+  let tiefe = 0;
+  const istDatei = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  flaeche.addEventListener("dragenter", e => { if (!istDatei(e)) return; e.preventDefault(); tiefe++; flaeche.classList.add("ziehen-tk"); });
+  flaeche.addEventListener("dragover", e => { if (istDatei(e)) e.preventDefault(); });
+  flaeche.addEventListener("dragleave", () => { if (--tiefe <= 0) { tiefe = 0; flaeche.classList.remove("ziehen-tk"); } });
+  flaeche.addEventListener("drop", e => {
+    if (!istDatei(e)) return; e.preventDefault(); e.stopPropagation(); tiefe = 0; flaeche.classList.remove("ziehen-tk");
+    if (e.dataTransfer.files.length) w.setzen(e.dataTransfer.files[0]);
+  });
+  return w;
+}
+$("#tk-form").insertAdjacentHTML("beforeend", '<div class="tk-ablage" aria-hidden="true"><span>Datei loslassen zum Anhängen</span></div>');
+const tkNeuAnhang = tkAnhangWahl($("#tk-neu-anhang"), $("#tk-neu-anhang .tk-klammer"), $("#tk-form"));
+const tkAntwortAnhang = tkAnhangWahl($("#tk-antwort-anhang"), $("#tk-antwort-klammer"), $("#tk-detail"));
 $("#tk-form").addEventListener("submit", async e => {
   e.preventDefault();
-  const b = $("#tk-senden"); b.disabled = true; b.textContent = "Wird gesendet …";
-  const erg = await rufe("ticketNeu", $("#tk-thema").value, $("#tk-text").value, $("#tk-auftrag").value, $("#tk-kontakt").value);
+  const b = $("#tk-senden"); b.disabled = true; b.textContent = tkNeuAnhang.datei ? "Wird hochgeladen …" : "Wird gesendet …";
+  const erg = await rufe("ticketNeu", $("#tk-thema").value, $("#tk-text").value, $("#tk-auftrag").value, $("#tk-kontakt").value, tkNeuAnhang.datei);
   b.disabled = false; b.textContent = "Ticket senden";
   if (erg.fehler) return toast("fehler", "Nicht gesendet", erg.fehler, 7000);
+  tkNeuAnhang.setzen(null);
   toast("ok", "Ticket gesendet", "Wir melden uns hier im Programm – du bekommst Bescheid, sobald wir antworten.", 7000);
   tickets.unshift({...erg.ticket, gesehen: erg.ticket.nachrichten.length}); zeigeTicket(erg.ticket.id);
 });
 $("#tk-antwort-senden").addEventListener("click", async () => {
-  const feld = $("#tk-antwort"), b = $("#tk-antwort-senden"); if (!tkAktiv || !feld.value.trim()) return;
-  b.disabled = true;
-  const erg = await rufe("ticketNachricht", tkAktiv, feld.value);
-  b.disabled = false;
+  const feld = $("#tk-antwort"), b = $("#tk-antwort-senden"), datei = tkAntwortAnhang.datei;
+  if (!tkAktiv || (!feld.value.trim() && !datei)) return;
+  b.disabled = true; if (datei) b.textContent = "Lädt …";
+  const erg = await rufe("ticketNachricht", tkAktiv, feld.value, datei);
+  b.disabled = false; b.textContent = "Senden";
   if (erg.fehler) return toast("fehler", "Nicht gesendet", erg.fehler, 7000);
-  feld.value = ""; const i = tickets.findIndex(t => t.id === erg.ticket.id);
+  feld.value = ""; tkAntwortAnhang.setzen(null); const i = tickets.findIndex(t => t.id === erg.ticket.id);
   tickets[i] = {...erg.ticket, gesehen: erg.ticket.nachrichten.length}; zeigeTicket(erg.ticket.id);
 });
 /* Als Windows-Programm: Fensterknoepfe + Speichern ueber den Windows-Dialog */

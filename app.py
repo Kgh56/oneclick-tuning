@@ -1090,10 +1090,51 @@ def ticket_text_pruefen(text) -> str:
     return text
 
 
+TICKET_ANHAENGE_KUNDE = 20   # Dateien pro Ticket vom Kunden
+
+
+def ticket_eingabe() -> tuple[dict, object]:
+    """Daten einer Ticket-Nachricht aus dem Programm: JSON oder (mit Datei) multipart."""
+    if request.files or request.form:
+        return request.form.to_dict(), request.files.get("datei")
+    daten = request.get_json(silent=True)
+    return (daten if isinstance(daten, dict) else {}), None
+
+
+def ticket_datei_lesen(datei) -> tuple[str, bytes] | None:
+    """Hochgeladene Datei pruefen. None = keine Datei; Abgelehnt bei leerer oder unzulaessiger Datei."""
+    if not datei or not datei.filename:
+        return None
+    name = sicherer_name(PurePosixPath(datei.filename.replace("\\", "/")).name)[:150]
+    if oneclick.abgas_datei(name):
+        raise Abgelehnt("Files zur Abschaltung der Abgasreinigung werden nicht unterstützt.")
+    daten = datei.read()
+    if not daten:
+        raise Abgelehnt("Die Datei ist leer.")
+    return name, daten
+
+
+def ticket_datei_ablegen(tid: str, name: str, daten: bytes) -> dict:
+    fid = uuid.uuid4().hex[:12]
+    ordner = TICKETS / "anhang" / tid
+    ordner.mkdir(parents=True, exist_ok=True)
+    (ordner / fid).write_bytes(daten)
+    return {"id": fid, "name": name, "groesse": len(daten)}
+
+
+def kunde_ticket_datei(datei):
+    """Datei vom Kunden pruefen inkl. Mengenbegrenzung."""
+    gelesen = ticket_datei_lesen(datei)
+    if gelesen:
+        if zu_viele("ticketdatei", 20, 3600):
+            raise Abgelehnt("Zu viele Dateien in kurzer Zeit. Bitte kurz warten.")
+        merken("ticketdatei")
+    return gelesen
+
+
 @app.route("/api/ticket", methods=["POST"])
 def api_ticket_neu():
-    daten = request.get_json(silent=True)
-    daten = daten if isinstance(daten, dict) else {}
+    daten, datei = ticket_eingabe()
     try:
         thema = str(daten.get("thema") or "")
         if thema not in TICKET_THEMEN:
@@ -1101,6 +1142,7 @@ def api_ticket_neu():
         text = ticket_text_pruefen(daten.get("text"))
         if zu_viele("ticket", 10, 3600):
             raise Abgelehnt("Zu viele Tickets in kurzer Zeit. Bitte später nochmal versuchen.")
+        gelesen = kunde_ticket_datei(datei)
         merken("ticket")
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
@@ -1110,6 +1152,8 @@ def api_ticket_neu():
          "auftrag": aid if finde_auftrag(aid) else "", "kontakt": str(daten.get("kontakt") or "").strip()[:100],
          "nachrichten": [{"von": "kunde", "text": text, "zeit": jetzt}]}
     with ticket_sperre:
+        if gelesen:
+            t["nachrichten"][0]["datei"] = ticket_datei_ablegen(t["id"], *gelesen)
         speichere_ticket(t)
     threading.Thread(target=ticket_melden, args=(t, True), daemon=True).start()
     return jsonify(api_ticket(t))
@@ -1134,12 +1178,16 @@ def api_ticket_datei(tid, fid):
 
 @app.route("/api/ticket/<tid>/nachricht", methods=["POST"])
 def api_ticket_nachricht(tid):
-    daten = request.get_json(silent=True)
-    daten = daten if isinstance(daten, dict) else {}
+    daten, datei = ticket_eingabe()
+    if finde_ticket(tid) is None:
+        return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
     try:
-        text = ticket_text_pruefen(daten.get("text"))
+        text = str(daten.get("text") or "").strip()[:3000]
+        if not (datei and datei.filename):
+            text = ticket_text_pruefen(text)
         if zu_viele("ticketnachricht", 30, 3600):
             raise Abgelehnt("Zu viele Nachrichten in kurzer Zeit. Bitte kurz warten.")
+        gelesen = kunde_ticket_datei(datei)
         merken("ticketnachricht")
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
@@ -1149,7 +1197,12 @@ def api_ticket_nachricht(tid):
             return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
         if len(t["nachrichten"]) >= 200:
             return jsonify(fehler="Dieses Ticket ist voll. Bitte ein neues Ticket öffnen."), 422
-        t["nachrichten"].append({"von": "kunde", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")})
+        n = {"von": "kunde", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")}
+        if gelesen:
+            if sum(1 for x in t["nachrichten"] if x["von"] == "kunde" and x.get("datei")) >= TICKET_ANHAENGE_KUNDE:
+                return jsonify(fehler="In diesem Ticket sind schon genug Dateien. Bitte ein neues Ticket öffnen."), 422
+            n["datei"] = ticket_datei_ablegen(tid, *gelesen)
+        t["nachrichten"].append(n)
         t["status"] = "OFFEN"
         speichere_ticket(t)
     threading.Thread(target=ticket_melden, args=(t, False), daemon=True).start()
@@ -1203,22 +1256,12 @@ def admin_ticket(tid):
             t = finde_ticket(tid)
             if aktion == "antworten":
                 text = request.form.get("text", "").strip()[:5000]
-                datei = request.files.get("datei")
-                anhang = None
-                if datei and datei.filename:
-                    name = sicherer_name(PurePosixPath(datei.filename.replace("\\", "/")).name)[:150]
-                    daten = datei.read()
-                    if oneclick.abgas_datei(name):
-                        flash("Nicht gesendet – Files zur Abschaltung der Abgasreinigung werden nicht unterstützt.")
-                        return redirect(url_for("admin_ticket", tid=tid))
-                    if not daten:
-                        flash("Nicht gesendet – die Datei ist leer.")
-                        return redirect(url_for("admin_ticket", tid=tid))
-                    fid = uuid.uuid4().hex[:12]
-                    ordner = TICKETS / "anhang" / tid
-                    ordner.mkdir(parents=True, exist_ok=True)
-                    (ordner / fid).write_bytes(daten)
-                    anhang = {"id": fid, "name": name, "groesse": len(daten)}
+                try:
+                    gelesen = ticket_datei_lesen(request.files.get("datei"))
+                except Abgelehnt as e:
+                    flash("Nicht gesendet – " + str(e))
+                    return redirect(url_for("admin_ticket", tid=tid))
+                anhang = ticket_datei_ablegen(tid, *gelesen) if gelesen else None
                 if text or anhang:
                     n = {"von": "admin", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")}
                     if anhang:
@@ -3187,7 +3230,7 @@ pruefen(); setInterval(pruefen,8000);})();
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
 {% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ auftrag.ecu }}, #{{ auftrag.id[:8] }}){% endif %}</p>
 <div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
-<div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ url_for('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ (n.datei.groesse / 1024)|round|int }} KB</a>{% endif %}</div>{% endfor %}</div>
+<div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ url_for('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ [1, (n.datei.groesse / 1024)|round|int]|max }} KB</a>{% endif %}</div>{% endfor %}</div>
 <form method="post" enctype="multipart/form-data" id="antwort-form" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
 <label class="feld">Antwort an den Kunden</label><textarea name="text" id="antwort-text"></textarea>
 <label class="drop" id="anhang-drop" style="padding:22px 18px;margin-bottom:14px"><input type="file" name="datei" id="anhang-datei">
