@@ -1849,7 +1849,7 @@ const HAKEN = '<span class="haken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5
 function auswahlZeigen(a) {
   if (zustand.modus === "original") a = {...a, angebot: a.angebot.filter(o => o.key === zustand.original)};
   zustand.entwurf = a;
-  zustand.auswahl = new Set(a.angebot.length ? [a.angebot[0].key] : []);
+  zustand.auswahl = new Set();   // nichts vorauswaehlen - der Kunde entscheidet selbst
   $("#aw-datei").textContent = a.datei;
   $("#aw-chips").innerHTML = "";
   [["ECU", a.ecu], ["Software", a.software]].forEach(([k, v]) => {
@@ -1892,8 +1892,10 @@ function auswahlMalen() {
   $("#aw-summe").textContent = euro(summe);
   // Files aus dem Archiv: sofort kaufen. Nur Rueckruesten ueber die Softwarenummer prueft der Admin vorher.
   const pruefen = (zustand.entwurf && zustand.entwurf.angebot || []).some(o => zustand.auswahl.has(o.key) && o.sofort === false);
-  $("#senden").textContent = pruefen ? "Auftrag senden" : (zustand.zahlung && summe > 0 ? "Jetzt kaufen" : "Jetzt holen");
-  $("#aw-zahlhinweis").textContent = pruefen ? "Wir prüfen diesen Auftrag kurz und geben ihn frei – danach bezahlen und herunterladen."
+  const leer = zustand.auswahl.size === 0;
+  $("#senden").textContent = leer ? "Lösung wählen" : pruefen ? "Auftrag senden" : (zustand.zahlung && summe > 0 ? "Jetzt kaufen" : "Jetzt holen");
+  $("#aw-zahlhinweis").textContent = leer ? "Wähle oben eine oder mehrere Lösungen."
+                                   : pruefen ? "Wir prüfen diesen Auftrag kurz und geben ihn frei – danach bezahlen und herunterladen."
                                              : "Sofort bezahlen und herunterladen – ohne Wartezeit.";
 }
 function euro(cent) {
