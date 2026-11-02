@@ -807,13 +807,56 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
 }
 @media (max-width:520px){.kopf-pille:not(.verbindung) small{display:none}.marke{font-size:14px}.kopf-pille{padding:5px 8px 5px 5px}
   .loesungen{grid-template-columns:minmax(0,1fr)}.datei-zeile{flex-wrap:wrap}.datei-pille{flex-basis:100%}.btn{letter-spacing:0}}
+
+/* Startbildschirm mit Tacho */
+#intro{background:radial-gradient(circle at 50% 45%,#0b1638,#03060f 75%)}
+.splash{display:flex;align-items:center;gap:clamp(20px,5vw,60px);width:min(700px,calc(100vw - 32px));padding:clamp(22px,4vw,40px) clamp(22px,4vw,46px);
+  border-radius:20px;background:linear-gradient(160deg,#121a33,#0a0f22);border:1px solid rgba(91,141,255,.28);
+  box-shadow:0 30px 90px rgba(0,0,0,.65),0 0 60px rgba(47,107,255,.18),inset 0 1px 0 rgba(255,255,255,.06);animation:splash-rein .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes splash-rein{from{opacity:0;transform:translateY(18px) scale(.97)}}
+#intro.weg .splash{transform:scale(.96);transition:transform .7s var(--feder)}
+.sp-links{flex:1;min-width:0}
+.sp-marke svg{width:58px;height:58px;filter:drop-shadow(0 0 16px rgba(47,107,255,.7))}
+.sp-name{margin-top:14px;font-family:var(--kopf);font-weight:800;font-size:clamp(20px,3.4vw,30px);line-height:1.15;color:#fff;overflow-wrap:anywhere;
+  background:linear-gradient(90deg,#fff,#8fb4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sp-status{display:flex;align-items:center;gap:9px;margin-top:20px;font-size:13.5px;font-weight:600;color:#a9bde6}
+.sp-status i{width:14px;height:14px;border-radius:50%;border:2px solid rgba(91,141,255,.3);border-top-color:#5b8dff;animation:drehen .8s linear infinite;flex:none}
+.sp-status.ok{color:#6cf597}.sp-status.ok i{animation:none;border:0;background:#2fd35a;box-shadow:0 0 12px #2fd35a;width:10px;height:10px}
+.sp-status.fehler{color:#ff8a80}.sp-status.fehler i{animation:none;border:0;background:#ff5a50;width:10px;height:10px}
+.sp-copy{margin-top:8px;font-size:11.5px;color:#5d6f96}
+.tacho{width:clamp(170px,30vw,250px);flex:none;overflow:visible}
+.t-spur,.t-wert{fill:none;stroke-width:9;stroke-linecap:round;transform:rotate(150deg);transform-origin:110px 110px}
+.t-spur{stroke:rgba(91,141,255,.14)}
+.t-wert{stroke:url(#tacho-farbe);filter:drop-shadow(0 0 8px rgba(47,107,255,.9))}
+.t-strich{stroke:rgba(200,215,255,.35);stroke-width:1.4}.t-strich.gross{stroke:#dbe6ff;stroke-width:2.2}
+.t-zahl{fill:#a9bde6;font:600 8.5px Montserrat,sans-serif;text-anchor:middle;dominant-baseline:middle}
+#t-nadel{transform-origin:110px 110px;transform:rotate(-120deg)}
+#t-nadel path{fill:#e8efff;filter:drop-shadow(0 0 6px rgba(143,180,255,.9))}
+#t-nadel circle{fill:#1f4fd8;stroke:#8fb4ff;stroke-width:2}#t-nadel .t-mitte{fill:#fff;stroke:none}
+.t-text{fill:#5d6f96;font:700 10px Montserrat,sans-serif;text-anchor:middle;letter-spacing:.1em}
+@media (max-width:560px){.splash{flex-direction:column-reverse;text-align:center;gap:10px}.sp-status{justify-content:center}.sp-marke{display:none}.sp-name{margin-top:0}}
 </style>
 </head>
 <body>
 <div class="deko" aria-hidden="true"><div class="aurora"><i></i><i></i><i></i></div>
 <canvas id="netz"></canvas>
 <div class="raster"></div><i class="horizont"></i></div>
-<div id="intro"><div><div class="logo-gross" id="intro-logo"></div><div class="linie"></div></div></div>
+<div id="intro"><div class="splash">
+  <div class="sp-links">
+    <div class="sp-marke" id="sp-marke"></div>
+    <div class="sp-name" id="intro-logo">OneClick Tuning</div>
+    <div class="sp-status" id="intro-status"><i></i><span>Verbindung wird geprüft …</span></div>
+    <div class="sp-copy" id="sp-copy"></div>
+  </div>
+  <svg class="tacho" id="tacho" viewBox="0 0 220 190" aria-hidden="true">
+    <defs><linearGradient id="tacho-farbe" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#1f4fd8"/><stop offset="1" stop-color="#5b8dff"/></linearGradient></defs>
+    <circle class="t-spur" cx="110" cy="110" r="88"/>
+    <circle class="t-wert" id="t-wert" cx="110" cy="110" r="88"/>
+    <g id="t-skala"></g>
+    <g id="t-nadel"><path d="M108 112 L110 36 L112 112 Z"/><circle cx="110" cy="110" r="7"/><circle cx="110" cy="110" r="3" class="t-mitte"/></g>
+    <text x="110" y="168" class="t-text" id="t-text">km/h</text>
+  </svg>
+</div></div>
 <div id="zahl-dialog"><div class="karte">
   <h2>Jetzt bezahlen</h2>
   <p class="leise" style="margin-top:6px" id="zd-was"></p>
@@ -1221,22 +1264,39 @@ addEventListener("resize", schieberSetzen);
 
 /* ---------- Intro ---------- */
 function intro(text) {
-  const el = $("#intro-logo");
-  el.innerHTML = "";
-  // Woerter bleiben zusammen, umbrechen nur zwischen den Woertern (schmale Handys)
-  let i = 0;
-  text.split(" ").filter(Boolean).forEach((w, n) => {
-    const wort = document.createElement("span"); wort.className = "wort";
-    [...w].forEach(z => {
-      const s = document.createElement("span");
-      s.textContent = z;
-      s.style.animationDelay = (i++ * 0.045) + "s";
-      if (n === 0 && text.includes(" ")) s.style.color = "#5b8dff";
-      wort.appendChild(s);
-    });
-    el.appendChild(wort);
-  });
+  $("#intro-logo").textContent = text;
+  $("#sp-copy").textContent = "© " + new Date().getFullYear() + " " + text;
 }
+/* Startbildschirm: Tacho mit Nadel, die hochdreht und sich dann einpendelt */
+(function tacho() {
+  const NS = "http://www.w3.org/2000/svg", skala = $("#t-skala"), R = 88, U = 2 * Math.PI * R, L = U * 240 / 360;
+  const wert = $("#t-wert"), nadel = $("#t-nadel");
+  $(".t-spur").style.strokeDasharray = `${L} ${U}`;
+  for (let v = 0; v <= 220; v += 10) {
+    const w = (150 + 240 * v / 220) * Math.PI / 180, gross = v % 20 === 0;
+    const l = document.createElementNS(NS, "line");
+    const r1 = gross ? 70 : 74, r2 = 80;
+    l.setAttribute("x1", 110 + r1 * Math.cos(w)); l.setAttribute("y1", 110 + r1 * Math.sin(w));
+    l.setAttribute("x2", 110 + r2 * Math.cos(w)); l.setAttribute("y2", 110 + r2 * Math.sin(w));
+    l.setAttribute("class", gross ? "t-strich gross" : "t-strich"); skala.appendChild(l);
+    if (gross) { const t = document.createElementNS(NS, "text"); t.setAttribute("x", 110 + 56 * Math.cos(w)); t.setAttribute("y", 111 + 56 * Math.sin(w));
+      t.setAttribute("class", "t-zahl"); t.textContent = v; skala.appendChild(t); }
+  }
+  const setzen = p => { wert.style.strokeDasharray = `${L * p} ${U}`; nadel.style.transform = `rotate(${-120 + 240 * p}deg)`; };
+  const marke = $(".marke .logo"); if (marke) $("#sp-marke").appendChild(marke.cloneNode(true));
+  setzen(0);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setzen(.55);
+  const t0 = performance.now();
+  (function lauf(t) {
+    const x = (t - t0) / 1000; let p;
+    if (x < .25) p = 0;
+    else if (x < 1.3) { const k = (x - .25) / 1.05; p = 1 - Math.pow(1 - k, 3); }            // hochdrehen bis 220
+    else if (x < 2.1) { const k = (x - 1.3) / .8; p = 1 - .45 * (1 - Math.pow(1 - k, 3)); }  // einpendeln
+    else p = .55 + Math.sin((x - 2.1) * 9) * .012;                                            // leicht zittern
+    setzen(p);
+    if (!$("#intro").classList.contains("weg") || x < 3) requestAnimationFrame(lauf);
+  })(t0);
+})();
 intro("OneClick Tuning");
 
 /* ---------- Ansichten ---------- */
@@ -1728,10 +1788,15 @@ async function init() {
   if (d.fehler) d.verbindung = d.fehler;
   if (d.firma) intro(d.firma);
   starten(d, true);
+  const st = $("#intro-status");
+  setTimeout(() => {
+    st.classList.add(d.verbindung ? "fehler" : "ok");
+    st.querySelector("span").textContent = d.verbindung ? "Keine Verbindung" : "Verbunden";
+  }, Math.max(0, 1500 - (Date.now() - beginn)));
   setTimeout(() => {
     $("#intro").classList.add("weg");
     if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
-  }, Math.max(300, 2100 - (Date.now() - beginn)));
+  }, Math.max(300, 2700 - (Date.now() - beginn)));
   setInterval(aktualisieren, 8000);
   setTimeout(aktualisieren, 2500);
   zurueckVonStripe();
