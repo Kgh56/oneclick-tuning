@@ -3114,7 +3114,7 @@ h1 span{background:linear-gradient(90deg,#5aa0ff,#2f7bff);-webkit-background-cli
 section{padding:60px 0}
 h2{font-size:clamp(26px,3.4vw,38px);margin:0 0 10px;font-weight:800;letter-spacing:-.01em}
 .unter{color:var(--leise);margin:0 0 34px;max-width:620px}
-.raster{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.raster{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .f{padding:22px;border-radius:14px;background:var(--karte);border:1px solid var(--rand);transition:border-color .2s,transform .2s}
 .f:hover{border-color:rgba(47,123,255,.6);transform:translateY(-3px)}
 .f .ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(180deg,#3b86ff,#1f5fe0);box-shadow:0 6px 18px rgba(47,123,255,.35);margin-bottom:14px}
@@ -3165,12 +3165,17 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg></div><b>Sicher bezahlen</b><span>Bezahlung über Stripe mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></div><b>Anfrage, wenn nichts passt</b><span>Fahrzeugdaten eintragen, Anfrage senden – wir erstellen dein File und melden uns im Programm.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></div><b>Support im Programm</b><span>Problem mit einem File? Ticket öffnen, Logs oder Screenshots anhängen – wir antworten im Programm und schicken dir das angepasste File direkt in den Chat.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div><b>Updates mit einem Klick</b><span>Neue Funktionen kommen über den Update-Knopf im Programm – kein neuer Download nötig.</span></div>
  </div></div></section>
 <section><div class="breit">
  <h2>So sieht's aus</h2><p class="unter">Dunkel, klar, schnell – gemacht für die Arbeit in der Werkstatt.</p>
  <div class="bilder">
   <figure><img src="/bilder/programm-laden.webp" width="1440" height="900" loading="lazy" alt="File laden"><figcaption>File laden – einfach hineinziehen</figcaption></figure>
+  <figure><img src="/bilder/programm-bezahlen.webp" width="1440" height="900" loading="lazy" alt="Bezahlen"><figcaption>Sofort bezahlen – sicher über Stripe</figcaption></figure>
   <figure><img src="/bilder/programm-auftraege.webp" width="1440" height="900" loading="lazy" alt="Meine Aufträge"><figcaption>Meine Aufträge – Status, Bezahlung, Download</figcaption></figure>
+  <figure><img src="/bilder/programm-support.webp" width="1440" height="900" loading="lazy" alt="Support-Ticket"><figcaption>Support – Tickets mit Files direkt im Chat</figcaption></figure>
+  <figure><img src="/bilder/programm-anfrage.webp" width="1440" height="900" loading="lazy" alt="Anfrage stellen"><figcaption>Anfrage – wenn noch nichts im Archiv liegt</figcaption></figure>
   <figure><img src="/bilder/programm-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"><figcaption>Startbildschirm – Verbindung wird geprüft</figcaption></figure>
  </div></div></section>
 <section id="ablauf"><div class="breit">
@@ -3178,7 +3183,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <div class="schritte">
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen und starten. Fertig – keine Installation nötig.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
-  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und Auftrag senden.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Sofort bezahlen und das File herunterladen. Anfragen nach unserer Freigabe.</span></div>
  </div>
  <div class="hinweis"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
@@ -3189,6 +3194,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <details><summary>Was kostet das Programm?</summary><p>Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo.</p></details>
  <details><summary>Brauche ich ein Konto?</summary><p>Nein. Deine Aufträge merkt sich das Programm auf deinem PC.</p></details>
  <details><summary>Für welche Steuergeräte gibt es Files?</summary><p>Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File.</p></details>
+ <details><summary>Was mache ich, wenn es ein Problem mit dem File gibt?</summary><p>Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat.</p></details>
  <details><summary>Muss ich die Checksumme korrigieren?</summary><p>Ja, lass die Checksumme beim Schreiben von deinem Flash-Tool korrigieren.</p></details>
  <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Nein, OneClick Solutions gibt es als Programm für Windows 10 und 11.</p></details>
 </div></section>
