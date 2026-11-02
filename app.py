@@ -863,7 +863,7 @@ def api_auftrag(a: dict) -> dict:
 @app.route("/api/info")
 def api_info():
     namen = option_namen()
-    return jsonify(firma=PROGRAMM_NAME, api=1,
+    return jsonify(firma=PROGRAMM_NAME, api=1, ui=str(KUNDENSEITE.stat().st_mtime_ns),
                    original=oneclick.ORIGINAL,
                    optionen=[{"key": o, "name": namen[o]} for o in oneclick.optionen()],   # fuer Anfragen
                    fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER],
@@ -1126,6 +1126,23 @@ def admin_tickets():
     tickets = alle_tickets()
     tickets.sort(key=lambda t: t["status"] != "OFFEN")   # offene zuerst (sonst neueste zuerst)
     return render_template("tickets.html", tickets=[api_ticket(t) | {"kontakt": t.get("kontakt", "")} for t in tickets])
+
+
+@app.route("/admin/ticket/<tid>/daten")
+@admin_noetig
+def admin_ticket_daten(tid):
+    """Fuer das automatische Nachladen auf der Ticket-Seite."""
+    t = finde_ticket(tid)
+    if t is None:
+        return jsonify(fehler="nicht gefunden"), 404
+    return jsonify(api_ticket(t))
+
+
+@app.route("/admin/tickets/stand")
+@admin_noetig
+def admin_tickets_stand():
+    """Fuer die Ticket-Liste: aendert sich, sobald irgendwo eine Nachricht dazukommt."""
+    return jsonify(stand=[[t["id"], len(t.get("nachrichten", [])), t["status"]] for t in alle_tickets()])
 
 
 @app.route("/admin/ticket/<tid>", methods=["GET", "POST"])
@@ -3079,6 +3096,12 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
 <td><span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span></td>
 <td><a class="btn klein" href="{{ url_for('admin_ticket', tid=t.id) }}">Öffnen</a></td></tr>{% endfor %}</table></div>
 {% else %}<p class="leise">Noch keine Tickets.</p>{% endif %}</div>
+<script>
+// Liste aktualisiert sich selbst, sobald ein Ticket oder eine Nachricht dazukommt
+(function(){var alt=null;function pruefen(){fetch('{{ url_for('admin_tickets_stand') }}',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+  var neu=JSON.stringify(d.stand); if(alt!==null&&neu!==alt) location.reload(); alt=neu;}).catch(function(){});}
+pruefen(); setInterval(pruefen,8000);})();
+</script>
 {% endblock %}""",
 
 "ticket.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -3087,7 +3110,7 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
 <p class="leise" style="margin-top:-8px">Status: <span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span>
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
 {% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ auftrag.ecu }}, #{{ auftrag.id[:8] }}){% endif %}</p>
-<div class="verlauf">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
+<div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
 <div>{{ n.text }}</div></div>{% endfor %}</div>
 <form method="post" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
 <label class="feld">Antwort an den Kunden</label><textarea name="text" required></textarea>
@@ -3096,7 +3119,30 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
 {% if t.status == 'GESCHLOSSEN' %}<input type="hidden" name="aktion" value="oeffnen"><button class="btn grau">Wieder öffnen</button>
 {% else %}<input type="hidden" name="aktion" value="schliessen"><button class="btn grau">Ticket schließen</button>{% endif %}</form>
 </div>
-<style>.verlauf{display:flex;flex-direction:column;gap:10px;margin-top:16px}.nachricht{max-width:78%;padding:10px 14px;border-radius:10px;background:var(--glas2);border:1px solid var(--rand)}
+<script>
+// Neue Nachrichten automatisch nachladen (alle 5 s), ohne die angefangene Antwort zu verlieren
+(function(){
+  var v=document.getElementById('verlauf'), url='{{ url_for('admin_ticket_daten', tid=t.id) }}';
+  function zeit(z){return z.slice(8,10)+'.'+z.slice(5,7)+'.'+z.slice(0,4)+' '+z.slice(11,16);}
+  function holen(){
+    if(document.hidden) return;
+    fetch(url,{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(t){
+      if(!t||t.nachrichten.length<=+v.dataset.anzahl) return;
+      t.nachrichten.slice(+v.dataset.anzahl).forEach(function(n){
+        var d=document.createElement('div'); d.className='nachricht '+n.von+' neu';
+        var k=document.createElement('span'); k.className='leise'; k.textContent=(n.von==='kunde'?'Kunde':'Du')+' · '+zeit(n.zeit);
+        var x=document.createElement('div'); x.textContent=n.text; d.appendChild(k); d.appendChild(x); v.appendChild(d);
+      });
+      v.dataset.anzahl=t.nachrichten.length;
+      var st=document.querySelector('.status'); if(st&&t.status==='OFFEN'){st.textContent='Offen';st.className='status s-WARTET';}
+      if(Notification&&Notification.permission==='granted'&&document.visibilityState!=='visible') new Notification('Neue Nachricht im Ticket #'+t.kurz);
+    }).catch(function(){});
+  }
+  setInterval(holen,5000);
+})();
+</script>
+<style>.nachricht.neu{animation:neu 1.4s ease-out}@keyframes neu{from{box-shadow:0 0 0 2px #2f7bff}}
+.verlauf{display:flex;flex-direction:column;gap:10px;margin-top:16px}.nachricht{max-width:78%;padding:10px 14px;border-radius:10px;background:var(--glas2);border:1px solid var(--rand)}
 .nachricht div{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}.nachricht.admin{align-self:flex-end;background:rgba(47,123,255,.14);border-color:rgba(47,123,255,.4)}</style>
 {% endblock %}""",
 

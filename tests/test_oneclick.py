@@ -437,6 +437,11 @@ class WebTests(Basis):
         a.post(f"/admin/ticket/{t['id']}", data={"csrf": a.csrf, "aktion": "schliessen"})
         self.assertEqual(k.get(f"/api/ticket/{t['id']}").json["status"], "GESCHLOSSEN")
         self.assertEqual(self.kunde.get(f"/admin/ticket/{t['id']}", headers={"User-Agent": "x"}).status_code, 302)   # nur Admin
+        # Nachladen im Admin (Ticket-Seite + Liste)
+        self.assertEqual(len(a.get(f"/admin/ticket/{t['id']}/daten").json["nachrichten"]), 3)
+        self.assertIn(t["id"], json.dumps(a.get("/admin/tickets/stand").json))
+        self.assertEqual(self.kunde.get(f"/admin/ticket/{t['id']}/daten", headers={"User-Agent": "x"}).status_code, 302)
+        self.assertTrue(k.get("/api/info").json["ui"])                       # Stand der Oberflaeche fuer den Update-Knopf
         # Aufraeumen nach der Frist
         A.speichere_config({"aufbewahrung_tage": 1})
         alt = A.finde_ticket(t["id"]); alt["nachrichten"][-1]["zeit"] = "2020-01-01T00:00:00"; A.speichere_ticket(alt)

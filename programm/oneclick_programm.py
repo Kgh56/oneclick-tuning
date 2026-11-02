@@ -150,6 +150,33 @@ class Bruecke:
     def neu_laden(self):
         self._fenster.load_url(SERVER + "/")
 
+    # --- Update-Knopf in der Oberflaeche ---
+    def update_pruefen(self):
+        """{"version": "3.15", "neu": 16 oder None}. Im Entwicklungsstand (keine .exe) gibt es kein Programm-Update."""
+        if not getattr(sys, "frozen", False):
+            return {"version": VERSION, "neu": None}
+        try:
+            info = Updater().pruefen()
+        except Exception:
+            return {"version": VERSION, "fehler": "Update-Server gerade nicht erreichbar. Bitte später nochmal versuchen."}
+        return {"version": VERSION, "neu": int(info["version"]) if info else None}
+
+    def update_installieren(self):
+        """Neue .exe laden, pruefen (SHA-256), gegen die laufende tauschen und neu starten."""
+        if not getattr(sys, "frozen", False):
+            return {"fehler": "Nur im installierten Programm möglich."}
+        try:
+            u = Updater()
+            info = u.pruefen()
+            if not info:
+                return {"aktuell": True}
+            u.installieren(info)
+            u.neu_starten()
+        except Exception as e:
+            return {"fehler": f"Update fehlgeschlagen: {e}"}
+        threading.Timer(0.8, self._fenster.destroy).start()   # Antwort noch an die Oberflaeche, dann schliessen
+        return {"ok": True}
+
     def speichern(self, url: str):
         """File vom Server holen und ueber 'Speichern unter ...' ablegen. Nur Adressen unseres Servers."""
         if not url.startswith(SERVER + "/api/auftrag/"):
@@ -210,6 +237,7 @@ def selbsttest(fenster, ergebnis_datei: str):
             time.sleep(1)
         erg["speichern"] = bool(fenster.evaluate_js("typeof window.pywebview.api.speichern === 'function'"))
         erg["kennung"] = "OneClickProgramm/" in str(fenster.evaluate_js("navigator.userAgent"))
+        erg["update"] = bool(fenster.evaluate_js("typeof window.pywebview.api.update_pruefen === 'function'"))
         erg["version"] = VERSION
     finally:
         Path(ergebnis_datei).write_text(json.dumps(erg))

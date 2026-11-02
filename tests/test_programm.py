@@ -23,6 +23,11 @@ class ProgrammTests(unittest.TestCase):
         self.assertEqual(P.EXE_NAME, "OneClick-Solutions.exe")
         self.assertIn("OneClickProgramm/", P.USER_AGENT)   # sonst laesst der Server das Programm nicht rein
 
+    def test_update_knopf_ohne_exe(self):
+        b = P.Bruecke()
+        self.assertEqual(b.update_pruefen(), {"version": P.VERSION, "neu": None})   # Entwicklungsstand: kein Programm-Update
+        self.assertIn("fehler", b.update_installieren())
+
     def test_speichern_nur_eigener_server(self):
         b = P.Bruecke()
         self.assertIn("fehler", b.speichern("https://boese.example/api/auftrag/x/download"))

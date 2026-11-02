@@ -41,6 +41,7 @@ jobs:
           grep -q '"api": true' selbsttest.json
           grep -q '"speichern": true' selbsttest.json
           grep -q '"kennung": true' selbsttest.json
+          grep -q '"update": true' selbsttest.json
 
       - name: Versionsdatei für das Auto-Update erzeugen
         shell: bash

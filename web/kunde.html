@@ -1083,6 +1083,16 @@ a.btn{text-decoration:none}
 .tk-antwort{display:flex;gap:10px;margin-top:12px;align-items:flex-end}.tk-antwort .feld{flex:1;margin:0;resize:vertical}
 button.hilfe{font:inherit;cursor:pointer;color:var(--nx-blau2);border-color:rgba(47,123,255,.45);background:rgba(47,123,255,.1)}
 button.hilfe svg{width:15px;height:15px}
+
+/* Update-Knopf (nur im Programm) */
+.nur-app{display:none!important}
+.app-modus .nur-app{display:flex!important}
+.nx-update{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;color:#dfe5f0}
+.nx-update svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.nx-update:hover{border-color:var(--nx-blau)}
+.nx-update.verfuegbar{color:#fff;border-color:var(--nx-blau2);background:linear-gradient(180deg,rgba(59,134,255,.35),rgba(31,95,224,.2));animation:update-puls 2s ease-in-out infinite}
+@keyframes update-puls{50%{box-shadow:0 0 18px rgba(47,123,255,.6)}}
+.nx-update:disabled{opacity:.6}
 </style>
 </head>
 <body>
@@ -1131,6 +1141,7 @@ button.hilfe svg{width:15px;height:15px}
       <div class="nx-pille"><i></i>Automatische Prüfung <b class="blau">24/7</b></div>
       <div class="nx-pille"><i></i>Ticket-Service <b class="gruen">Online</b></div>
       <div class="nx-pille verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
+      <button type="button" class="nx-pille nx-update nur-app" id="nx-update" title="Nach Updates suchen"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span>Update</span></button>
       <button type="button" class="nx-glocke" id="nx-glocke" title="Offene Aufträge"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><b id="kp-offen">0</b></button>
       <div class="nx-fenster nur-app"><button type="button" data-fenster="minimieren" title="Minimieren"><svg viewBox="0 0 24 24"><path d="M6 17h12"/></svg></button>
         <button type="button" data-fenster="maximieren" title="Maximieren"><svg viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/></svg></button>
@@ -1410,7 +1421,7 @@ const WEB = {
     try {
       const {daten: i} = await server("/api/info");
       Object.assign(erg, {firma: i.firma, original: i.original || "original", optionen: i.optionen || [], fahrzeug_felder: i.fahrzeug_felder || [],
-                          zahlung_aktiv: !!i.zahlung_aktiv, preise: i.preise || {}, support_whatsapp: i.support_whatsapp || ""});
+                          zahlung_aktiv: !!i.zahlung_aktiv, preise: i.preise || {}, support_whatsapp: i.support_whatsapp || "", ui: i.ui || ""});
     } catch (e) { erg.verbindung = e.message; }
     return erg;
   },
@@ -1444,6 +1455,10 @@ const WEB = {
       catch (e) { if (e.status === 404) lokal.ticketEntfernen(t.id); }
     }
     return {tickets: liste};
+  },
+  async ticket(id) {
+    try { const {daten} = await server(`/api/ticket/${encodeURIComponent(id)}`); return {ticket: daten}; }
+    catch (e) { return {fehler: e.message}; }
   },
   async ticketNeu(thema, text, auftrag, kontakt) {
     kontakt = lokal.kontakt(kontakt);
@@ -2182,8 +2197,45 @@ async function ticketsLaden(melden) {
   });
   tkErsterLauf = false;
   tkListeMalen();
-  if (tkAktiv && $("#seite-support").classList.contains("aktiv")) zeigeTicket(tkAktiv);
+  const offen = tickets.find(t => t.id === tkAktiv);
+  if (offen && $("#seite-support").classList.contains("aktiv") && !$("#tk-detail").hidden && (vorher.get(tkAktiv) || 0) !== offen.nachrichten.length) zeigeTicket(tkAktiv);
 }
+/* Offenes Ticket alle 4 s abfragen: neue Antworten erscheinen sofort im Verlauf */
+setInterval(async () => {
+  if (document.hidden || !tkAktiv || !$("#seite-support").classList.contains("aktiv") || $("#tk-detail").hidden) return;
+  const erg = await rufe("ticket", tkAktiv); if (erg.fehler || !erg.ticket) return;
+  const i = tickets.findIndex(t => t.id === erg.ticket.id); if (i < 0) return;
+  if (erg.ticket.nachrichten.length !== tickets[i].nachrichten.length || erg.ticket.status !== tickets[i].status) {
+    tickets[i] = {...erg.ticket, gesehen: tickets[i].gesehen}; zeigeTicket(erg.ticket.id);
+  }
+}, 4000);
+/* ---------- Update-Knopf (im Programm) ---------- */
+async function updatePruefen(still) {
+  const api = window.pywebview && window.pywebview.api, knopf = $("#nx-update");
+  let prog = null, ui = "";
+  if (api && api.update_pruefen) { try { prog = await api.update_pruefen(); } catch (e) {} }
+  try { ui = (await server("/api/info")).daten.ui || ""; } catch (e) {}
+  const neuProg = prog && prog.neu, neuUi = ui && zustand.ui && ui !== zustand.ui;
+  knopf.classList.toggle("verfuegbar", !!(neuProg || neuUi));
+  knopf.querySelector("span").textContent = neuProg || neuUi ? "Update verfügbar" : "Update";
+  if (still) return;
+  if (neuProg) {
+    if (!confirm(`Neue Programm-Version 3.${prog.neu} ist da (du hast ${prog.version}).\n\nJetzt installieren? Das Programm startet danach kurz neu.`)) return;
+    knopf.disabled = true; knopf.querySelector("span").textContent = "Wird installiert …";
+    let r; try { r = await api.update_installieren(); } catch (e) { r = {fehler: String(e)}; }
+    knopf.disabled = false;
+    if (r.fehler) { knopf.querySelector("span").textContent = "Update verfügbar"; return toast("fehler", "Update fehlgeschlagen", r.fehler, 9000); }
+    if (r.aktuell) return toast("ok", "Alles aktuell", "Du hast schon die neueste Version.", 5000);
+    toast("ok", "Update installiert", "Das Programm startet jetzt neu …", 5000);
+  } else if (neuUi) {
+    toast("ok", "Neue Version der Oberfläche", "Wird jetzt geladen …", 3000);
+    setTimeout(() => location.reload(), 900);
+  } else if (prog && prog.fehler) toast("fehler", "Update-Prüfung", prog.fehler, 7000);
+  else toast("ok", "Alles aktuell", "Du hast die neueste Version" + (prog ? " (" + prog.version + ")" : "") + ".", 5000);
+}
+$("#nx-update").addEventListener("click", () => updatePruefen(false));
+setTimeout(() => updatePruefen(true), 20000);
+setInterval(() => updatePruefen(true), 30 * 60 * 1000);
 $("#sn-support").addEventListener("click", () => { seite("support"); $("#sn-support").classList.add("an"); if (!tkAktiv && $("#tk-form").hidden) tkBereich("#tk-leer"); ticketsLaden(false); });
 ["#tk-neu-knopf", "#tk-neu-knopf2", "#nx-info-support"].forEach(x => $(x).addEventListener("click", () => neuesTicket()));
 $("#tk-abbrechen").addEventListener("click", () => tkBereich("#tk-leer"));
@@ -2224,6 +2276,7 @@ function starten(d, mitIntro) {
   zustand.zahlung = !!d.zahlung_aktiv;
   zustand.support = (d.support_whatsapp || "").replace(/[^0-9]/g, "");
   zustand.preise = d.preise || {};
+  if (d.ui) zustand.ui = d.ui;
   zustand.auftraege = d.auftraege || [];
   $("#kontakt").value = d.kontakt || "";
   requestAnimationFrame(schieberSetzen);
