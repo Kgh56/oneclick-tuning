@@ -452,6 +452,15 @@ class WebTests(Basis):
         A.aufraeumen()
         self.assertIsNone(A.finde_ticket(t["id"]))
 
+    def test_kunden_upload_mit_abgas_namen_abgelehnt(self):
+        for name in ["golf_dpf_off.bin", "A4 EGR OFF.bin", "passat_adblue_delete.ori", "x_kat-off.bin"]:
+            r = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(self.golf)), name)}, content_type="multipart/form-data")
+            self.assertEqual(r.status_code, 422, name)
+            self.assertIn("Abgasreinigung", r.json["fehler"])
+        for name in ["golf_ori.bin", "Lambda_Sonde_Test_ORI.bin", "katalog.bin", "Golf 7 Stage1 Kat.bin"]:   # keine Abschaltung
+            r = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(self.golf)), name)}, content_type="multipart/form-data")
+            self.assertEqual(r.status_code, 200, name)
+
     def test_ticket_datei_vom_admin(self):
         k, a = self.kunde, self.admin()
         t = k.post("/api/ticket", json={"thema": "file", "text": "Ruckelt im Teillastbereich"}).json

@@ -554,6 +554,9 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     merken("upload")
     if len(daten) < 1024:
         raise Abgelehnt("Die Datei ist zu klein für ein ECU-File.")
+    if oneclick.abgas_datei(PurePosixPath(str(dateiname or "").replace("\\", "/")).name):
+        raise Abgelehnt("Laut Dateiname ist in diesem File die Abgasreinigung abgeschaltet (z. B. DPF, AGR, AdBlue). "
+                        "Solche Files bearbeiten wir nicht. Bitte das unveränderte Original laden.")
 
     info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
     ecu = ", ".join(info["ecu"]) or "?"
@@ -1105,7 +1108,12 @@ def ticket_datei_lesen(datei) -> tuple[str, bytes] | None:
     """Hochgeladene Datei pruefen. None = keine Datei; Abgelehnt bei leerer oder unzulaessiger Datei."""
     if not datei or not datei.filename:
         return None
-    name = sicherer_name(PurePosixPath(datei.filename.replace("\\", "/")).name)[:150]
+    roh = PurePosixPath(datei.filename.replace("\\", "/")).name
+    endung = sicherer_name(PurePosixPath(roh).suffix)[:10]          # Endung bleibt auch bei langen Namen
+    name = sicherer_name(PurePosixPath(roh).stem if endung != "unbenannt" else roh)
+    name = name + "." + endung if endung != "unbenannt" and name != "unbenannt" else name
+    if re.fullmatch(r"(?i)(con|prn|aux|nul|com\d|lpt\d)(\..*)?", name):   # unter Windows nicht speicherbar
+        name = "datei-" + name
     if oneclick.abgas_datei(name):
         raise Abgelehnt("Files zur Abschaltung der Abgasreinigung werden nicht unterstützt.")
     daten = datei.read()
@@ -3000,8 +3008,8 @@ i.addEventListener('change',zeig);
 d.addEventListener('drop',ev=>{ev.preventDefault();i.files=ev.dataTransfer.files;zeig()});
 document.getElementById('zf').addEventListener('submit',()=>{const b=document.getElementById('los');b.textContent='Wird hochgeladen … (kann dauern)';b.disabled=true});
 document.getElementById('nf').addEventListener('submit',()=>{const b=document.getElementById('nlos');b.textContent='Wird gespeichert …';b.disabled=true});
-document.querySelectorAll('label.datei input').forEach(x=>x.addEventListener('change',()=>{
-  x.parentElement.classList.toggle('gewaehlt',x.files.length>0); kennt();}));
+document.querySelectorAll('label.datei input[type=file]').forEach(x=>x.addEventListener('change',()=>{
+  x.parentElement.classList.toggle('gewaehlt',!!(x.files&&x.files.length)); kennt();}));
 // Schon im Archiv? Fingerabdruck (SHA-256) im Browser berechnen, nur der wird an den Server geschickt
 const hash=async f=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',await f.arrayBuffer()))].map(b=>b.toString(16).padStart(2,'0')).join('');
 async function kennt(){
@@ -3259,7 +3267,7 @@ pruefen(); setInterval(pruefen,8000);})();
         var d=document.createElement('div'); d.className='nachricht '+n.von+' neu';
         var k=document.createElement('span'); k.className='leise'; k.textContent=(n.von==='kunde'?'Kunde':'Du')+' · '+zeit(n.zeit);
         var x=document.createElement('div'); x.textContent=n.text; d.appendChild(k); d.appendChild(x);
-        if(n.datei){var a=document.createElement('a'); a.className='anhang'; a.href=url.replace(/\/daten$/,'/datei/'+n.datei.id); a.textContent='📎 '+n.datei.name; d.appendChild(a);}
+        if(n.datei){var a=document.createElement('a'); a.className='anhang'; a.href=url.replace(/[/]daten$/,'/datei/'+n.datei.id); a.textContent='📎 '+n.datei.name; d.appendChild(a);}
         v.appendChild(d);
       });
       v.dataset.anzahl=t.nachrichten.length;
