@@ -35,8 +35,14 @@ jobs:
         shell: bash
         run: |
           export ONECLICK_SELBSTTEST="$PWD/selbsttest.json"
-          timeout 240 ./dist/OneClick-Solutions.exe || echo "Programm-Ende: $?"
-          echo "Ergebnis:"; cat selbsttest.json; echo
+          # WebView2 bricht auf den GitHub-Rechnern ab und zu beim Start ab (E_ABORT) - dann bis zu 3 Versuche
+          for versuch in 1 2 3; do
+            rm -f selbsttest.json
+            timeout 240 ./dist/OneClick-Solutions.exe || echo "Programm-Ende: $?"
+            echo "Ergebnis (Versuch $versuch):"; cat selbsttest.json; echo
+            grep -q '"ui": true' selbsttest.json && break
+            sleep 10
+          done
           grep -q '"ui": true' selbsttest.json
           grep -q '"api": true' selbsttest.json
           grep -q '"speichern": true' selbsttest.json
