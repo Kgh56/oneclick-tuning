@@ -758,6 +758,21 @@ class WebTests(Basis):
         # Benutzte Loesung kann nicht geloescht werden
         self.assertIn("noch im Archiv benutzt", self.loesung(a, "loeschen", key="drallklappen"))
 
+    def test_abgas_filter_trifft_nur_echte_abschaltungen(self):
+        frei = ["Lambda Volllast", "Lambda anpassen", "Pops & Bangs agressiv", "Kaltstart", "Knox", "Equinox", "Katalog",
+                "Scramble", "O2 Anzeige", "Kat-Schutz", "Turbo Kat", "Lambda Regelung schneller", "Abgasklappe auf", "Golf7_stage1.bin"]
+        gesperrt = ["DPF off", "DPF", "dpfoff", "golf dpf.bin", "FAP", "OPF off", "EGR", "egr_off", "AGR aus", "AdBlue", "Ad Blue off",
+                    "SCR", "NOx", "Harnstoff aus", "Partikelfilter", "Abgasrückführung", "Lambda off", "lambdaoff", "O2 aus",
+                    "Kat delete", "Katalysator entfernen", "seat nox.bin", "noegr", "Cat off", "Lambdasonde deaktivieren"]
+        for n in frei:
+            self.assertFalse(oneclick.abgas_abschaltung(n), n)
+        for n in gesperrt:
+            self.assertTrue(oneclick.abgas_abschaltung(n), n)
+        a = self.admin()
+        self.assertIn("angelegt", self.loesung(a, name="Lambda Volllast"))
+        self.assertIn("angelegt", self.loesung(a, name="Pops agressiv"))
+        self.assertIn("nicht unterstützt", self.loesung(a, name="Lambda aus"))
+
     def test_eigene_loesung_gesperrt_und_doppelt(self):
         a = self.admin()
         for name in ["DPF Off", "AGR aus", "AdBlue off", "Kat aus", "Lambda off"]:

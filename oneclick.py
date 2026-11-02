@@ -57,10 +57,33 @@ INDEX_VERSION = 7
 MAX_ABWEICHUNG = 0.05   # Rueckruesten ueber Softwarenummer: hoechstens 5 % der Bytes duerfen abweichen
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
-GESPERRT = re.compile(
-    r"dpf|adblue|ad[\s_-]*blue|partikel|harnstoff|katalysator|lambda|abgasr(ü|ue)ckf|nox"
-    r"|(^|[^a-z0-9])(egr|agr|scr|fap|kat|o2|opf|gpf)([^a-z0-9]|$)"
-)
+# Abschaltungen der Abgasreinigung werden nicht unterstuetzt. Erkannt wird nur, was wirklich gemeint ist:
+#  - eindeutige Bauteile der Abgasreinigung als eigenes Wort (DPF, AGR, AdBlue ...), auch "dpfoff", "egr_off"
+#  - mehrdeutige Begriffe (Lambda, O2, Kat) NUR zusammen mit "off/aus/delete/entfernen ..."
+#    -> "Lambda Volllast", "Kaltstart", "Knox", "agressiv", "Katalog" werden nicht mehr blockiert.
+_AUS = r"(?:off|aus|delete|del|removal|remove|entfern\w*|deaktiv\w*|disable\w*|abschalt\w*|stilllegung|l(?:ö|oe)sch\w*|kill|weg|ohne|bypass|sim|emu)"
+_EINDEUTIG = re.compile(
+    r"(?<![a-z0-9])(?:no|ohne)?(?:dpf|fap|opf|gpf|egr|agr|scr|nox|adblue|ad[\s_-]?blue|ureas?|harnstoff\w*|partikelfilter\w*|abgasr(?:ü|ue)ckf\w*)"
+    r"(?:[\s_-]?" + _AUS + r")?(?![a-z0-9])")
+_MEHRDEUTIG = re.compile(r"(?<![a-z0-9])(?:lambda\w*|o2|kat|katalysator\w*|cat)(?:[\s_-]?" + _AUS + r")?(?![a-z0-9])")
+_AUS_WORT = re.compile(r"(?<![a-z0-9])" + _AUS + r"(?![a-z0-9])|(?:lambda|o2|kat|cat|katalysator)" + _AUS + r"(?![a-z0-9])")
+
+
+def abgas_abschaltung(text: str) -> bool:
+    """True, wenn der Name eine Abschaltung der Abgasreinigung meint."""
+    t = (text or "").lower().replace("&", " ")
+    if _EINDEUTIG.search(t):
+        return True
+    return bool(_MEHRDEUTIG.search(t) and _AUS_WORT.search(t))
+
+
+class _Gesperrt:   # alte Schnittstelle (GESPERRT.search) bleibt erhalten
+    @staticmethod
+    def search(text):
+        return abgas_abschaltung(text)
+
+
+GESPERRT = _Gesperrt()
 
 MERGE_LUECKE = 8      # Aenderungen mit kleinerem Abstand werden zu einem Block zusammengefasst
 KONTEXT = 16          # Bytes vor/nach jeder Aenderung, die zusaetzlich identisch sein muessen
@@ -288,7 +311,7 @@ def option_anlegen(name: str) -> str:
     key = schluessel(name)[:30]
     if not key:
         raise ValueError("Bitte einen Namen eingeben.")
-    if GESPERRT.search(name.lower()) or GESPERRT.search(key):
+    if abgas_abschaltung(name):
         raise ValueError("Lösungen, die die Abgasreinigung abschalten (DPF, AGR, AdBlue/SCR, Kat, Lambda …), "
                          "werden nicht unterstützt.")
     if key in ("ori", ORIGINAL) or MUSTER_ORI.search(key) or key in optionen():
@@ -311,7 +334,7 @@ def kombi_schluessel(teile) -> str:
 def abgas_datei(name: str) -> bool:
     """Nennt der Dateiname eine Abschaltung der Abgasreinigung (DPF, AGR/EGR, AdBlue/SCR, NOx, Lambda, Kat ...)?
     Solche Files werden nicht ins Archiv uebernommen."""
-    return bool(GESPERRT.search(Path(name).stem.lower()))
+    return abgas_abschaltung(Path(name).stem)
 
 
 def loesung_aus_name(name: str):
