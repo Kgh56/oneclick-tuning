@@ -1493,8 +1493,11 @@ const WEB = {
   ticketDatei(tid, fid) { return WEB.dateiHolen(`/api/ticket/${encodeURIComponent(tid)}/datei/${encodeURIComponent(fid)}`); },
   async dateiHolen(pfad) {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.speichern) {
-      try { return await window.pywebview.api.speichern(new URL(pfad, location.href).href); }
+      let erg;
+      try { erg = await window.pywebview.api.speichern(new URL(pfad, location.href).href); }
       catch (e) { return {fehler: String(e && e.message || e)}; }
+      // aeltere Programm-Versionen kennen nur Auftrags-Downloads -> dann normal herunterladen
+      if (!(erg && erg.fehler === "Ungültige Adresse.")) return erg;
     }
     try {
       const {r} = await server(pfad);
