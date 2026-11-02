@@ -1520,7 +1520,7 @@ async function rufe(name, ...args) {
     return {fehler: "Unerwarteter Fehler: " + ((e && e.message) || e)};
   }
 }
-let zustand = {original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: "", optionen: [], felder: [], wunsch: new Set(), zahlung: false, preise: {}, support: ""};
+let zustand = {modus: "neu", original: "original", auftraege: [], entwurf: null, auswahl: new Set(), filter: "alle", suche: "", optionen: [], felder: [], wunsch: new Set(), zahlung: false, preise: {}, support: ""};
 const ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
 /* Vergroesserung auf grossen Monitoren (CSS zoom) - Mauspositionen umrechnen */
 const zoomFaktor = () => parseFloat(getComputedStyle(document.querySelector(".app")).zoom) || 1;
@@ -1653,12 +1653,13 @@ function zeige(id) {
 /* Titel oben im Rahmen + Zurueck-Knopf */
 function kopfAktualisieren() {
   const e = zustand.entwurf || {};
-  const t = {"v-upload": "File laden", "v-analyse": "File wird verarbeitet", "v-anfrage": "Anfrage stellen",
+  const t = {"v-upload": zustand.modus === "original" ? "Original wiederherstellen" : "File laden", "v-analyse": "File wird verarbeitet", "v-anfrage": "Anfrage stellen",
     "v-auswahl": e.ecu && e.ecu !== "?" ? e.ecu : (e.datei || "Lösungen"),
     "v-erfolg": $("#erfolg-titel").textContent, "v-fehler": $("#fehler-titel").textContent}[aktuelle] || "";
   const ti = $("#titel");
   if (ti.textContent !== t) { ti.textContent = t; ti.classList.remove("neu"); void ti.offsetWidth; ti.classList.add("neu"); }
-  document.querySelectorAll(".seite-nav button").forEach(b => b.classList.toggle("an", b.id === "sn-neu" && aktuelle !== "v-erfolg"));
+  if ($("#seite-ecu").classList.contains("aktiv"))   // im Bereich ECU File: je nach Modus "ECU File" oder "Original wiederherstellen" markieren
+    document.querySelectorAll(".seite-nav button").forEach(b => b.classList.toggle("an", b.id === (zustand.modus === "original" ? "sn-original" : "sn-neu")));
   $("#zurueck").classList.toggle("weg", aktuelle === "v-upload" || aktuelle === "v-analyse");
 }
 /* Konsole: was gerade passiert, mit Uhrzeit */
@@ -1757,7 +1758,7 @@ async function pruefen(datei) {
   if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
   $("#analyse-datei").innerHTML = SYMBOL_DATEI + "<span></span>";
   $("#analyse-datei span").textContent = datei.name;
-  seite("ecu"); $("#sn-neu").classList.add("an");
+  seite("ecu"); $(zustand.modus === "original" ? "#sn-original" : "#sn-neu").classList.add("an");
   zeige("v-analyse"); schrittAnimation();
   log("Upload gestartet: " + datei.name);
   const beginn = Date.now();
@@ -1770,6 +1771,15 @@ async function pruefen(datei) {
     log(erg.fehler, "warn");
     zustand.entwurf = erg.anfrage ? erg : null;   // Original liegt auf dem Server -> Anfrage moeglich
     return fehler(erg.anfrage ? "Noch nicht im Archiv" : "Das hat nicht geklappt", erg.fehler, erg.anfrage);
+  }
+  if (zustand.modus === "original") {
+    erg.angebot = erg.angebot.filter(o => o.key === zustand.original);
+    if (!erg.angebot.length) {
+      zustand.entwurf = erg;
+      log("Kein passendes Original im Archiv gefunden", "warn");
+      return fehler("Kein Original gefunden", "Für dieses File liegt bei uns (noch) kein passendes Original. Ist es vielleicht schon das Original? "
+        + "Sonst stell uns eine Anfrage – wir kümmern uns darum.", true);
+    }
   }
   log("File hochgeladen und analysiert", "ok");
   log("Steuergerät: " + (erg.ecu || "?") + " · Software: " + (erg.software || "?"));
@@ -1792,6 +1802,7 @@ const SYMBOL_DOWNLOAD = '<svg class="symbol" viewBox="0 0 24 24"><g class="pfeil
 const SYMBOL_DATEI = '<svg class="symbol" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
 const HAKEN = '<span class="haken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>';
 function auswahlZeigen(a) {
+  if (zustand.modus === "original") a = {...a, angebot: a.angebot.filter(o => o.key === zustand.original)};
   zustand.entwurf = a;
   zustand.auswahl = new Set(a.angebot.length ? [a.angebot[0].key] : []);
   $("#aw-datei").textContent = a.datei;
@@ -2124,14 +2135,21 @@ function seite(name, filter) {
     listeMalen(); requestAnimationFrame(schieberSetzen);
   }
 }
-$("#sn-neu").addEventListener("click", () => { seite("ecu"); $("#sn-neu").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload"); });
+$("#sn-neu").addEventListener("click", () => { modus("neu"); seite("ecu"); $("#sn-neu").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload"); });
+/* Modus: "neu" = Tuning bestellen, "original" = getuntes File laden und nur das Original zurueckbekommen */
+function modus(m) {
+  zustand.modus = m;
+  $(".unter-titel").textContent = m === "original"
+    ? "Getuntes File laden – wir suchen das passende Original, damit du dein Fahrzeug zurückrüsten kannst."
+    : "Original-File laden – wir prüfen sofort, welche Lösungen es dafür gibt.";
+  kopfAktualisieren();
+}
 $("#nx-neu-auftrag").addEventListener("click", () => $("#sn-neu").click());
 $("#sn-auftraege").addEventListener("click", () => { seite("auftraege", "alle"); $("#sn-auftraege").classList.add("an"); });
 $("#nx-glocke").addEventListener("click", () => $("#sn-auftraege").click());
 $("#sn-anfragen").addEventListener("click", () => { seite("auftraege", "anfrage"); $("#sn-anfragen").classList.add("an"); });
 $("#sn-original").addEventListener("click", () => {
-  seite("ecu"); $("#sn-original").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload");
-  toast("info", "Original wiederherstellen", "Lade dein getuntes File hoch – liegt das Original bei uns, bekommst du „Original (Rückrüsten)“ angeboten.", 9000);
+  modus("original"); seite("ecu"); $("#sn-original").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload");
 });
 $("#nx-details").addEventListener("click", () => $(".nx-bericht").classList.toggle("offen"));
 /* ---------- Support-Tickets ---------- */
