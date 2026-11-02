@@ -29,13 +29,13 @@ jobs:
         run: echo "${{ github.run_number }}" > programm/version.txt
 
       - name: .exe bauen
-        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Tuning --icon programm/icon.ico --add-data "programm/version.txt;." programm/oneclick_programm.py
+        run: pyinstaller --noconfirm --onefile --windowed --name OneClick-Solutions --icon programm/icon.ico --add-data "programm/version.txt;." programm/oneclick_programm.py
 
       - name: Selbsttest (fertige .exe starten, Fenster und Brücke prüfen)
         shell: bash
         run: |
           export ONECLICK_SELBSTTEST="$PWD/selbsttest.json"
-          timeout 240 ./dist/OneClick-Tuning.exe || echo "Programm-Ende: $?"
+          timeout 240 ./dist/OneClick-Solutions.exe || echo "Programm-Ende: $?"
           echo "Ergebnis:"; cat selbsttest.json; echo
           grep -q '"ui": true' selbsttest.json
           grep -q '"api": true' selbsttest.json
@@ -45,7 +45,7 @@ jobs:
       - name: Versionsdatei für das Auto-Update erzeugen
         shell: bash
         run: |
-          python -c "import hashlib, json; d = open('dist/OneClick-Tuning.exe', 'rb').read(); json.dump({'version': int(open('programm/version.txt').read()), 'sha256': hashlib.sha256(d).hexdigest(), 'groesse': len(d)}, open('dist/version.json', 'w'))"
+          python -c "import hashlib, json; d = open('dist/OneClick-Solutions.exe', 'rb').read(); json.dump({'version': int(open('programm/version.txt').read()), 'sha256': hashlib.sha256(d).hexdigest(), 'groesse': len(d)}, open('dist/version.json', 'w'))"
           cat dist/version.json
 
       - name: Als Download bereitstellen
@@ -54,13 +54,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view programm >/dev/null 2>&1 || \
-            gh release create programm --title "OneClick Tuning – Windows-Programm" \
-              --notes "Programm für Kunden: OneClick-Tuning.exe herunterladen und starten. Updates installiert das Programm danach selbst."
+            gh release create programm --title "OneClick Solutions – Windows-Programm" \
+              --notes "Programm für Kunden: OneClick-Solutions.exe herunterladen und starten. Updates installiert das Programm danach selbst."
           # Erst die .exe, dann die Versionsdatei: Programme sehen die neue Version erst, wenn die .exe schon da ist
+          gh release upload programm dist/OneClick-Solutions.exe --clobber
+          # Uebergang: bereits installierte Programme mit altem Namen holen sich ihr Update noch unter dem alten Dateinamen
+          cp dist/OneClick-Solutions.exe dist/OneClick-Tuning.exe
           gh release upload programm dist/OneClick-Tuning.exe --clobber
           gh release upload programm dist/version.json --clobber
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OneClick-Tuning
-          path: dist/OneClick-Tuning.exe
+          name: OneClick-Solutions
+          path: dist/OneClick-Solutions.exe

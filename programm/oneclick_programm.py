@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OneClick Tuning - Windows-Programm fuer Kunden
+OneClick Solutions - Windows-Programm fuer Kunden
 
 Ein eigenes Programmfenster (ohne Browser-Leisten, mit eigener Titelleiste) fuer das Kunden-Portal.
 Die Oberflaeche kommt live vom Server (web/kunde.html) - Design-Updates sind damit sofort bei allen
@@ -29,6 +29,8 @@ from pathlib import Path
 
 SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping.de").rstrip("/")
 UPDATE_URL = os.environ.get("ONECLICK_UPDATE_URL", "https://github.com/Kgh56/oneclick-tuning/releases/download/programm")
+PROGRAMM_NAME = "OneClick Solutions"
+EXE_NAME = "OneClick-Solutions.exe"
 # pywebview erlaubt im Filternamen nur Buchstaben, Ziffern und Leerzeichen (sonst bricht der Dialog still ab)
 DATEI_TYPEN = ("ECU Datei (*.bin)", "Alle Dateien (*.*)")
 
@@ -61,7 +63,7 @@ def datenordner() -> Path:
 
 
 def holen(url: str, timeout: int = 30) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": f"OneClick-Programm/{VERSION}"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -87,7 +89,7 @@ class Updater:
         return info if int(info["version"]) > self.eigene else None
 
     def installieren(self, info: dict) -> Path:
-        daten = self.holen(f"{self.basis_url}/OneClick-Tuning.exe", 300)
+        daten = self.holen(f"{self.basis_url}/{EXE_NAME}", 300)
         if hashlib.sha256(daten).hexdigest() != info["sha256"] or len(daten) < 1024 * 1024:
             raise RuntimeError("Der Download ist beschädigt.")
         # Laufende .exe beiseite schieben (Umbenennen geht unter Windows), neue an ihren Platz schreiben
@@ -154,7 +156,7 @@ class Bruecke:
             return {"fehler": "Ungültige Adresse."}
         import webview
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": f"OneClick-Programm/{VERSION}"})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=120) as r:
                 daten, name = r.read(), dateiname_aus(r.headers.get("Content-Disposition", ""))
         except urllib.error.HTTPError as e:
@@ -180,7 +182,7 @@ body{margin:0;height:100vh;display:grid;place-items:center;background:#0d0f14;co
 h1{font-size:21px;margin:0 0 8px}p{color:#8b93a5;margin:0 0 22px}
 button{border:1px solid #4d92ff;border-radius:10px;padding:11px 22px;font:inherit;font-weight:700;color:#fff;cursor:pointer;
 background:linear-gradient(180deg,#3b86ff,#1f5fe0)}</style></head><body><div class="k">
-<h1>Keine Verbindung</h1><p>Der OneClick-Server ist gerade nicht erreichbar. Bitte Internetverbindung prüfen.</p>
+<h1>Keine Verbindung</h1><p>Der OneClick-Solutions-Server ist gerade nicht erreichbar. Bitte Internetverbindung prüfen.</p>
 <button onclick="pywebview.api.neu_laden()">Erneut versuchen</button></div></body></html>"""
 
 
@@ -235,7 +237,7 @@ def main():
         start = {"url": SERVER + "/"}
     else:
         start = {"html": OFFLINE}
-    fenster = webview.create_window("OneClick Tuning", js_api=bruecke, width=1440, height=900, min_size=(1100, 700),
+    fenster = webview.create_window(PROGRAMM_NAME, js_api=bruecke, width=1440, height=900, min_size=(1100, 700),
                                     frameless=True, easy_drag=False, background_color="#0d0f14", **start)
     bruecke._fenster = fenster
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True

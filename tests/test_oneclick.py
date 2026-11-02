@@ -22,7 +22,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import app as A          # noqa: E402
+import app as A
+from flask.testing import FlaskClient
+
+
+class ProgrammClient(FlaskClient):
+    """Testet wie das Windows-Programm (die Kunden-Schnittstelle beantwortet nur das Programm)."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.environ_base["HTTP_USER_AGENT"] = "Mozilla/5.0 (Windows NT 10.0) Edg/130.0 OneClickProgramm/test"
+
+
+A.app.test_client_class = ProgrammClient          # noqa: E402
 import oneclick          # noqa: E402
 from werkzeug.security import generate_password_hash  # noqa: E402
 
@@ -46,7 +57,6 @@ class Basis(unittest.TestCase):
         A.EIGENE = d / "eigene"
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
-        A.speichere_config({"nur_programm": False})   # die meisten Tests pruefen das Portal selbst
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
         self.telegram = []
@@ -363,49 +373,27 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.post("/admin/archiv/alles", data={"csrf": self.kunde.csrf, "aktion": "loeschen",
                                                                       "bestaetigung": "ALLES"}).status_code, 302)
 
-    def test_browser_bekommt_werbeseite_programm_das_portal(self):
-        A.speichere_config({"nur_programm": True})
+    def test_browser_nur_werbeseite_programm_das_portal(self):
         pc = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36 Edg/130"}
-        programm = {"User-Agent": pc["User-Agent"] + " OneClickProgramm/3.12"}
         handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148"}
-        for ua in (pc, handy):
-            r = self.kunde.get("/", headers=ua)
-            self.assertEqual(r.status_code, 200)
-            self.assertIn("Windows-Programm", r.text)
-            self.assertIn(A.PROGRAMM_DOWNLOAD, r.text)
-            self.assertNotIn('id="zone"', r.text)                     # kein Portal im Browser
-        r = self.kunde.get("/", headers=programm)
-        self.assertIn('id="zone"', r.text)                            # das Programm bekommt das Portal
-        self.assertNotIn('location.replace("/nur-pc")', r.text)
-        self.assertIn('id="zone"', self.admin().get("/", headers=pc).text)   # Admin im Browser: Portal
-        self.assertEqual(self.kunde.get("/bilder/programm-auswahl.webp").status_code, 200)
-        self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
-        self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)   # Rechtstexte bleiben
-        self.assertEqual(self.kunde.get("/api/info", headers=pc).status_code, 200)   # Programm braucht die API
-        A.speichere_config({"nur_programm": False})
-        self.assertIn('id="zone"', self.kunde.get("/", headers=pc).text)
-
-    def test_kundenseite_nur_am_pc(self):
-        handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"}
-        android = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-        pc = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
-        for ua in (handy, android):
-            r = self.kunde.get("/", headers=ua)
-            self.assertEqual(r.status_code, 302)
-            self.assertTrue(r.headers["Location"].endswith("/nur-pc"))
-        r = self.kunde.get("/", headers=pc)
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('location.replace("/nur-pc")', r.text)          # Schutz auch fuer iPad (gibt sich als Mac aus)
-        seite = self.kunde.get("/nur-pc", headers=handy).text
-        self.assertIn("Bitte am Laptop oder PC öffnen", seite)
-        self.assertIn("Impressum", seite)                              # Rechtstexte bleiben erreichbar
-        self.assertEqual(self.kunde.get("/impressum", headers=handy).status_code, 200)
         a = self.admin()
-        self.assertEqual(a.get("/", headers=handy).status_code, 200)   # Admin kommt immer rein
-        self.assertNotIn('location.replace("/nur-pc")', a.get("/", headers=pc).text)
-        A.speichere_config({"nur_pc": False})
-        self.assertEqual(self.kunde.get("/", headers=handy).status_code, 200)
-        self.assertNotIn('location.replace("/nur-pc")', self.kunde.get("/", headers=pc).text)
+        for c, ua in ((self.kunde, pc), (self.kunde, handy), (a, pc)):        # auch der Admin bekommt im Browser nur Werbung
+            r = c.get("/", headers=ua)
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("OneClick Solutions", r.text)
+            self.assertIn(A.PROGRAMM_DOWNLOAD, r.text)
+            self.assertNotIn('id="zone"', r.text)                            # kein Hochladen im Browser
+        self.assertIn('id="zone"', self.kunde.get("/").text)                 # das Programm bekommt das Portal
+        # Schnittstelle: Browser abgewiesen, Programm und Admin erlaubt
+        self.assertEqual(self.kunde.get("/api/info", headers=pc).status_code, 403)
+        self.assertEqual(self.kunde.post("/api/pruefen", headers=pc).status_code, 403)
+        self.assertEqual(self.kunde.get("/api/info").json["firma"], "OneClick Solutions")
+        self.assertEqual(a.get("/api/info", headers=pc).status_code, 200)
+        self.assertEqual(a.get("/admin", headers=pc).status_code, 200)        # Admin-Bereich im Browser
+        self.assertEqual(self.kunde.get("/bilder/programm-auswahl.webp", headers=pc).status_code, 200)
+        self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
+        self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)
+        self.assertNotIn("nur_programm", a.get("/admin/einstellungen").text)  # kein Schalter mehr
 
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
@@ -624,7 +612,8 @@ class WebTests(Basis):
         a = self.admin()
         a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "speichern", "firmenname": "Müller Tuning",
                                              "impressum": "Müller GmbH\nHauptstr. 1", "aufbewahrung_tage": "90"})
-        self.assertIn("Müller", self.kunde.get("/").text)
+        self.assertIn("Müller", a.get("/admin").text)                       # Firmenname: Admin-Bereich
+        self.assertEqual(self.kunde.get("/api/info").json["firma"], "OneClick Solutions")   # Programm heisst immer so
         self.assertIn("Hauptstr. 1", self.kunde.get("/impressum").text)
 
     def test_zip_import(self):
@@ -1232,10 +1221,9 @@ class ApiTests(Basis):
         self.assertEqual((r.status_code, r.headers["Cache-Control"]), (200, "no-cache"))
         for teil in ('id="zone"', "/api/pruefen", "/api/auftrag/", "Anfrage stellen", "/impressum", "/datenschutz"):
             self.assertIn(teil, r.text)
-        for teil in ("window.pywebview.api", "releases/download/programm/OneClick-Tuning.exe", 'data-fenster="schliessen"'):
-            self.assertIn(teil, r.text)                    # Windows-Programm: Download-Knopf + Fensterknoepfe
-        A.speichere_config({"firmenname": "Muster <Tuning>"})
-        self.assertIn("<title>Muster &lt;Tuning&gt;</title>", self.c.get("/").text)
+        for teil in ("window.pywebview.api", 'data-fenster="schliessen"'):
+            self.assertIn(teil, r.text)                    # Windows-Programm: Fensterknoepfe
+        self.assertIn("<title>OneClick Solutions</title>", r.text)
 
     def test_support_whatsapp_und_suche(self):
         self.assertEqual(self.c.get("/api/info").json["support_whatsapp"], "4915568540674")   # Standard
@@ -1275,7 +1263,7 @@ class ApiTests(Basis):
 
     def test_info(self):
         j = self.c.get("/api/info").json
-        self.assertEqual(j["firma"], "OneClick Tuning")
+        self.assertEqual(j["firma"], "OneClick Solutions")
         self.assertEqual(j["original"], "original")
 
     def test_ablauf(self):

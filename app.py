@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OneClick Tuning - Webseite
+OneClick Solutions - Webseite
 
 Start:
     python app.py admin <name>     Admin anlegen (fragt nach Passwort)
@@ -484,22 +484,20 @@ def schrift(name):
 
 
 PROGRAMM_UA = "OneClickProgramm/"   # Kennung, mit der sich das Windows-Programm meldet
-PROGRAMM_DOWNLOAD = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe"
-HANDY_UA = re.compile(r"iPhone|iPod|iPad|Android|Mobile|Windows Phone|BlackBerry|BB10|Opera Mini|IEMobile|webOS|Kindle|Silk|Tablet|PlayBook", re.I)
-
-
-def nur_pc() -> bool:
-    """Kundenseite nur am Laptop/PC (Admin -> Einstellungen). Standard: an. Der Admin kommt immer rein."""
-    return lade_config().get("nur_pc", True) is not False and not session.get("admin")
-
-
-def nur_programm() -> bool:
-    """Kundenseite nur im Windows-Programm (Admin -> Einstellungen). Standard: an. Der Admin kommt immer rein."""
-    return lade_config().get("nur_programm", True) is not False and not session.get("admin")
+PROGRAMM_NAME = "OneClick Solutions"
+PROGRAMM_DOWNLOAD = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Solutions.exe"
 
 
 def ist_programm() -> bool:
     return PROGRAMM_UA in request.headers.get("User-Agent", "")
+
+
+@app.before_request
+def nur_ueber_programm():
+    """Die Kunden-Schnittstelle (/api/...) beantwortet nur das Programm. Im Browser gibt es nur die
+    Werbeseite und den Admin-Bereich."""
+    if request.path.startswith("/api/") and not ist_programm() and not session.get("admin"):
+        return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
 
 
 @app.route("/bilder/<name>")
@@ -511,34 +509,18 @@ def bild(name):
 
 @app.route("/programm")
 def programm_seite():
-    """Werbeseite fuer das Windows-Programm (das zeigt der Browser statt des Portals)."""
+    """Werbeseite fuer das Windows-Programm - das ist alles, was Kunden im Browser sehen."""
     cfg = lade_config()
-    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, firma=cfg.get("firmenname") or "OneClick Tuning",
-                           jahr=datetime.now().year,
-                           whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
-
-
-@app.route("/nur-pc")
-def nur_pc_seite():
-    cfg = lade_config()
-    adresse = (cfg.get("basis_url") or request.host_url).rstrip("/")
-    return render_template("nur_pc.html", adresse=adresse,
+    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, firma=PROGRAMM_NAME, jahr=datetime.now().year,
                            whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
 
 
 @app.route("/")
 def start():
     """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
-    if nur_programm() and not ist_programm():
-        return programm_seite()   # Browser: nur die Werbeseite, das Portal gibt es im Programm
-    if nur_pc() and not ist_programm() and HANDY_UA.search(request.headers.get("User-Agent", "")):
-        return redirect(url_for("nur_pc_seite"))
+    if not ist_programm():
+        return programm_seite()   # Browser: nur die Werbeseite - das Portal gibt es nur im Programm
     seite = KUNDENSEITE.read_text(encoding="utf-8")
-    if nur_pc() and not ist_programm():   # zusaetzlich im Browser: reine Touch-Geraete ohne Maus/Touchpad (z. B. iPad, das sich als Mac ausgibt)
-        seite = seite.replace("<head>", '<head>\n<script>if(!matchMedia("(any-pointer: fine)").matches&&navigator.maxTouchPoints>0)'
-                                        'location.replace("/nur-pc")</script>', 1)
-    name = html.escape(lade_config().get("firmenname") or "OneClick Tuning")
-    seite = seite.replace("<title>OneClick Tuning</title>", f"<title>{name}</title>", 1)
     antwort = app.response_class(seite, mimetype="text/html")
     antwort.headers["Cache-Control"] = "no-cache"   # nach einem Update sofort die neue Seite
     return antwort
@@ -880,7 +862,7 @@ def api_auftrag(a: dict) -> dict:
 @app.route("/api/info")
 def api_info():
     namen = option_namen()
-    return jsonify(firma=lade_config().get("firmenname") or "OneClick Tuning", api=1,
+    return jsonify(firma=PROGRAMM_NAME, api=1,
                    original=oneclick.ORIGINAL,
                    optionen=[{"key": o, "name": namen[o]} for o in oneclick.optionen()],   # fuer Anfragen
                    fahrzeug_felder=[{"key": f, "name": n, "pflicht": p} for f, n, p in FAHRZEUG_FELDER],
@@ -2192,8 +2174,6 @@ def einstellungen():
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
-                "nur_pc": request.form.get("nur_pc") == "1",
-                "nur_programm": request.form.get("nur_programm") == "1",
                 "support_whatsapp": re.sub(r"[^0-9]", "", request.form.get("support_whatsapp", ""))[:20],
             })
             flash("Gespeichert.")
@@ -2231,7 +2211,7 @@ def einstellungen():
         elif aktion == "test":
             cfg = lade_config()
             ok = telegram_api("sendMessage", {"chat_id": cfg.get("telegram_chat_id"),
-                                              "text": f"✅ {cfg.get('firmenname') or 'OneClick Tuning'} ist verbunden."})
+                                              "text": f"✅ {cfg.get('firmenname') or PROGRAMM_NAME} ist verbunden."})
             flash("Testnachricht gesendet." if ok and ok.get("ok")
                   else "Senden fehlgeschlagen. Token und Chat-ID prüfen.")
         elif aktion == "aufraeumen":
@@ -2421,294 +2401,27 @@ padding:8px 0;border-bottom:1px solid var(--rand);overflow-wrap:anywhere}
 table:not(.liste-tab) th{white-space:normal;padding-left:0}
 }
 
-/* ===================== NEO: futuristisches Design ===================== */
-@font-face{font-family:"Orbitron";font-weight:700;font-display:swap;src:url(/fonts/orbitron-latin-700-normal.woff2) format("woff2")}
-@font-face{font-family:"Orbitron";font-weight:900;font-display:swap;src:url(/fonts/orbitron-latin-900-normal.woff2) format("woff2")}
-@font-face{font-family:"Chakra Petch";font-weight:400;font-display:swap;src:url(/fonts/chakra-petch-latin-400-normal.woff2) format("woff2")}
-@font-face{font-family:"Chakra Petch";font-weight:500;font-display:swap;src:url(/fonts/chakra-petch-latin-500-normal.woff2) format("woff2")}
-@font-face{font-family:"Chakra Petch";font-weight:600;font-display:swap;src:url(/fonts/chakra-petch-latin-600-normal.woff2) format("woff2")}
-@font-face{font-family:"Chakra Petch";font-weight:700;font-display:swap;src:url(/fonts/chakra-petch-latin-700-normal.woff2) format("woff2")}
-@font-face{font-family:"JetBrains Mono";font-weight:400;font-display:swap;src:url(/fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2")}
-@font-face{font-family:"JetBrains Mono";font-weight:600;font-display:swap;src:url(/fonts/jetbrains-mono-latin-600-normal.woff2) format("woff2")}
-:root{--bg:#03040a;--neon:#00e5ff;--neon2:#ff2bd6;--violett:#7c5cff;--akzent:#00e5ff;--akzent2:#ff2bd6;--blau:#00e5ff;
---ok:#39ff88;--warn:#ffe14d;--text:#e9f6ff;--leise:#8aa0b8;--rand:rgba(0,229,255,.16);--rand2:rgba(0,229,255,.34);
---glas:rgba(6,12,26,.72);--glas2:rgba(0,229,255,.08);--verlauf:linear-gradient(100deg,#00e5ff,#7c5cff 55%,#ff2bd6);
---mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--kopf:"Orbitron","Chakra Petch",sans-serif;
---ecke:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
-body{font-family:"Chakra Petch",system-ui,"Segoe UI",sans-serif;font-size:15.5px;letter-spacing:.01em;background-color:var(--bg);
-background-image:radial-gradient(1100px 600px at 12% -12%,rgba(0,229,255,.16),transparent 60%),
-radial-gradient(900px 600px at 100% 0%,rgba(255,43,214,.13),transparent 60%),
-radial-gradient(900px 700px at 50% 120%,rgba(124,92,255,.14),transparent 60%)}
-/* Raster-Boden + Scanlines */
-.deko{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;contain:strict}
-.deko .boden{position:absolute;left:-50%;right:-50%;bottom:-10vh;height:60vh;
-background-image:linear-gradient(rgba(0,229,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.22) 1px,transparent 1px);
-background-size:64px 64px;transform:perspective(420px) rotateX(62deg);transform-origin:50% 100%;
--webkit-mask-image:linear-gradient(to top,#000 0%,transparent 85%);mask-image:linear-gradient(to top,#000 0%,transparent 85%);
-animation:boden 6s linear infinite;opacity:.55}
-@keyframes boden{to{background-position:0 64px,0 0}}
-body::after{content:"";position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.07;
-background:repeating-linear-gradient(0deg,rgba(255,255,255,.35) 0 1px,transparent 1px 3px)}
-::selection{background:rgba(255,43,214,.4)}
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:#05070f}
-::-webkit-scrollbar-thumb{background:linear-gradient(#00e5ff55,#ff2bd655);border-radius:0}
-/* Kopfzeile */
-header{background:rgba(3,5,12,.72);border-bottom:1px solid transparent;
-border-image:linear-gradient(90deg,transparent,#00e5ff,#ff2bd6,transparent) 1;box-shadow:0 10px 40px rgba(0,229,255,.06)}
-.logo{font-family:var(--kopf);font-weight:900;font-size:17px;letter-spacing:.08em;text-transform:uppercase}
-.logo span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent;
-filter:drop-shadow(0 0 10px rgba(0,229,255,.55))}
-.logo::before{content:"";display:inline-block;width:9px;height:9px;margin-right:10px;vertical-align:1px;background:var(--neon);
-box-shadow:0 0 12px var(--neon);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);animation:blink 2.4s ease-in-out infinite}
-@keyframes blink{50%{opacity:.35;box-shadow:none}}
-nav a{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--leise);position:relative;padding:4px 0}
-nav a::after{content:"";position:absolute;left:0;right:100%;bottom:-2px;height:1px;background:var(--neon);box-shadow:0 0 8px var(--neon);transition:right .3s}
-nav a:hover{color:var(--neon);text-shadow:0 0 12px rgba(0,229,255,.6)}nav a:hover::after,nav a.an::after{right:0}
-nav a.an{color:var(--text)}
-/* Karten: abgeschnittene Ecken + HUD-Klammern */
-.karte{position:relative;border-radius:0;clip-path:var(--ecke);border:1px solid var(--rand);padding:30px;
-background:
-linear-gradient(var(--neon),var(--neon)) left 0 top 0/16px 2px no-repeat,linear-gradient(var(--neon),var(--neon)) left 0 top 0/2px 16px no-repeat,
-linear-gradient(var(--neon2),var(--neon2)) right 0 bottom 0/16px 2px no-repeat,linear-gradient(var(--neon2),var(--neon2)) right 0 bottom 0/2px 16px no-repeat,
-linear-gradient(180deg,rgba(10,20,40,.78),rgba(4,8,18,.82));
-box-shadow:inset 0 0 0 1px rgba(0,229,255,.05),inset 0 40px 80px -60px rgba(0,229,255,.25)}
-.karte:hover{border-color:var(--rand2)}
-h1,h2,h3{font-family:var(--kopf);text-transform:uppercase;letter-spacing:.06em}
-h1{font-size:26px;font-weight:900;background:linear-gradient(90deg,#fff,#bff7ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-h2{font-size:15.5px;font-weight:700;color:var(--neon);text-shadow:0 0 14px rgba(0,229,255,.45)}
-h2::before{content:"// ";color:var(--neon2);text-shadow:0 0 10px rgba(255,43,214,.6)}
-h3{font-size:13px;color:var(--leise)}
-.hero h1{font-size:clamp(30px,6vw,56px);letter-spacing:.04em}
-.hero h1 span{background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent}
-.leise,.hinweis{color:var(--leise)}
-/* Knoepfe */
-.btn{font-family:var(--kopf);font-weight:700;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;border-radius:0;padding:13px 26px;
-clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
-background:var(--verlauf);background-size:200% 100%;color:#02040a;box-shadow:none;filter:drop-shadow(0 0 14px rgba(0,229,255,.45));
-transition:background-position .4s,filter .25s,transform .15s}
-.btn:hover{background-position:100% 0;filter:drop-shadow(0 0 22px rgba(255,43,214,.6));transform:translateY(-1px);box-shadow:none}
-.btn.grau{background:rgba(0,229,255,.07);color:var(--neon);border:1px solid var(--rand2);filter:none}
-.btn.grau:hover{background:rgba(0,229,255,.16);filter:drop-shadow(0 0 12px rgba(0,229,255,.4))}
-.btn.gruen{background:linear-gradient(100deg,#39ff88,#00e5ff);color:#02040a;filter:drop-shadow(0 0 14px rgba(57,255,136,.45))}
-.btn.klein{padding:8px 14px;font-size:11px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
-/* Eingaben */
-input[type=text],input[type=password],input[type=number],input[type=email],textarea,select{border-radius:0;background:rgba(0,10,22,.7);
-border:1px solid var(--rand);color:var(--text);font-family:"Chakra Petch",sans-serif;
-clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%)}
-input:focus,textarea:focus,select:focus{border-color:var(--neon);box-shadow:0 0 0 1px var(--neon),0 0 24px rgba(0,229,255,.3)}
-input::placeholder,textarea::placeholder{color:#4f6378}
-input[type=checkbox],input[type=radio]{accent-color:var(--neon)}
-input[type=file]::file-selector-button{border-radius:0;font-family:var(--mono);text-transform:uppercase;font-size:11px;letter-spacing:.1em;
-background:rgba(0,229,255,.1);color:var(--neon);border:1px solid var(--rand2)}
-label.feld{font-size:13.5px;color:#a9bfd4}
-/* Upload-Feld */
-.drop{border-radius:0;border:1px dashed var(--rand2);background:
-repeating-linear-gradient(45deg,rgba(0,229,255,.025) 0 12px,transparent 12px 24px),rgba(0,10,22,.5);clip-path:var(--ecke)}
-.drop::before{border-radius:0;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--verlauf);color:#02040a;
-box-shadow:none;filter:drop-shadow(0 0 16px rgba(0,229,255,.6));animation:schweben 3s ease-in-out infinite}
-@keyframes schweben{50%{transform:translateY(-6px)}}
-.drop.aktiv,.drop:hover{border-color:var(--neon);background-color:rgba(0,229,255,.06);box-shadow:inset 0 0 40px rgba(0,229,255,.12)}
-.drop b{font-family:var(--kopf);letter-spacing:.08em;text-transform:uppercase;font-size:15px}
-label.datei{border-radius:0;border-color:var(--rand2);background:rgba(0,10,22,.55);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
-label.datei.pflicht{border-color:rgba(255,43,214,.6)}
-label.datei.gewaehlt{border-color:var(--ok);background:rgba(57,255,136,.07);box-shadow:inset 0 0 30px rgba(57,255,136,.08)}
-.optionen label{border-radius:0;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
-.optionen label:has(input:checked){background:rgba(0,229,255,.1);border:1px solid var(--neon);box-shadow:inset 0 0 30px rgba(0,229,255,.18)}
-/* Tabellen */
-th{font-family:var(--mono);color:var(--neon);opacity:.8;font-size:11px;letter-spacing:.14em}
-td,th{border-bottom:1px solid rgba(0,229,255,.1)}
-.liste-tab tr{transition:background .2s}
-.liste-tab tr:hover td{background:rgba(0,229,255,.035)}
-td code,code,pre{font-family:var(--mono);border-radius:0;background:rgba(0,229,255,.07);color:#bff7ff}
-/* Status */
-.status{border-radius:0;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;
-clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%);border:0}
-.s-FREIGEGEBEN,.a-AUTOMATISCH{background:rgba(57,255,136,.14);color:var(--ok);text-shadow:0 0 10px rgba(57,255,136,.5)}
-.s-ENTWURF{background:rgba(0,229,255,.12);color:var(--neon)}
-.s-WARTET{background:rgba(255,225,77,.12);color:var(--warn);text-shadow:0 0 10px rgba(255,225,77,.5)}
-.s-ABGELEHNT,.a-MANUELL{background:rgba(255,43,214,.13);color:#ff6be4}
-/* Meldungen */
-.meldung{border-radius:0;background:rgba(0,229,255,.07);border:0;border-left:3px solid var(--neon);font-family:var(--mono);font-size:13px;
-box-shadow:inset 30px 0 60px -40px rgba(0,229,255,.4)}
-/* Kennzahlen */
-.zahl{font-family:var(--kopf);font-weight:900;letter-spacing:.02em;background:var(--verlauf);-webkit-background-clip:text;background-clip:text;color:transparent;
-filter:drop-shadow(0 0 16px rgba(0,229,255,.35))}
-.raster .karte{background:
-linear-gradient(var(--neon),var(--neon)) left 0 top 0/16px 2px no-repeat,linear-gradient(var(--neon),var(--neon)) left 0 top 0/2px 16px no-repeat,
-linear-gradient(180deg,rgba(10,22,44,.85),rgba(4,8,18,.85))}
-.warten{border-radius:0;background:rgba(255,225,77,.06);border:1px solid rgba(255,225,77,.3)}
-.kreis{border-radius:0;border-width:2px;animation:dreh 1.2s linear infinite}
-footer,footer a{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#4f6378}
-footer a:hover{color:var(--neon)}
-main>*{animation:neo-rein .6s cubic-bezier(.2,.8,.2,1) both}
-@keyframes neo-rein{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
-@media (max-width:720px){.karte{padding:20px;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
-h1{font-size:21px}.liste-tab tr{border-radius:0;border-color:var(--rand);background:rgba(0,10,22,.55)}
-.liste-tab td::before{font-family:var(--mono);color:var(--neon);opacity:.75}.deko .boden{height:40vh}}
-@media (prefers-reduced-motion:reduce){.deko .boden,.logo::before,.drop::before{animation:none}}
-.zahl{font-family:"Chakra Petch",sans-serif;font-weight:700;font-size:clamp(30px,3vw,42px);white-space:nowrap}
-@media (max-width:520px){.btn{letter-spacing:.08em;padding:12px 18px}}
-td a,p a,.hinweis a{color:var(--text);text-decoration-color:rgba(0,229,255,.5);text-underline-offset:3px}
-td a:hover,p a:hover{color:var(--neon);text-shadow:0 0 10px rgba(0,229,255,.5)}
-
-/* ===================== NEO: Animationen & Effekte ===================== */
-@view-transition{navigation:auto}
-::view-transition-old(root){animation:vt-raus .28s cubic-bezier(.4,0,1,1) both}
-::view-transition-new(root){animation:vt-rein .45s cubic-bezier(.2,.8,.2,1) both}
-@keyframes vt-raus{to{opacity:0;filter:blur(6px);transform:scale(.985)}}
-@keyframes vt-rein{from{opacity:0;filter:blur(8px);transform:scale(1.015)}}
-/* Lichtschein, der der Maus folgt */
-#neo-licht{position:fixed;left:0;top:0;width:520px;height:520px;margin:-260px 0 0 -260px;z-index:-1;pointer-events:none;border-radius:50%;
-background:radial-gradient(circle,rgba(0,229,255,.13),rgba(124,92,255,.06) 40%,transparent 68%);opacity:0;transition:opacity .6s;will-change:transform}
-body.maus #neo-licht{opacity:1}
-/* Scan-Strahl laeuft beim Erscheinen einmal ueber jede Karte */
-.karte::after{content:"";position:absolute;left:0;right:0;top:-80px;height:80px;pointer-events:none;
-background:linear-gradient(180deg,transparent,rgba(0,229,255,.16) 70%,rgba(0,229,255,.55) 98%,transparent);opacity:0}
-.karte.scan::after{animation:scan-durch 1.3s cubic-bezier(.3,.6,.3,1) .15s 1 both}
-@keyframes scan-durch{0%{opacity:1;transform:translateY(0)}85%{opacity:1}100%{opacity:0;transform:translateY(calc(var(--h,600px) + 120px))}}
-/* Karten erscheinen beim Scrollen */
-.karte.warte{opacity:0;transform:translateY(34px) scale(.985);filter:blur(6px);animation:none}
-.karte.sicht{opacity:1;transform:none;filter:none;transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1),filter .7s}
-/* Kacheln kippen mit der Maus */
-.raster .karte{transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .3s;transform-style:preserve-3d;will-change:transform}
-.raster .karte:hover{border-color:var(--rand2)}
-/* Knoepfe: Glanz + Klick-Welle + Glitch beim Hover */
-.btn{position:relative;overflow:hidden}
-.btn::after{content:"";position:absolute;top:0;bottom:0;left:-70%;width:45%;transform:skewX(-22deg);pointer-events:none;
-background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:glanz-lauf 4.5s ease-in-out infinite}
-.btn.grau::after{background:linear-gradient(90deg,transparent,rgba(0,229,255,.35),transparent)}
-@keyframes glanz-lauf{0%,70%{left:-70%}100%{left:140%}}
-.btn:hover{animation:btn-glitch .35s steps(2) 1}
-@keyframes btn-glitch{0%{text-shadow:2px 0 #ff2bd6,-2px 0 #00e5ff}50%{text-shadow:-2px 0 #ff2bd6,2px 0 #00e5ff}100%{text-shadow:none}}
-.welle{position:absolute;border-radius:50%;background:rgba(255,255,255,.5);transform:scale(0);pointer-events:none;animation:welle .65s ease-out forwards}
-@keyframes welle{to{transform:scale(4);opacity:0}}
-.btn.laedt{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.18) 0 10px,transparent 10px 20px),var(--verlauf);background-size:28px 28px,200% 100%;animation:laden-streifen .6s linear infinite}
-@keyframes laden-streifen{to{background-position:28px 0,0 0}}
-/* Ueberschriften: Glitch beim Hover, Cursor-Strich beim Entschluesseln */
-h1:hover{animation:glitch .45s steps(3) 1}
-@keyframes glitch{0%{transform:translate(0);filter:drop-shadow(2px 0 #ff2bd6) drop-shadow(-2px 0 #00e5ff)}
-33%{transform:translate(-2px,1px) skewX(-4deg)}66%{transform:translate(2px,-1px) skewX(3deg);filter:drop-shadow(-2px 0 #ff2bd6) drop-shadow(2px 0 #00e5ff)}100%{transform:none;filter:none}}
-.entschluesseln::after{content:"_";margin-left:2px;color:var(--neon2);animation:blink .6s steps(1) infinite}
-/* Status-Pillen leben */
-.s-WARTET{animation:warte-puls 2.2s ease-in-out infinite}
-@keyframes warte-puls{50%{background:rgba(255,225,77,.24);text-shadow:0 0 16px rgba(255,225,77,.9)}}
-.s-FREIGEGEBEN{position:relative;overflow:hidden}
-.s-FREIGEGEBEN::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(57,255,136,.35),transparent);transform:translateX(-100%);animation:pille-glanz 3.5s ease-in-out infinite}
-@keyframes pille-glanz{60%,100%{transform:translateX(100%)}}
-/* Tabellenzeilen kommen nacheinander */
-.liste-tab tr.rein{animation:zeile-rein .5s cubic-bezier(.2,.8,.2,1) both}
-@keyframes zeile-rein{from{opacity:0;transform:translateX(-14px)}}
-.liste-tab tr:not(:first-child){position:relative}
-.liste-tab tr:not(:first-child):hover{box-shadow:inset 3px 0 0 var(--neon)}
-/* Eingaben: Fokus pulsiert */
-input:focus,textarea:focus,select:focus{animation:fokus-puls 1.8s ease-in-out infinite}
-@keyframes fokus-puls{50%{box-shadow:0 0 0 1px var(--neon),0 0 34px rgba(0,229,255,.45)}}
-/* Upload-Feld: laufender Rand */
-.drop{background-image:repeating-linear-gradient(45deg,rgba(0,229,255,.025) 0 12px,transparent 12px 24px),
-linear-gradient(90deg,var(--neon) 50%,transparent 0),linear-gradient(90deg,var(--neon) 50%,transparent 0),
-linear-gradient(0deg,var(--neon) 50%,transparent 0),linear-gradient(0deg,var(--neon) 50%,transparent 0);
-background-repeat:repeat,repeat-x,repeat-x,repeat-y,repeat-y;background-size:auto,16px 1px,16px 1px,1px 16px,1px 16px;
-background-position:0 0,0 0,0 100%,0 0,100% 0;border-color:transparent;animation:ameisen 1.2s linear infinite}
-@keyframes ameisen{to{background-position:0 0,16px 0,-16px 100%,0 -16px,100% 16px}}
-/* Meldungen gleiten rein */
-.meldung{animation:meldung-rein .6s cubic-bezier(.2,.8,.2,1) both}
-@keyframes meldung-rein{from{opacity:0;transform:translateX(-24px);clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
-/* Logo-Glitch ab und zu */
-.logo span{animation:logo-flacker 7s steps(1) infinite}
-@keyframes logo-flacker{0%,96%,100%{opacity:1;transform:none}97%{opacity:.6;transform:translateX(2px) skewX(-8deg)}98%{opacity:1;transform:translateX(-2px)}}
-/* Horizont-Leuchten unten */
-.deko .horizont{position:absolute;left:0;right:0;bottom:-20vh;height:40vh;
-background:radial-gradient(60% 50% at 50% 100%,rgba(255,43,214,.22),transparent 70%);animation:horizont 6s ease-in-out infinite}
-@keyframes horizont{50%{opacity:.55;transform:scaleX(1.15)}}
-@media (hover:none),(max-width:720px){ #neo-licht{display:none}.btn::after{animation-duration:6s}}
-@media (prefers-reduced-motion:reduce){.karte::after,.btn::after,.s-FREIGEGEBEN::after,.deko .horizont{display:none}
-.karte.warte{opacity:1;transform:none;filter:none}*{animation:none!important}}
-
-/* ===================== BLAU: Werkstatt-Software-Look ===================== */
-@font-face{font-family:"Montserrat";font-weight:500;font-display:swap;src:url(/fonts/montserrat-latin-500-normal.woff2) format("woff2")}
-@font-face{font-family:"Montserrat";font-weight:600;font-display:swap;src:url(/fonts/montserrat-latin-600-normal.woff2) format("woff2")}
-@font-face{font-family:"Montserrat";font-weight:700;font-display:swap;src:url(/fonts/montserrat-latin-700-normal.woff2) format("woff2")}
-@font-face{font-family:"Montserrat";font-weight:800;font-display:swap;src:url(/fonts/montserrat-latin-800-normal.woff2) format("woff2")}
-:root{--bg:#040919;--neon:#5b8dff;--neon2:#8fb4ff;--akzent:#2f6bff;--akzent2:#5b8dff;--blau:#2f6bff;--ok:#2fd35a;--warn:#ffc23d;
---text:#eef3ff;--leise:#93a6cc;--rand:rgba(61,123,255,.38);--rand2:rgba(91,141,255,.75);--glas:rgba(7,13,36,.86);--glas2:rgba(47,107,255,.12);
---verlauf:linear-gradient(180deg,#3b78ff,#1f4fd8);--kopf:"Montserrat",system-ui,sans-serif;--spur:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='46' viewBox='0 0 1200 46'><g fill='none' stroke='%233d7bff' stroke-opacity='.55' stroke-width='1.5'><path d='M0 40 H180 l14 -14 H330 l10 10 H520 M560 40 H700 l16 -16 H860 M900 40 H1040 l12 -12 H1200'/><path d='M120 40 v-18 M410 36 v-22 l8 -8 M640 40 v-14 M980 40 v-20 l-8 -8' stroke-opacity='.35'/></g><g fill='%233d7bff' fill-opacity='.7'><circle cx='418' cy='6' r='2.5'/><circle cx='972' cy='12' r='2.5'/><circle cx='120' cy='22' r='2'/><circle cx='640' cy='26' r='2'/></g></svg>")}
-*,*::before,*::after{clip-path:none!important}
-body{font-family:"Montserrat",system-ui,"Segoe UI",sans-serif;font-weight:500;font-size:14.5px;letter-spacing:0;background-color:#040919;
-background-image:radial-gradient(1100px 600px at 12% -12%,rgba(47,107,255,.2),transparent 60%),radial-gradient(900px 600px at 100% 10%,rgba(150,80,30,.18),transparent 60%),
-radial-gradient(900px 700px at 50% 120%,rgba(31,79,216,.2),transparent 60%)}
-body::after{display:none}
-.deko .boden{display:none}
-.deko .horizont{background:radial-gradient(60% 50% at 50% 100%,rgba(47,107,255,.25),transparent 70%)}
-#neo-licht{background:radial-gradient(circle,rgba(47,107,255,.14),rgba(47,107,255,.05) 40%,transparent 68%)}
-::selection{background:rgba(47,107,255,.45)}
-header{background:rgba(4,9,25,.7);border-bottom:2px solid transparent;border-image:linear-gradient(90deg,transparent,#2f6bff 15%,#2f6bff 85%,transparent) 1;box-shadow:none}
-.logo{font-family:var(--kopf);font-weight:800;font-size:17px;letter-spacing:.01em;text-transform:none}
-.logo span{background:linear-gradient(90deg,#fff,#8fb4ff);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 10px rgba(47,107,255,.6));animation:none}
-.logo::before{background:#2f6bff;box-shadow:0 0 12px #2f6bff;border-radius:3px;transform:rotate(45deg)}
-nav{gap:4px 6px}
-nav a{font-family:var(--kopf);font-weight:700;font-size:13px;letter-spacing:0;text-transform:none;color:#cfdcff;padding:7px 12px;border-radius:9px;transition:background .2s,color .2s}
-nav a::after{display:none}
-nav a:hover{background:rgba(47,107,255,.18);color:#fff;text-shadow:none}
-nav a.an{background:var(--verlauf);color:#fff;box-shadow:0 0 14px rgba(47,107,255,.55)}
-.karte{border-radius:16px;border:2px solid var(--blau);padding:26px 28px 40px;overflow:hidden;
-background:var(--spur) center bottom/1200px 46px no-repeat,radial-gradient(ellipse at 75% 70%,rgba(150,80,30,.2),transparent 60%),linear-gradient(180deg,rgba(10,18,48,.94),rgba(5,10,30,.96));
-box-shadow:0 0 0 1px rgba(91,141,255,.22) inset,0 0 24px rgba(47,107,255,.3),inset 0 0 40px rgba(47,107,255,.1)}
-.karte:hover{border-color:#4a85ff}
-.raster .karte{background:radial-gradient(ellipse at 80% 90%,rgba(47,107,255,.25),transparent 60%),linear-gradient(180deg,rgba(12,22,58,.95),rgba(6,12,34,.95));padding:20px 22px}
-.karte::after{background:linear-gradient(180deg,transparent,rgba(47,107,255,.14) 70%,rgba(120,170,255,.5) 98%,transparent)}
-h1,h2,h3{font-family:var(--kopf);text-transform:none;letter-spacing:-.005em}
-h1{font-weight:800;font-size:27px;background:none;-webkit-background-clip:initial;background-clip:initial;color:#fff}
-h2{font-weight:700;font-size:16.5px;color:#a9c4ff;text-shadow:none}
-h2::before{content:none}
-h3{font-weight:700;font-size:14px;color:var(--leise)}
-.hero h1 span{background:linear-gradient(90deg,#8fb4ff,#3b78ff);-webkit-background-clip:text;background-clip:text}
-.btn{border-radius:10px;font-family:var(--kopf);font-weight:700;font-size:13.5px;letter-spacing:0;text-transform:none;color:#fff;padding:11px 22px;
-background:var(--verlauf);border:1px solid var(--rand2);filter:none;box-shadow:0 0 16px rgba(47,107,255,.45),inset 0 1px 0 rgba(255,255,255,.25)}
-.btn:hover{background:linear-gradient(180deg,#4f88ff,#2a5ce6);filter:none;box-shadow:0 0 24px rgba(47,107,255,.7),inset 0 1px 0 rgba(255,255,255,.3);animation:none}
-.btn.grau{background:rgba(10,20,52,.75);color:#dbe6ff;border:1px solid var(--rand)}
-.btn.grau:hover{background:rgba(47,107,255,.2);border-color:var(--rand2)}
-.btn.gruen{background:linear-gradient(180deg,#36e06c,#1c9e45);border-color:#6cf597;color:#fff;filter:none;box-shadow:0 0 16px rgba(47,211,90,.45)}
-.btn.klein{padding:7px 13px;font-size:12px}
-.btn::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent)}
-.btn.laedt{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.18) 0 10px,transparent 10px 20px),var(--verlauf)}
-input[type=text],input[type=password],input[type=number],input[type=email],textarea,select{border-radius:9px;background:rgba(5,10,30,.75);border:1px solid var(--rand);font-family:var(--kopf)}
-input:focus,textarea:focus,select:focus{border-color:var(--rand2);box-shadow:0 0 0 3px rgba(47,107,255,.25);animation:none}
-input[type=checkbox],input[type=radio]{accent-color:#2f6bff}
-input[type=file]::file-selector-button{border-radius:8px;font-family:var(--kopf);text-transform:none;letter-spacing:0;font-size:12px;font-weight:700;
-background:var(--verlauf);color:#fff;border:1px solid var(--rand2)}
-label.feld{font-family:var(--kopf);font-size:13px;color:#a9bfe6}
-.drop{border-radius:14px;border:2px solid #4a85ff;background:linear-gradient(135deg,#1b3fb4,#14309a 45%,#2b2a9c 75%,#1d3aa8);animation:none;
-box-shadow:0 0 26px rgba(47,107,255,.5),inset 0 0 60px rgba(47,107,255,.35);color:#a9c0f5}
-.drop::before{border-radius:12px;background:rgba(255,255,255,.15);color:#fff;filter:none;box-shadow:0 0 18px rgba(143,180,255,.6)}
-.drop:hover,.drop.aktiv{background:linear-gradient(135deg,#2048c4,#1838aa 45%,#3230ad 75%,#2242b8);box-shadow:0 0 40px rgba(47,107,255,.8),inset 0 0 70px rgba(91,141,255,.45)}
-.drop b{font-family:var(--kopf);font-weight:800;letter-spacing:.1em;color:#cfe0ff;text-shadow:0 0 14px rgba(143,180,255,.8)}
-label.datei{border-radius:10px;background:rgba(10,20,52,.7);border:1px solid var(--rand)}
-label.datei.pflicht{border-color:rgba(255,154,31,.7)}
-label.datei.gewaehlt{border-color:var(--ok);background:rgba(47,211,90,.08)}
-.optionen label{border-radius:10px}
-.optionen label:has(input:checked){background:linear-gradient(180deg,#3b78ff,#1f4fd8);border:1px solid #a9c4ff;box-shadow:0 0 16px rgba(47,107,255,.6)}
-th{font-family:var(--kopf);color:#8fb4ff;opacity:1;font-size:11.5px;letter-spacing:.06em;font-weight:700}
-td,th{border-bottom:1px solid rgba(61,123,255,.18)}
-.liste-tab tr:not(:first-child):hover{box-shadow:inset 3px 0 0 #3b78ff}
-.liste-tab tr:hover td{background:rgba(47,107,255,.07)}
-td code,code,pre{border-radius:6px;background:rgba(47,107,255,.12);color:#cfe0ff}
-.status{border-radius:6px;font-family:var(--kopf);font-weight:800;font-size:11px;letter-spacing:.02em;padding:4px 10px}
-.s-FREIGEGEBEN,.a-AUTOMATISCH{background:rgba(47,211,90,.16);color:#6cf597;text-shadow:none}
-.s-ENTWURF{background:rgba(47,107,255,.18);color:#a9c4ff}
-.s-WARTET{background:rgba(255,194,61,.14);color:#ffc23d;text-shadow:none}
-.s-ABGELEHNT,.a-MANUELL{background:rgba(255,90,80,.15);color:#ff8a80}
-@keyframes warte-puls{50%{background:rgba(255,194,61,.28);text-shadow:0 0 12px rgba(255,194,61,.8)}}
-.meldung{border-radius:10px;background:rgba(47,107,255,.12);border:1px solid var(--rand);border-left:4px solid #3b78ff;font-family:var(--kopf);font-size:13.5px;box-shadow:none}
-.zahl{font-family:var(--kopf);font-weight:800;background:none;-webkit-background-clip:initial;background-clip:initial;color:#fff;filter:drop-shadow(0 0 12px rgba(47,107,255,.6))}
-.warten{border-radius:10px}
-.kreis{border-radius:50%}
-.entschluesseln::after{color:#5b8dff}
-footer,footer a{font-family:var(--kopf);font-size:11.5px;letter-spacing:0;text-transform:none;color:#5d6f96}
-footer a:hover{color:#a9c4ff}
-.liste-tab td::before{font-family:var(--kopf);color:#8fb4ff;opacity:1}
-@media (max-width:720px){.karte{padding:18px 16px 36px}nav a{padding:6px 10px}.liste-tab tr{border-radius:10px;background:rgba(10,20,52,.6)}}
+/* ===================== Standard-Design: schlicht, ohne Effekte ===================== */
+:root{--bg:#0f1115;--glas:#171a21;--glas2:#1e222b;--rand:#2a2f3a;--rand2:#3a4150;--text:#e8ecf4;--leise:#9aa3b5;
+--akzent:#2f7bff;--akzent2:#2f7bff;--blau:#2f7bff;--ok:#22c55e;--warn:#f5b301;--verlauf:linear-gradient(#2f7bff,#2f7bff)}
+body{background:var(--bg);background-image:none}
+::selection{background:rgba(47,123,255,.35)}
+header{background:#14171d;-webkit-backdrop-filter:none;backdrop-filter:none}
+.logo span{background:none;-webkit-background-clip:initial;background-clip:initial;color:var(--text)}
+nav a.an{color:var(--text);font-weight:600}
+.karte{background:var(--glas);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;border-radius:12px}
+.btn{border-radius:8px;box-shadow:none}.btn:hover{transform:none;box-shadow:none;background:#2a6de6}
+.btn.grau{background:var(--glas2)}.btn.grau:hover{background:#252a34}
+.btn.gruen{background:#1f9d55;box-shadow:none}.btn.gruen:hover{background:#1b8a4b}
+.drop::before{box-shadow:none}
+.drop.aktiv,.drop:hover{box-shadow:none;background:rgba(47,123,255,.06);border-color:#2f7bff}
+.optionen label:has(input:checked){background:rgba(47,123,255,.12);border:1.5px solid #2f7bff;box-shadow:none}
+.optionen input:checked+span{background:none;color:var(--text)}
+.zahl{background:none;color:var(--text);-webkit-background-clip:initial;background-clip:initial;white-space:nowrap;font-size:clamp(26px,2.4vw,38px)}
+.hero h1 span{background:none;color:#5aa0ff}
+input:focus,textarea:focus{border-color:#2f7bff;box-shadow:0 0 0 3px rgba(47,123,255,.2)}
+main>*{animation:none}
 </style></head><body>
-<div class="deko" aria-hidden="true"><i class="boden"></i><i class="horizont"></i></div>
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
@@ -2732,68 +2445,6 @@ document.querySelectorAll('table').forEach(function(t){
     t.rows[r].cells[c].setAttribute('data-label',(kopf.cells[c]||{}).textContent||'');
 });
 
-// ===================== NEO: Animationen =====================
-(function(){
-  var ruhig=matchMedia('(prefers-reduced-motion: reduce)').matches, maus=matchMedia('(hover:hover) and (pointer:fine)').matches;
-  if(ruhig) return;
-  var karten=[].slice.call(document.querySelectorAll('main .karte'));
-  // Scan-Strahl + Erscheinen beim Scrollen
-  var io='IntersectionObserver' in window ? new IntersectionObserver(function(es){es.forEach(function(e){
-    if(!e.isIntersecting) return; var k=e.target; io.unobserve(k);
-    k.style.setProperty('--h',k.offsetHeight+'px'); k.classList.remove('warte'); k.classList.add('sicht','scan');
-  })},{threshold:0, rootMargin:'0px 0px -40px 0px'}) : null;
-  karten.forEach(function(k,i){
-    var r=k.getBoundingClientRect();
-    // nur normale Karten einblenden - lange Listen (Archiv, Auftraege) sind immer sofort sichtbar
-    if(io && r.top>innerHeight && r.height<innerHeight*1.5){k.classList.add('warte'); io.observe(k);}
-    else {k.style.setProperty('--h',k.offsetHeight+'px'); setTimeout(function(){k.classList.add('scan')},i*90);}
-  });
-  // Sicherheitsnetz: spaetestens nach 4 s ist jede Karte sichtbar, egal was passiert
-  setTimeout(function(){document.querySelectorAll('.karte.warte').forEach(function(k){k.classList.remove('warte');k.classList.add('sicht');});},4000);
-  // Tabellenzeilen nacheinander
-  document.querySelectorAll('.liste-tab').forEach(function(t){
-    for(var r=1;r<t.rows.length && r<40;r++){t.rows[r].classList.add('rein');t.rows[r].style.animationDelay=(0.15+r*0.045)+'s';}
-  });
-  // Ueberschriften entschluesseln (nur reiner Text)
-  var Z='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&<>/*+=';
-  document.querySelectorAll('main h1, main h2').forEach(function(el,idx){
-    if(el.children.length||!el.textContent.trim()||el.textContent.length>60) return;
-    var ziel=el.textContent, n=0, schritt=Math.max(1,ziel.length/16);
-    el.classList.add('entschluesseln');
-    setTimeout(function(){var t=setInterval(function(){
-      var s='';for(var i=0;i<ziel.length;i++) s+=(i<n||ziel[i]===' ')?ziel[i]:Z[Math.random()*Z.length|0];
-      el.textContent=s; n+=schritt; if(n>=ziel.length){clearInterval(t);el.textContent=ziel;el.classList.remove('entschluesseln');}
-    },30)},120+idx*110);
-  });
-  // Zahlen hochzaehlen
-  document.querySelectorAll('.zahl').forEach(function(el){
-    var txt=el.textContent.trim(), m=txt.match(/^([\\d.]+)(,(\\d+))?(.*)$/); if(!m) return;
-    var ganz=parseInt(m[1].replace(/\\./g,''),10), nk=m[3]||'', ziel=ganz+(nk?parseInt(nk,10)/Math.pow(10,nk.length):0), rest=m[4];
-    if(!(ziel>0)) return; var t0=null, dauer=1200;
-    function fmt(v){var s=v.toFixed(nk.length).split('.');s[0]=s[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');return s.join(',')+rest;}
-    function lauf(t){if(!t0)t0=t;var p=Math.min(1,(t-t0)/dauer),e=1-Math.pow(1-p,4);el.textContent=fmt(ziel*e);if(p<1)requestAnimationFrame(lauf);}
-    el.textContent=fmt(0); setTimeout(function(){requestAnimationFrame(lauf)},250);
-  });
-  // Klick-Welle auf Knoepfen + Lade-Streifen beim Absenden
-  document.addEventListener('pointerdown',function(e){
-    var b=e.target.closest('.btn'); if(!b) return; var r=b.getBoundingClientRect(), w=document.createElement('span'), d=Math.max(r.width,r.height);
-    w.className='welle'; w.style.cssText='width:'+d+'px;height:'+d+'px;left:'+(e.clientX-r.left-d/2)+'px;top:'+(e.clientY-r.top-d/2)+'px';
-    b.appendChild(w); setTimeout(function(){w.remove()},700);
-  });
-  document.addEventListener('submit',function(e){var b=e.target.querySelector('button.btn:not(.grau)');if(b)b.classList.add('laedt');});
-  if(!maus) return;
-  // Lichtschein folgt der Maus (weich nachgezogen)
-  var licht=document.createElement('div'); licht.id='neo-licht'; document.body.appendChild(licht);
-  var zx=innerWidth/2, zy=innerHeight/2, x=zx, y=zy;
-  addEventListener('pointermove',function(e){zx=e.clientX;zy=e.clientY;document.body.classList.add('maus');},{passive:true});
-  (function tick(){x+=(zx-x)*.12;y+=(zy-y)*.12;licht.style.transform='translate3d('+x+'px,'+y+'px,0)';requestAnimationFrame(tick);})();
-  // Kacheln kippen
-  document.querySelectorAll('.raster .karte').forEach(function(k){
-    k.addEventListener('pointermove',function(e){var r=k.getBoundingClientRect(),px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
-      k.style.transform='perspective(700px) rotateX('+(-py*9)+'deg) rotateY('+(px*11)+'deg) translateZ(6px)';});
-    k.addEventListener('pointerleave',function(){k.style.transform='';});
-  });
-})();
 </script>
 </body></html>""",
 
@@ -3122,7 +2773,7 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ firma }} – Windows-Programm</title>
-<meta name="description" content="OneClick Tuning: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, nach Freigabe bezahlen und herunterladen. Kein Abo.">
+<meta name="description" content="OneClick Solutions: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, nach Freigabe bezahlen und herunterladen. Kein Abo.">
 <meta name="theme-color" content="#0d0f14">
 <style>
 @font-face{font-family:"Montserrat";font-weight:500;font-display:swap;src:url(/fonts/montserrat-latin-500-normal.woff2) format("woff2")}
@@ -3203,7 +2854,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
   <div class="handy-hinweis">Das Programm läuft auf Windows-PCs und Laptops. Öffne diese Seite einfach am PC, um es herunterzuladen.</div>
   <div class="klein-info pc">Für Windows 10 und 11 · Updates installiert das Programm selbst</div>
  </div>
- <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Tuning Programm: Lösungen für ein ECU-File wählen"></div>
+ <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Solutions Programm: Lösungen für ein ECU-File wählen"></div>
 </header>
 <section id="funktionen"><div class="breit">
  <h2>Alles, was du für dein File brauchst</h2><p class="unter">Ein Programm, ein klarer Ablauf – vom Original bis zum fertigen File.</p>
@@ -3239,7 +2890,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <details><summary>Brauche ich ein Konto?</summary><p>Nein. Deine Aufträge merkt sich das Programm auf deinem PC.</p></details>
  <details><summary>Für welche Steuergeräte gibt es Files?</summary><p>Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File.</p></details>
  <details><summary>Muss ich die Checksumme korrigieren?</summary><p>Ja, lass die Checksumme beim Schreiben von deinem Flash-Tool korrigieren.</p></details>
- <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Nein, OneClick Tuning gibt es als Programm für Windows 10 und 11.</p></details>
+ <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Nein, OneClick Solutions gibt es als Programm für Windows 10 und 11.</p></details>
 </div></section>
 <section><div class="breit"><div class="cta">
  <h2>Bereit für dein nächstes File?</h2><p>Programm laden, Original rein, fertig.</p>
@@ -3254,24 +2905,6 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
  document.querySelectorAll('.handy-hinweis').forEach(function(e){e.style.display='block'});}
 </script>
 </body></html>""",
-"nur_pc.html": """{% extends "basis.html" %}{% block inhalt %}
-<div class="karte" style="max-width:560px;margin:4vh auto 0;text-align:center">
-<svg viewBox="0 0 64 48" style="width:84px;height:63px;margin:6px auto 14px;display:block;fill:none;stroke:#8fb4ff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 12px rgba(47,107,255,.8))">
-<rect x="10" y="4" width="44" height="30" rx="3"/><path d="M3 42h58l-4-6H7z"/><path d="M27 21l4 4 8-9" stroke="#2fd35a"/></svg>
-<h1>Bitte am Laptop oder PC öffnen</h1>
-<p class="leise" style="margin:6px 0 18px">OneClick Tuning ist für die Arbeit mit ECU-Files gemacht und funktioniert nur am Laptop oder PC.
-Öffne einfach diese Adresse dort im Browser:</p>
-<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center">
-<code id="adresse" style="font-size:14px;padding:10px 14px;word-break:break-all">{{ adresse }}</code>
-<button class="btn" type="button" id="kopieren">Link kopieren</button></div>
-{% if whatsapp %}<p style="margin-top:22px"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Schreib uns per WhatsApp</a></p>{% endif %}
-</div>
-<script>
-document.getElementById('kopieren').addEventListener('click',function(){var b=this,t=document.getElementById('adresse').textContent;
- (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Kopiert ✓'},function(){
- var r=document.createRange();r.selectNodeContents(document.getElementById('adresse'));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Markiert – jetzt kopieren'});});
-</script>
-{% endblock %}""",
 "sortieren.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Sortieren</h1>
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
@@ -3397,7 +3030,7 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <div class="karte"><h1>Einstellungen</h1>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="speichern">
 <label class="feld">Firmenname (oben links und im Browser-Tab; das erste Wort wird rot)</label>
-<input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Tuning">
+<input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Solutions">
 <label class="feld">Adresse der Seite</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
@@ -3408,14 +3041,6 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
-<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 12px;cursor:pointer">
-<input type="checkbox" name="nur_programm" value="1" {{ 'checked' if cfg.get('nur_programm', True) }} style="margin-top:4px">
-<span><b>Kundenseite nur im Windows-Programm</b><br><span class="leise" style="font-size:13px">An: Kunden können OneClick nur noch mit dem
-Programm benutzen. Wer die Seite im Browser öffnet, bekommt nur die Download-Seite für das Programm. Du als Admin kommst im Browser immer rein.</span></span></label>
-<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 12px;cursor:pointer">
-<input type="checkbox" name="nur_pc" value="1" {{ 'checked' if cfg.get('nur_pc', True) }} style="margin-top:4px">
-<span><b>Kundenseite nur am Laptop / PC</b><br><span class="leise" style="font-size:13px">An: Kunden mit Handy oder Tablet sehen nur den Hinweis,
-die Seite am Laptop oder PC zu öffnen. Du als Admin kommst immer rein. Rechtstexte bleiben überall erreichbar.</span></span></label>
 <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;cursor:pointer">
 <input type="checkbox" name="nur_identisch" value="1" {{ 'checked' if cfg.nur_identisch }} style="margin-top:4px">
 <span><b>Nur komplett identische Originale</b><br><span class="leise" style="font-size:13px">Aus: Treffer auch, wenn das File an allen Stellen,
@@ -3506,7 +3131,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 @app.context_processor
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
-            "firma": lade_config().get("firmenname") or "OneClick Tuning",
+            "firma": lade_config().get("firmenname") or PROGRAMM_NAME,
             "zu_sortieren": eingang_anzahl() if session.get("admin") else 0}
 
 
@@ -3545,7 +3170,7 @@ if __name__ == "__main__":
         telegram_id()
     elif befehl == "telegram-test":
         cfg = lade_config()
-        ok = telegram_api("sendMessage", {"chat_id": cfg.get("telegram_chat_id"), "text": "✅ OneClick Tuning ist verbunden."})
+        ok = telegram_api("sendMessage", {"chat_id": cfg.get("telegram_chat_id"), "text": f"✅ {PROGRAMM_NAME} ist verbunden."})
         print("Gesendet." if ok and ok.get("ok") else f"Fehler: {ok}")
     else:
         AUFTRAEGE.mkdir(exist_ok=True)

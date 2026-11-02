@@ -18,6 +18,11 @@ class ProgrammTests(unittest.TestCase):
         self.assertEqual(P.dateiname_aus('attachment; filename="a:b*?.bin"'), "a_b_.bin")
         self.assertEqual(P.dateiname_aus(""), "file.bin")
 
+    def test_name_und_kennung(self):
+        self.assertEqual(P.PROGRAMM_NAME, "OneClick Solutions")
+        self.assertEqual(P.EXE_NAME, "OneClick-Solutions.exe")
+        self.assertIn("OneClickProgramm/", P.USER_AGENT)   # sonst laesst der Server das Programm nicht rein
+
     def test_speichern_nur_eigener_server(self):
         b = P.Bruecke()
         self.assertIn("fehler", b.speichern("https://boese.example/api/auftrag/x/download"))
