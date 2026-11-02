@@ -835,6 +835,64 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
 #t-nadel circle{fill:#1f4fd8;stroke:#8fb4ff;stroke-width:2}#t-nadel .t-mitte{fill:#fff;stroke:none}
 .t-text{fill:#5d6f96;font:700 10px Montserrat,sans-serif;text-anchor:middle;letter-spacing:.1em}
 @media (max-width:560px){.splash{flex-direction:column-reverse;text-align:center;gap:10px}.sp-status{justify-content:center}.sp-marke{display:none}.sp-name{margin-top:0}}
+
+/* ===================== PRO: Desktop-Effekte ===================== */
+@property --lw{syntax:"<angle>";inherits:false;initial-value:0deg}
+.deko::before{content:"";position:absolute;inset:-40px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'><g fill='none' stroke='%233d7bff' stroke-opacity='.09' stroke-width='1.2'><path d='M0 40 H70 l20 20 V120 H160 l20 -20 H260'/><path d='M40 260 V190 l20 -20 H130 V140'/><path d='M200 0 V60 l-20 20 V170 l30 30 H260'/></g><g fill='%233d7bff' fill-opacity='.14'><circle cx='90' cy='60' r='3'/><circle cx='130' cy='140' r='3'/><circle cx='180' cy='80' r='3'/><circle cx='210' cy='200' r='3'/></g></svg>") repeat;opacity:.9;
+  transform:translate(calc(var(--px,0) * -24px),calc(var(--py,0) * -24px))}
+/* Lauflicht: ein heller Punkt faehrt den Rahmen entlang */
+.lauflicht{position:absolute;inset:0;border-radius:inherit;padding:2px;pointer-events:none;z-index:4;
+  background:conic-gradient(from var(--lw),transparent 0 76%,rgba(91,141,255,.0) 78%,#8fb4ff 86%,#fff 88%,#8fb4ff 90%,transparent 94%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  animation:lauf 7s linear infinite;filter:drop-shadow(0 0 6px #5b8dff)}
+@keyframes lauf{to{--lw:360deg}}
+/* Impulse auf den Leiterbahnen */
+.impulse{position:absolute;left:50%;bottom:0;width:1200px;height:46px;transform:translateX(-50%);pointer-events:none;z-index:1}
+.impulse path{fill:none;stroke:#cfe0ff;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:26 900;stroke-dashoffset:926;
+  filter:drop-shadow(0 0 5px #5b8dff);animation:impuls-lauf 4.2s linear infinite}
+@keyframes impuls-lauf{to{stroke-dashoffset:0}}
+/* Titel: wischt bei jedem Wechsel herein, Glanz laeuft drueber */
+#titel{background:linear-gradient(100deg,#fff 42%,#a9c4ff 50%,#fff 58%) 200% 0/260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:titel-glanz 6s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(47,107,255,.35))}
+#titel.neu{animation:titel-rein .55s cubic-bezier(.2,.8,.2,1) both,titel-glanz 6s ease-in-out .6s infinite}
+@keyframes titel-rein{from{opacity:0;transform:translateX(-18px);filter:blur(8px);letter-spacing:.06em}}
+@keyframes titel-glanz{0%,60%{background-position:200% 0}100%{background-position:-60% 0}}
+.rahmen-kopf{background:repeating-linear-gradient(90deg,rgba(91,141,255,.55) 0 1px,transparent 1px 22px) left bottom/100% 6px no-repeat}
+/* Upload-Feld: Waben-Muster, pulsierender Chip, Funkenring */
+.zone::after{background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='48' viewBox='0 0 56 48'><path d='M14 1 L42 1 L55 24 L42 47 L14 47 L1 24 Z' fill='none' stroke='%23b9d0ff' stroke-opacity='.10' stroke-width='1.2'/></svg>") center/56px 48px,linear-gradient(135deg,#1b3fb4,#14309a 45%,#2b2a9c 75%,#1d3aa8)}
+.ecu .kern rect{animation:kern-glut 2.4s ease-in-out infinite}
+@keyframes kern-glut{50%{filter:drop-shadow(0 0 22px rgba(185,208,255,.95))}}
+.funken{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:5}
+.funken i{position:absolute;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 10px #8fb4ff,0 0 20px #3b78ff;
+  animation:funke .8s cubic-bezier(.1,.7,.3,1) forwards}
+@keyframes funke{to{transform:translate(var(--x),var(--y)) scale(.2);opacity:0}}
+/* Konsole: blinkender Cursor in der letzten Zeile, feine Scanlinien */
+.konsole{position:relative;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px),rgba(5,10,30,.75)}
+.k-zeile:last-child::after{content:"▌";margin-left:3px;color:#8fb4ff;animation:blinken .9s steps(1) infinite}
+/* Seitenleiste */
+.seite-nav button{position:relative;overflow:hidden}
+.seite-nav button::before{content:"";position:absolute;left:0;top:18%;bottom:18%;width:3px;border-radius:3px;background:#5b8dff;box-shadow:0 0 10px #5b8dff;
+  transform:scaleY(0);transition:transform .25s}
+.seite-nav button:hover::before,.seite-nav button.an::before{transform:scaleY(1)}
+.seite-nav button.an{background:rgba(47,107,255,.22);border-color:var(--blau2);color:#fff}
+/* Schalter: Lichtimpuls beim Einschalten */
+.loesung.an .haken{animation:schalter-an .45s ease-out 1!important}
+@keyframes schalter-an{0%{box-shadow:0 0 0 0 rgba(47,211,90,.9)}100%{box-shadow:0 0 0 10px rgba(47,211,90,0),0 0 10px rgba(47,211,90,.7)}}
+/* Senden-Knopf atmet, wenn er bereit ist */
+#senden:not(:disabled){animation:bereit 2.6s ease-in-out infinite}
+@keyframes bereit{50%{box-shadow:0 0 30px rgba(47,211,90,.75),inset 0 1px 0 rgba(255,255,255,.3)}}
+/* Fussleiste: Tastenkuerzel + Live-Status */
+.fuss{align-items:center}
+.fuss .kuerzel{color:var(--dunkel);gap:6px}
+.fuss kbd{font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:4px;border:1px solid var(--rand);background:rgba(47,107,255,.1);color:#cfe0ff}
+.fuss .live{gap:6px;color:var(--leise)}
+.fuss .live i{width:7px;height:7px;border-radius:50%;background:#2fd35a;box-shadow:0 0 8px #2fd35a;animation:blinken 2s ease-in-out infinite}
+.fuss .live b{font-family:var(--mono);font-weight:600;color:#cfe0ff}
+#ping.gut{color:#6cf597}#ping.mittel{color:#ffc23d}#ping.lahm{color:#ff8a80}
+/* Tiefe: Hintergrund-Ebenen bewegen sich gegen die Maus */
+.aurora{transform:translate(calc(var(--px,0) * 40px),calc(var(--py,0) * 30px))}
+@media (max-width:980px),(hover:none){.fuss .kuerzel{display:none}.lauflicht,.impulse{display:none}}
+@media (prefers-reduced-motion:reduce){.lauflicht,.impulse,.funken{display:none}#titel,#titel.neu,#senden:not(:disabled){animation:none}}
 </style>
 </head>
 <body>
@@ -1055,6 +1113,8 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
   </main>
   <footer class="fuss">
     <span id="fuss-firma">© OneClick Tuning</span>
+    <span class="kuerzel"><kbd>Strg</kbd>+<kbd>O</kbd> File öffnen <kbd>Esc</kbd> Zurück <kbd>Strg</kbd>+<kbd>Enter</kbd> Senden</span>
+    <span class="live"><i></i>Server <b id="ping">–</b> · <b id="uhr">--:--:--</b></span>
     <span><a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a> · <a href="/agb">AGB</a> · <a href="/widerruf">Widerruf</a> · <a href="/haftung">Haftung</a></span>
   </footer>
 </div>
@@ -1316,15 +1376,19 @@ function kopfAktualisieren() {
   const t = {"v-upload": "File laden", "v-analyse": "File wird verarbeitet", "v-anfrage": "Anfrage stellen",
     "v-auswahl": e.ecu && e.ecu !== "?" ? e.ecu : (e.datei || "Lösungen"),
     "v-erfolg": $("#erfolg-titel").textContent, "v-fehler": $("#fehler-titel").textContent}[aktuelle] || "";
-  $("#titel").textContent = t;
+  const ti = $("#titel");
+  if (ti.textContent !== t) { ti.textContent = t; ti.classList.remove("neu"); void ti.offsetWidth; ti.classList.add("neu"); }
+  document.querySelectorAll(".seite-nav button").forEach(b => b.classList.toggle("an", b.id === "sn-neu" && aktuelle !== "v-erfolg"));
   $("#zurueck").classList.toggle("weg", aktuelle === "v-upload" || aktuelle === "v-analyse");
 }
 /* Konsole: was gerade passiert, mit Uhrzeit */
 function log(text, art = "") {
   const k = $("#konsole"); if (!k) return;
   const z = document.createElement("div"); z.className = "k-zeile " + art;
-  z.textContent = "[" + new Date().toLocaleTimeString("de-DE") + "] " + text;
+  const voll = "[" + new Date().toLocaleTimeString("de-DE") + "] " + text;
   k.appendChild(z);
+  if (ruhig || voll.length > 160) z.textContent = voll;
+  else { let i = 0; const t = setInterval(() => { i += 2; z.textContent = voll.slice(0, i); if (i >= voll.length) clearInterval(t); }, 12); }
   while (k.children.length > 40) k.firstChild.remove();
   k.scrollTop = k.scrollHeight;
 }
@@ -1858,6 +1922,56 @@ init();
     const r = k.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
     k.style.transform = `perspective(600px) rotateX(${-py * 10}deg) rotateY(${px * 12}deg) translateZ(4px)`;
   }, { passive: true });
+})();
+
+/* ===================== PRO: Desktop-Effekte ===================== */
+(function pro() {
+  if (ruhig) return;
+  const fein = matchMedia("(hover:hover) and (pointer:fine)").matches;
+  // Uhr + echte Antwortzeit vom Server
+  const uhr = $("#uhr"), ping = $("#ping");
+  setInterval(() => uhr.textContent = new Date().toLocaleTimeString("de-DE"), 1000);
+  const orig = WEB.aktualisieren;
+  WEB.aktualisieren = async (...a) => { const t0 = performance.now(); const r = await orig(...a);
+    if (r && !r.fehler) { const ms = Math.max(1, Math.round(performance.now() - t0)); ping.textContent = ms + " ms"; ping.className = ms < 250 ? "gut" : ms < 800 ? "mittel" : "lahm"; }
+    else { ping.textContent = "offline"; ping.className = "lahm"; }
+    return r; };
+  // Lauflicht um die Rahmen + Impulse auf den Leiterbahnen
+  document.querySelectorAll(".app .karte, .seite").forEach((k, i) => {
+    const l = document.createElement("i"); l.className = "lauflicht"; l.style.animationDelay = (-i * 1.7) + "s"; k.appendChild(l);
+    const sv = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    sv.setAttribute("class", "impulse"); sv.setAttribute("viewBox", "0 0 1200 46"); sv.innerHTML = '<path d="M0 40 H180 l14 -14 H330 l10 10 H520"/><path d="M560 40 H700 l16 -16 H860"/><path d="M900 40 H1040 l12 -12 H1200"/><path d="M410 36 v-22 l8 -8"/><path d="M980 40 v-20 l-8 -8"/>';
+    [...sv.children].forEach((p, j) => p.style.animationDelay = (-(i * 0.9 + j * 1.3)) + "s");
+    k.appendChild(sv);
+  });
+  // Upload: Funkenring beim Laden einer Datei
+  const zone = $("#zone");
+  function funken() {
+    const b = document.createElement("div"); b.className = "funken";
+    for (let i = 0; i < 18; i++) { const f = document.createElement("i"); const w = i / 18 * Math.PI * 2;
+      f.style.setProperty("--x", Math.cos(w) * (120 + Math.random() * 80) + "px"); f.style.setProperty("--y", Math.sin(w) * (80 + Math.random() * 60) + "px"); b.appendChild(f); }
+    zone.appendChild(b); setTimeout(() => b.remove(), 900);
+  }
+  $("#datei").addEventListener("change", funken, true);
+  zone.addEventListener("drop", funken);
+  // Tastenkuerzel wie in einer Werkstatt-Software
+  document.addEventListener("keydown", e => {
+    const offen = $("#zahl-dialog").classList.contains("offen"), tippt = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); if (aktuelle !== "v-analyse" && !offen) $("#datei").click(); }
+    else if (e.key === "Escape") { if (offen) $("#zd-zu").click(); else if (!tippt && !$("#zurueck").classList.contains("weg")) $("#zurueck").click(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      if (aktuelle === "v-auswahl" && !$("#senden").disabled) { e.preventDefault(); $("#senden").click(); }
+      else if (aktuelle === "v-anfrage") { e.preventDefault(); $("#af-senden").click(); }
+    }
+  });
+  if (!fein) return;
+  // Hauptrahmen neigt sich ganz leicht mit der Maus (Tiefe)
+  const haupt = $(".rahmen-haupt");
+  let zx = 0, zy = 0, x = 0, y = 0;
+  addEventListener("pointermove", e => { zx = e.clientX / innerWidth - .5; zy = e.clientY / innerHeight - .5; }, {passive: true});
+  (function tick() { x += (zx - x) * .06; y += (zy - y) * .06;
+    document.documentElement.style.setProperty("--px", x.toFixed(4)); document.documentElement.style.setProperty("--py", y.toFixed(4));
+    requestAnimationFrame(tick); })();
 })();
 </script>
 </body>
