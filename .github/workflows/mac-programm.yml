@@ -65,6 +65,21 @@ jobs:
           grep -q '"update": true' selbsttest.json
           grep -q '"plattform": "mac"' selbsttest.json
 
+      - name: Selbsttest als Intel-Mac (über Rosetta)
+        run: |
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Rosetta auf diesem Build-Rechner nicht verfügbar – Intel-Test übersprungen"; exit 0
+          fi
+          export ONECLICK_SELBSTTEST="$PWD/selbsttest-intel.json"
+          arch -x86_64 "dist/OneClick Solutions.app/Contents/MacOS/OneClick Solutions" &
+          pid=$!
+          for i in $(seq 1 240); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          kill $pid 2>/dev/null || true
+          echo "Ergebnis (Intel):"; cat selbsttest-intel.json; echo
+          grep -q '"ui": true' selbsttest-intel.json
+          grep -q '"api": true' selbsttest-intel.json
+          grep -q '"kennung": true' selbsttest-intel.json
+
       - name: ZIP und Versionsdatei für das Auto-Update erzeugen
         run: |
           ditto -c -k --keepParent "dist/OneClick Solutions.app" dist/OneClick-Solutions-Mac.zip

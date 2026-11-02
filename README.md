@@ -136,15 +136,23 @@ die Seite fragt den Status selbst ab und meldet sich.
 - **Admin-Bereich** (`/login`): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
-## OneClick Solutions – Windows-Programm für Kunden
+## OneClick Solutions – Programm für Kunden (Windows und Mac)
 
-Kunden nutzen OneClick **nur** über das Windows-Programm **OneClick Solutions** (`programm/oneclick_programm.py`):
-- **Programm:** eigenes Fenster mit eigener Titelleiste, „Speichern unter …“ für Files, installiert Updates selbst.
+Kunden nutzen OneClick **nur** über das Programm **OneClick Solutions** (`programm/oneclick_programm.py`):
+- **Programm:** eigenes Fenster, „Speichern unter …“ für Files, installiert Updates selbst.
   Die Oberfläche kommt live vom Server (`web/kunde.html`) – Design-Updates sind sofort bei allen.
-- **Bauen:** macht GitHub automatisch bei Änderungen in `programm/` (Actions → „Windows-Programm bauen“),
-  Download unter Releases → `programm` → `OneClick-Solutions.exe`.
-- **Browser:** zeigt nur die Werbeseite mit Bildern und Download. Hochladen geht im Browser nicht, die Kunden-Schnittstelle
-  (`/api/...`) antwortet nur dem Programm. Im Browser gibt es sonst nur noch den Admin-Bereich (`/login`) und die Rechtstexte.
+  Windows: Fenster ohne Rahmen mit eigenen Knöpfen. Mac: normale Titelleiste, ⌘ statt Strg.
+- **Bauen:** macht GitHub automatisch bei Änderungen in `programm/`:
+  - Actions → „Windows-Programm bauen“ → Releases → `programm` → `OneClick-Solutions.exe`
+  - Actions → „Mac-Programm bauen“ → Releases → `programm` → `OneClick-Solutions-Mac.zip`
+    (eine App für Intel-Macs und Macs mit Apple-Chip, macOS 11 oder neuer; Updates über `version-mac.json`)
+  - Beide Builds starten das fertige Programm zur Probe (Selbsttest) und veröffentlichen nur, wenn alles klappt.
+- **Mac ohne Apple-Entwicklerkonto:** Beim ersten Start blockiert macOS das Programm. Kunden öffnen es über
+  Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“ (die Werbeseite erklärt das). Mit einem
+  Apple-Entwicklerkonto (99 $/Jahr) ließe sich das Programm signieren und notarisieren – dann entfällt die Warnung.
+- **Browser:** zeigt nur die Werbeseite mit Bildern und Download (Mac-Besucher bekommen automatisch den Mac-Download).
+  Hochladen geht im Browser nicht, die Kunden-Schnittstelle (`/api/...`) antwortet nur dem Programm.
+  Im Browser gibt es sonst nur noch den Admin-Bereich (`/login`) und die Rechtstexte.
 
 ## Support-Tickets (statt WhatsApp)
 

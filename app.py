@@ -487,6 +487,7 @@ def schrift(name):
 PROGRAMM_UA = "OneClickProgramm/"   # Kennung, mit der sich das Windows-Programm meldet
 PROGRAMM_NAME = "OneClick Solutions"
 PROGRAMM_DOWNLOAD = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Solutions.exe"
+PROGRAMM_DOWNLOAD_MAC = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Solutions-Mac.zip"
 
 
 def ist_programm() -> bool:
@@ -520,7 +521,7 @@ def bild(name):
 def programm_seite():
     """Werbeseite fuer das Windows-Programm - das ist alles, was Kunden im Browser sehen."""
     cfg = lade_config()
-    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, firma=PROGRAMM_NAME, jahr=datetime.now().year,
+    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, download_mac=PROGRAMM_DOWNLOAD_MAC, firma=PROGRAMM_NAME, jahr=datetime.now().year,
                            whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
 
 
@@ -3125,8 +3126,8 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 {% endblock %}""",
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ firma }} – Windows-Programm</title>
-<meta name="description" content="OneClick Solutions: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, sofort bezahlen und herunterladen. Kein Abo.">
+<title>{{ firma }} – Programm für Windows und Mac</title>
+<meta name="description" content="OneClick Solutions: Chiptuning-Files als Programm für Windows und Mac. Original laden, Lösung wählen, sofort bezahlen und herunterladen. Kein Abo.">
 <meta name="theme-color" content="#0d0f14">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
 <link rel="alternate icon" href="/favicon.ico">
@@ -3198,16 +3199,17 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
 </style></head><body>
 <nav><div class="breit"><a class="marke" href="/programm"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#eaf2ff"/></svg><span>{{ firma }}</span></a>
 <div class="links"><a href="#funktionen">Funktionen</a><a href="#ablauf">So geht's</a><a href="#faq">FAQ</a></div>
-<a class="btn klein pc" href="{{ download }}">Download</a></div></nav>
+<a class="btn klein pc" href="{{ download }}" data-dl>Download</a></div></nav>
 <header class="breit held">
  <div>
   <span class="kicker"><i></i>WINDOWS-PROGRAMM · KOSTENLOS</span>
   <h1>Dein Chiptuning-File <span>mit einem Klick.</span></h1>
   <p>Original laden, Lösung wählen, sofort bezahlen und herunterladen – alles in einem Programm.
   <b>Kein Abo:</b> du zahlst nur für das File, das du wirklich brauchst.</p>
-  <div class="knoepfe pc"><a class="btn" href="{{ download }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> Programm herunterladen</a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
-  <div class="handy-hinweis">Das Programm läuft auf Windows-PCs und Laptops. Öffne diese Seite einfach am PC, um es herunterzuladen.</div>
-  <div class="klein-info pc">Für Windows 10 und 11 · Updates installiert das Programm selbst</div>
+  <div class="knoepfe pc"><a class="btn" href="{{ download }}" data-dl><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> <span data-dl-text>Programm herunterladen</span></a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
+  <div class="handy-hinweis">Das Programm läuft auf Windows-PCs, Laptops und Macs. Öffne diese Seite einfach am Computer, um es herunterzuladen.</div>
+  <div class="klein-info pc">Für Windows 10/11 und Mac (macOS 11 oder neuer) · Updates installiert das Programm selbst ·
+  <a href="{{ download }}" data-dl-win>Windows</a> · <a href="{{ download_mac }}" data-dl-mac>Mac</a></div>
  </div>
  <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Solutions Programm: Lösungen für ein ECU-File wählen"></div>
 </header>
@@ -3241,8 +3243,12 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Sofort bezahlen und das File herunterladen. Anfragen nach unserer Freigabe.</span></div>
  </div>
- <div class="hinweis"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
+ <div class="hinweis nur-win"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
  Dann auf <b>„Weitere Informationen“</b> und <b>„Trotzdem ausführen“</b> klicken – das passiert nur beim ersten Mal.</div>
+ <div class="hinweis nur-mac"><b>Auf dem Mac:</b> ZIP öffnen und <b>„OneClick Solutions“ in den Ordner „Programme“ ziehen</b> (sonst klappen Updates nicht).
+ Beim ersten Start meldet macOS, dass das Programm nicht geprüft werden konnte. Dann unter <b>Systemeinstellungen → Datenschutz &amp; Sicherheit</b>
+ ganz unten auf <b>„Dennoch öffnen“</b> klicken (ältere macOS-Versionen: Programm mit <b>Rechtsklick → Öffnen</b> starten) –
+ das passiert nur beim ersten Mal.</div>
 </div></section>
 <section id="faq" class="faq"><div class="breit">
  <h2>Häufige Fragen</h2><p class="unter">Noch etwas offen? Schreib uns einfach.</p>
@@ -3251,12 +3257,12 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <details><summary>Für welche Steuergeräte gibt es Files?</summary><p>Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File.</p></details>
  <details><summary>Was mache ich, wenn es ein Problem mit dem File gibt?</summary><p>Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat.</p></details>
  <details><summary>Muss ich die Checksumme korrigieren?</summary><p>Ja, lass die Checksumme beim Schreiben von deinem Flash-Tool korrigieren.</p></details>
- <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Nein, OneClick Solutions gibt es als Programm für Windows 10 und 11.</p></details>
+ <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Für den Mac ja (macOS 11 oder neuer, Intel und Apple-Chip). Fürs Handy gibt es OneClick Solutions nicht – du brauchst einen Windows-PC, Laptop oder Mac.</p></details>
 </div></section>
 <section><div class="breit"><div class="cta">
  <h2>Bereit für dein nächstes File?</h2><p>Programm laden, Original rein, fertig.</p>
- <a class="btn pc" href="{{ download }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> Jetzt herunterladen – kostenlos</a>
- <div class="handy-hinweis" style="max-width:520px;margin:0 auto">Bitte öffne diese Seite am Windows-PC oder Laptop.</div>
+ <a class="btn pc" href="{{ download }}" data-dl><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> <span data-dl-text>Jetzt herunterladen – kostenlos</span></a>
+ <div class="handy-hinweis" style="max-width:520px;margin:0 auto">Bitte öffne diese Seite am Windows-PC, Laptop oder Mac.</div>
  {% if whatsapp %}<p style="margin:18px 0 0"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Per WhatsApp schreiben</a></p>{% endif %}
 </div></div></section>
 <footer><div class="breit"><span>© {{ jahr }} {{ firma }}</span>
@@ -3264,6 +3270,12 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
 <script>
 if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.querySelectorAll('.pc').forEach(function(e){e.style.display='none'});
  document.querySelectorAll('.handy-hinweis').forEach(function(e){e.style.display='block'});}
+// Mac oder Windows: passenden Download vorschlagen (der andere bleibt unten als Link erreichbar)
+(function(){var mac=/Macintosh/.test(navigator.userAgent)&&!(navigator.maxTouchPoints>1);
+ document.querySelectorAll(mac?'.nur-win':'.nur-mac').forEach(function(e){e.style.display='none'});
+ if(!mac) return;
+ document.querySelectorAll('[data-dl]').forEach(function(a){a.href='{{ download_mac }}'});
+ document.querySelectorAll('[data-dl-text]').forEach(function(t){t.textContent=t.textContent.replace('herunterladen','für Mac herunterladen')});})();
 </script>
 </body></html>""",
 "tickets.html": """{% extends "basis.html" %}{% block inhalt %}

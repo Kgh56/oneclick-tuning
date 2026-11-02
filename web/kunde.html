@@ -1106,6 +1106,7 @@ button.hilfe svg{width:15px;height:15px}
 /* Update-Knopf (nur im Programm) */
 .nur-app{display:none!important}
 .app-modus .nur-app{display:flex!important}
+.app-modus.mac .nx-fenster{display:none!important}   /* Mac: Fenster hat die normale Titelleiste mit Ampel-Knoepfen */
 .nx-update{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;color:#dfe5f0}
 .nx-update svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .nx-update:hover{border-color:var(--nx-blau)}
@@ -2409,11 +2410,15 @@ $("#tk-antwort-senden").addEventListener("click", async () => {
   feld.value = ""; tkAntwortAnhang.setzen(null); const i = tickets.findIndex(t => t.id === erg.ticket.id);
   tickets[i] = {...erg.ticket, gesehen: erg.ticket.nachrichten.length}; zeigeTicket(erg.ticket.id);
 });
-/* Als Windows-Programm: Fensterknoepfe + Speichern ueber den Windows-Dialog */
+/* Als Programm (Windows/Mac): Fensterknoepfe + Speichern ueber den Dialog des Systems */
 function appModus() {
   if (!window.pywebview || !window.pywebview.api) return;
   if (document.body.classList.contains("app-modus")) return;
   document.body.classList.add("app-modus");
+  if (/Macintosh/.test(navigator.userAgent)) {   // Mac: Cmd statt Strg anzeigen
+    document.body.classList.add("mac");
+    document.querySelectorAll(".kuerzel kbd").forEach(k => { if (k.textContent === "Strg") k.textContent = "⌘"; });
+  }
   // Knoepfe in der Kopfleiste duerfen das Fenster nicht verschieben (Kopfleiste = Ziehen-Bereich)
   document.querySelectorAll("header button, header a, header input").forEach(b => b.addEventListener("mousedown", e => e.stopPropagation()));
   document.querySelectorAll("[data-fenster]").forEach(b => b.addEventListener("click", () => window.pywebview.api[b.dataset.fenster]()));
