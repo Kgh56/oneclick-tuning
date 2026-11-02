@@ -57,6 +57,8 @@ class Basis(unittest.TestCase):
         A.EINGANG = d / "eingang"
         A.EIGENE = d / "eigene"
         A.TICKETS = d / "tickets"
+        A.INSTALLATIONEN = d / "installationen.json"
+        A.DOWNLOADS = d / "downloads.json"
         A.speichere_config({"archiv_sofort": False})   # alte Tests pruefen den Ablauf mit Freigabe; Sofort-Kauf siehe test_sofort_kauf_*
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
@@ -384,7 +386,7 @@ class WebTests(Basis):
             r = c.get("/", headers=ua)
             self.assertEqual(r.status_code, 200)
             self.assertIn("OneClick Solutions", r.text)
-            self.assertIn(A.PROGRAMM_DOWNLOAD, r.text)
+            self.assertIn("/download/windows", r.text)   # Download laeuft ueber den Zaehler
             self.assertNotIn('id="zone"', r.text)                            # kein Hochladen im Browser
         self.assertIn('id="zone"', self.kunde.get("/").text)                 # das Programm bekommt das Portal
         # Schnittstelle: Browser abgewiesen, Programm und Admin erlaubt
@@ -523,6 +525,43 @@ class WebTests(Basis):
         # JSON geht weiterhin
         self.assertEqual(k.post(url, json={"text": "nur Text"}).status_code, 200)
         self.assertEqual(len(list((A.TICKETS / "anhang" / t["id"]).iterdir())), 2)
+
+    def test_installationen_zaehlen(self):
+        k = self.kunde
+        ids = ["a" * 32, "b" * 32, "c" * 32]
+        for i, kennung in enumerate(ids):
+            self.assertEqual(k.post("/api/hallo", json={"id": kennung, "plattform": "mac" if i == 2 else "windows", "version": "3.19"}).status_code, 200)
+        k.post("/api/hallo", json={"id": ids[0], "plattform": "windows", "version": "3.20"})   # Neustart: zaehlt nicht doppelt
+        for falsch in [{}, {"id": "x"}, {"id": "A" * 32}, {"id": "../" + "a" * 29}]:
+            self.assertEqual(k.post("/api/hallo", json=falsch).status_code, 422)
+        self.assertEqual(k.post("/api/hallo", json={"id": "d" * 32}, headers={"User-Agent": "Mozilla/5.0 Chrome"}).status_code, 403)
+        st = A.installations_statistik()
+        self.assertEqual((st["gesamt"], st["windows"], st["mac"], st["aktiv_30"], st["neu_7"]), (3, 2, 1, 3, 3))
+        self.assertEqual(dict(st["versionen"]), {"3.20": 1, "3.19": 2})
+        alt = A.lade_installationen(); alt["b" * 32].update(erst="2025-01-01", zuletzt="2025-02-01"); A.json_speichern(A.INSTALLATIONEN, alt)
+        st = A.installations_statistik()
+        self.assertEqual((st["gesamt"], st["aktiv_30"], st["neu_30"]), (3, 2, 2))
+        seite = html.unescape(self.admin().get("/admin").text)
+        self.assertIn("Programm-Installationen", seite)
+        self.assertIn("Windows 2 · 🍎 Mac 1", seite)
+        self.assertIn("Heruntergeladen (gesamt)", seite)
+        self.assertNotIn("1.2.3.4", A.INSTALLATIONEN.read_text())   # keine IP gespeichert
+        self.assertEqual(set(alt["a" * 32]), {"erst", "zuletzt", "plattform", "version"})
+
+    def test_downloads_zaehlen(self):
+        browser = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130"}
+        r = self.kunde.get("/download/windows", headers=browser)
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, A.PROGRAMM_DOWNLOAD))
+        self.assertEqual(self.kunde.get("/download/mac", headers=browser).headers["Location"], A.PROGRAMM_DOWNLOAD_MAC)
+        self.kunde.get("/download/mac", headers=browser)
+        self.kunde.get("/download/windows", headers={"User-Agent": "WhatsApp/2.23 (Link-Vorschau)"})   # Vorschau zaehlt nicht
+        self.assertEqual(self.kunde.get("/download/linux", headers=browser).status_code, 404)
+        st = A.download_statistik()
+        self.assertEqual((st["windows"], st["mac"], st["monat"]), (1, 2, 3))
+        seite = self.kunde.get("/", headers=browser).text   # Werbeseite verlinkt den Zaehler
+        self.assertIn('href="/download/windows"', seite)
+        self.assertIn("/download/mac", seite)
+        self.assertIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)
 
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:

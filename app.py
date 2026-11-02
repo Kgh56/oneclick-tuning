@@ -46,6 +46,7 @@ import oneclick
 
 BASE = Path(__file__).resolve().parent
 AUFTRAEGE = BASE / "auftraege"
+INSTALLATIONEN = BASE / "installationen.json"   # anonyme Zaehlung: wie viele Programme sind installiert
 TICKETS = BASE / "tickets"   # Support-Tickets aus dem Programm (bleiben auf dem Server, nie ins Repository)
 EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
 EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
@@ -521,7 +522,7 @@ def bild(name):
 def programm_seite():
     """Werbeseite fuer das Windows-Programm - das ist alles, was Kunden im Browser sehen."""
     cfg = lade_config()
-    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, download_mac=PROGRAMM_DOWNLOAD_MAC, firma=PROGRAMM_NAME, jahr=datetime.now().year,
+    return render_template("werbung.html", download="/download/windows", download_mac="/download/mac", firma=PROGRAMM_NAME, jahr=datetime.now().year,
                            whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
 
 
@@ -893,6 +894,94 @@ def api_auftrag(a: dict) -> dict:
     }
 
 
+installation_sperre = threading.Lock()
+
+
+def lade_installationen() -> dict:
+    try:
+        return json.loads(INSTALLATIONEN.read_text()) if INSTALLATIONEN.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
+@app.route("/api/hallo", methods=["POST"])
+def api_hallo():
+    """Das Programm meldet sich beim Start: zufaellige Installations-Kennung, Windows/Mac, Version.
+    Keine Kundendaten, keine IP - nur zum Zaehlen der Installationen."""
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    kennung = str(daten.get("id") or "")
+    if not re.fullmatch(r"[0-9a-f]{32}", kennung):
+        return jsonify(fehler="Ungültige Kennung."), 422
+    if zu_viele("hallo", 60, 3600):
+        return jsonify(ok=True)
+    merken("hallo")
+    plattform = "mac" if daten.get("plattform") == "mac" else "windows"
+    version = re.sub(r"[^0-9.]", "", str(daten.get("version") or ""))[:12]
+    heute = datetime.now().strftime("%Y-%m-%d")
+    with installation_sperre:
+        alle = lade_installationen()
+        if len(alle) >= 200000 and kennung not in alle:   # Schutz vor Muell
+            return jsonify(ok=True)
+        e = alle.get(kennung) or {"erst": heute}
+        e.update(zuletzt=heute, plattform=plattform, version=version)
+        alle[kennung] = e
+        json_speichern(INSTALLATIONEN, alle)
+    return jsonify(ok=True)
+
+
+def installations_statistik() -> dict:
+    alle = list(lade_installationen().values())
+    heute = datetime.now().date()
+    tage = lambda d: (heute - datetime.strptime(d, "%Y-%m-%d").date()).days
+    versionen = {}
+    for e in alle:
+        if tage(e["zuletzt"]) <= 30:
+            versionen[e.get("version") or "?"] = versionen.get(e.get("version") or "?", 0) + 1
+    return {"gesamt": len(alle),
+            "windows": sum(e.get("plattform") != "mac" for e in alle),
+            "mac": sum(e.get("plattform") == "mac" for e in alle),
+            "aktiv_30": sum(tage(e["zuletzt"]) <= 30 for e in alle),
+            "aktiv_7": sum(tage(e["zuletzt"]) <= 7 for e in alle),
+            "neu_7": sum(tage(e["erst"]) <= 7 for e in alle),
+            "neu_30": sum(tage(e["erst"]) <= 30 for e in alle),
+            "versionen": sorted(versionen.items(), key=lambda x: [int(t) if t.isdigit() else 0 for t in x[0].split(".")], reverse=True)}
+
+
+DOWNLOADS = BASE / "downloads.json"   # Klicks auf "Herunterladen" auf der Werbeseite (ohne Updates)
+BOT = re.compile(r"bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|curl|wget|python", re.I)
+
+
+@app.route("/download/<plattform>")
+def programm_download(plattform):
+    """Download-Knopf der Werbeseite: mitzaehlen (ohne personenbezogene Daten) und zu GitHub weiterleiten."""
+    if plattform not in ("windows", "mac"):
+        abort(404)
+    if not BOT.search(request.headers.get("User-Agent", "")) and not zu_viele("download", 20, 3600):
+        merken("download")
+        monat = datetime.now().strftime("%Y-%m")
+        with installation_sperre:
+            try:
+                d = json.loads(DOWNLOADS.read_text()) if DOWNLOADS.exists() else {}
+            except (OSError, ValueError):
+                d = {}
+            d[plattform] = d.get(plattform, 0) + 1
+            d.setdefault("monate", {}).setdefault(monat, {}).setdefault(plattform, 0)
+            d["monate"][monat][plattform] += 1
+            json_speichern(DOWNLOADS, d)
+    return redirect(PROGRAMM_DOWNLOAD_MAC if plattform == "mac" else PROGRAMM_DOWNLOAD)
+
+
+def download_statistik() -> dict:
+    try:
+        d = json.loads(DOWNLOADS.read_text()) if DOWNLOADS.exists() else {}
+    except (OSError, ValueError):
+        d = {}
+    monat = d.get("monate", {}).get(datetime.now().strftime("%Y-%m"), {})
+    return {"windows": d.get("windows", 0), "mac": d.get("mac", 0),
+            "monat": monat.get("windows", 0) + monat.get("mac", 0)}
+
+
 @app.route("/api/info")
 def api_info():
     namen = option_namen()
@@ -1014,7 +1103,8 @@ def admin():
                            freigegeben=sum(a["status"] == "FREIGEGEBEN" for a in alle),
                            telegram=bool(lade_config().get("telegram_chat_id")),
                            zahlung=zahlung_aktiv(), euro=euro,
-                           bezahlt=sum(a.get("betrag") or 0 for a in alle if a.get("bezahlt")))
+                           bezahlt=sum(a.get("betrag") or 0 for a in alle if a.get("bezahlt")),
+                           inst=installations_statistik(), downloads=download_statistik())
 
 
 @app.route("/admin/suche")
@@ -2904,6 +2994,23 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <div class="karte"><div class="leise">Files im Archiv</div><div class="zahl">{{ archiv }}</div>
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
+</div>
+<div class="karte" id="installationen"><h2>Programm-Installationen</h2>
+<div class="raster" style="margin:6px 0 4px">
+<div><div class="leise">Installiert (gesamt)</div><div class="zahl">{{ inst.gesamt }}</div>
+<div class="leise" style="font-size:13px">🪟 Windows {{ inst.windows }} · 🍎 Mac {{ inst.mac }}</div></div>
+<div><div class="leise">Benutzt (letzte 30 Tage)</div><div class="zahl">{{ inst.aktiv_30 }}</div>
+<div class="leise" style="font-size:13px">letzte 7 Tage: {{ inst.aktiv_7 }}</div></div>
+<div><div class="leise">Neu installiert (30 Tage)</div><div class="zahl">{{ inst.neu_30 }}</div>
+<div class="leise" style="font-size:13px">letzte 7 Tage: {{ inst.neu_7 }}</div></div>
+<div><div class="leise">Heruntergeladen (gesamt)</div><div class="zahl">{{ downloads.windows + downloads.mac }}</div>
+<div class="leise" style="font-size:13px">🪟 {{ downloads.windows }} · 🍎 {{ downloads.mac }} · diesen Monat: {{ downloads.monat }}</div></div>
+</div>
+{% if inst.versionen %}<p class="leise" style="font-size:13px;margin:8px 0 0">Versionen (letzte 30 Tage):
+{% for v, n in inst.versionen %}{{ v }}: {{ n }}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+<div class="hinweis"><b>Installiert:</b> Beim ersten Start fragt das Programm, ob es anonym mitzählen darf. Wer zustimmt, wird mit einer
+zufälligen Nummer gezählt (ohne Namen und Kundendaten) – jeder Laptop/Mac einmal. Wer ablehnt, fehlt in der Zahl; sie ist also eher etwas zu niedrig.
+<b>Heruntergeladen:</b> Klicks auf „Herunterladen“ auf der Werbeseite (ohne automatische Updates). Beides zählt ab dieser Version.</div>
 </div>
 <div class="karte"><h2>Warten auf Freigabe</h2>
 <p class="hinweis" style="margin-top:-6px">Telegram: {{ 'aktiv' if telegram else 'nicht eingerichtet' }} ·

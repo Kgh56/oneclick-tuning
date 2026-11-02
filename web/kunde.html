@@ -1106,7 +1106,11 @@ button.hilfe svg{width:15px;height:15px}
 /* Update-Knopf (nur im Programm) */
 .nur-app{display:none!important}
 .app-modus .nur-app{display:flex!important}
-.app-modus.mac .nx-fenster{display:none!important}   /* Mac: Fenster hat die normale Titelleiste mit Ampel-Knoepfen */
+.app-modus.mac .nx-fenster{display:none!important}
+#statistik-frage{position:fixed;left:24px;bottom:24px;z-index:900;max-width:380px;padding:16px 18px;border-radius:14px;background:#141a26;
+  border:1px solid rgba(47,123,255,.55);box-shadow:0 18px 50px rgba(0,0,0,.55);font-size:14px;animation:einblenden .4s both}
+#statistik-frage p{margin:6px 0 12px;color:var(--nx-leise);line-height:1.45}
+#statistik-frage div{display:flex;gap:10px}#statistik-frage .btn{padding:9px 16px;font-size:14px}   /* Mac: Fenster hat die normale Titelleiste mit Ampel-Knoepfen */
 .nx-update{cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;color:#dfe5f0}
 .nx-update svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .nx-update:hover{border-color:var(--nx-blau)}
@@ -2425,6 +2429,33 @@ function appModus() {
 }
 window.addEventListener("pywebviewready", appModus); appModus();
 
+/* Installation zaehlen - nur mit Einwilligung (einmal gefragt): zufaellige Kennung, Windows/Mac, Version, keine Kundendaten */
+function installationMelden() {
+  let wahl = null, id = null;
+  try { wahl = localStorage.getItem("oneclick-statistik"); id = localStorage.getItem("oneclick-installation"); } catch (e) { return; }
+  if (wahl === null) return statistikFragen();
+  if (wahl !== "ja") return;
+  if (!/^[0-9a-f]{32}$/.test(id || "")) {
+    id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
+    try { localStorage.setItem("oneclick-installation", id); } catch (e) { return; }   // ohne Speicher nicht zaehlen
+  }
+  const m = navigator.userAgent.match(/OneClickProgramm\/([0-9.]+)/);
+  fetch("/api/hallo", json("POST", {id, plattform: /Macintosh/.test(navigator.userAgent) ? "mac" : "windows",
+                                    version: m ? m[1] : ""})).catch(() => {});
+}
+function statistikFragen() {
+  if (document.getElementById("statistik-frage")) return;
+  const d = document.createElement("div"); d.id = "statistik-frage"; d.setAttribute("role", "dialog");
+  d.innerHTML = '<b>Kurze Frage</b><p>Darf das Programm anonym mitzählen, dass es installiert ist? Dabei wird nur eine zufällige Nummer, ' +
+    'Windows/Mac und die Programmversion übertragen – keine Daten zu dir oder deinen Files.</p>' +
+    '<div><button type="button" class="btn" data-w="ja">Ja, gern</button><button type="button" class="btn grau" data-w="nein">Nein</button></div>';
+  d.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    try { localStorage.setItem("oneclick-statistik", b.dataset.w); } catch (e) {}
+    d.remove(); if (b.dataset.w === "ja") installationMelden();
+  }));
+  document.body.appendChild(d);
+}
+
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
   zustand.original = d.original || "original";
@@ -2446,6 +2477,7 @@ async function init() {
   const beginn = Date.now();
   const d = await rufe("start");
   if (d.fehler) d.verbindung = d.fehler;
+  if (!d.verbindung) setTimeout(installationMelden, 4500);   // nach dem Startbildschirm
   if (d.firma) intro(d.firma);
   starten(d, true);
   const st = $("#intro-status");

@@ -40,6 +40,8 @@ Bei Problemen oder Fragen können Sie im Programm ein Support-Ticket öffnen (z.
 ## 9. Speicherung auf Ihrem PC
 Die Liste „Meine Aufträge“ speichert das Programm lokal auf Ihrem PC: Auftragsnummern, Dateinamen, Status, gewählte Lösungen, Preis, Kurzangaben zum Fahrzeug und Ihre Kontaktangabe, damit Sie sie nicht erneut eintippen müssen. Diese Liste wird nicht an uns übertragen; das Programm fragt damit nur den Status Ihrer Aufträge bei uns ab. Rechtsgrundlage ist § 25 Abs. 2 Nr. 2 TDDDG (unbedingt erforderlich für den von Ihnen gewünschten Dienst) sowie Art. 6 Abs. 1 lit. b DSGVO. Sie können Einträge jederzeit mit „Entfernen“ oder durch Löschen der Browserdaten entfernen.
 
+Anonyme Zählung der Installationen (nur mit Ihrer Einwilligung): Beim ersten Start fragt das Programm, ob es anonym mitzählen darf, dass es installiert ist. Nur wenn Sie zustimmen, speichert es eine zufällig erzeugte Nummer auf Ihrem Gerät und sendet diese bei jedem Start zusammen mit dem Betriebssystem (Windows oder Mac) und der Programmversion an unseren Server. Wir speichern dazu nur das Datum des ersten und des letzten Starts. Die Nummer enthält keine Angaben zu Ihrer Person und wird nicht mit Aufträgen, Tickets oder Ihrer IP-Adresse verknüpft. Rechtsgrundlage ist Ihre Einwilligung (§ 25 Abs. 1 TDDDG, Art. 6 Abs. 1 lit. a DSGVO). Sie können sie jederzeit widerrufen, indem Sie uns schreiben oder die Programmdaten löschen; wir löschen dann auf Wunsch auch den Eintrag auf dem Server.
+
 ## 10. Cookies
 Die Kundenseite setzt keine Cookies. Nur im internen Admin-Bereich wird für die Anmeldung ein technisch notwendiges Sitzungs-Cookie verwendet.
 
