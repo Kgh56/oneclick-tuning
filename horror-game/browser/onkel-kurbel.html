@@ -1,0 +1,1507 @@
+<title>Onkel Kurbel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Special+Elite&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed WebGL canvas; HUD pinned to corners; menus styled as a faded 1990s toy-box label */
+:root{
+  --void:#060504;        /* dunkle Halle */
+  --cream:#efe2c4;       /* Etikettenpapier */
+  --cream-dark:#d8c7a0;
+  --red:#c63f33;         /* Spielzeug-Rot (Akzent) */
+  --mustard:#e0ad38;
+  --teal:#3a8682;
+  --ink:#251c17;
+  --hud:#eadfc8;
+  --hud-dim:#8d8676;
+  --f-display:"Lilita One","Arial Rounded MT Bold","Trebuchet MS",sans-serif;
+  --f-note:"Special Elite","Courier New",Courier,monospace;
+  --f-ui:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+.layer>*{margin:auto}
+html,body{height:100%;background:var(--void);color:var(--hud);overflow:hidden}
+body{font-family:var(--f-ui);font-size:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+canvas#view{position:fixed;inset:0;width:100%;height:100%;display:block;background:var(--void)}
+.layer{position:fixed;inset:0;display:flex;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));overflow-y:auto}
+.shade{background:color-mix(in srgb,var(--void) 70%,transparent)}
+
+/* ---------- Spielzeugkarton-Etikett ---------- */
+.box{position:relative;width:min(660px,100%);background:var(--cream);color:var(--ink);
+  border:10px solid transparent;border-image:repeating-linear-gradient(45deg,var(--red) 0 14px,var(--cream) 14px 28px,var(--mustard) 28px 42px,var(--cream) 42px 56px,var(--teal) 56px 70px,var(--cream) 70px 84px) 10;
+  box-shadow:0 30px 90px #000;transform:rotate(-0.8deg);display:grid;gap:16px;padding:clamp(18px,4vw,36px)}
+.box::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 85% 10%,color-mix(in srgb,#5b3a14 22%,transparent),transparent 45%),radial-gradient(ellipse at 5% 95%,color-mix(in srgb,#2b1a10 30%,transparent),transparent 40%),radial-gradient(circle at 70% 75%,color-mix(in srgb,#6a0c08 25%,transparent),transparent 18%)}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-family:var(--f-display);font-size:15px;letter-spacing:.06em;color:var(--teal)}
+.brand small{font-family:var(--f-ui);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+.box h1{margin:0;font-family:var(--f-display);font-weight:400;font-size:clamp(46px,10vw,92px);line-height:.88;color:var(--red);letter-spacing:.01em;
+  text-shadow:3px 3px 0 var(--mustard),6px 6px 0 var(--ink);text-wrap:balance}
+.tag{margin:0;font-family:var(--f-note);font-size:16px}
+.age{position:absolute;right:clamp(12px,3vw,26px);top:clamp(64px,10vw,92px);width:74px;height:74px;border-radius:50%;background:var(--mustard);color:var(--ink);
+  display:grid;place-items:center;text-align:center;font-family:var(--f-display);font-size:13px;line-height:1.05;transform:rotate(12deg);box-shadow:2px 3px 0 var(--ink)}
+.age b{display:block;font-size:22px;font-weight:400}
+.story{margin:0;font-size:14px;line-height:1.55;max-width:56ch}
+.story b{color:var(--red);font-weight:500}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 18px;font-size:12.5px;margin:0;padding:0;list-style:none}
+.keys li{display:flex;gap:8px;align-items:baseline;min-width:0}
+kbd{font-family:var(--f-ui);font-size:11px;border:1px solid currentColor;padding:1px 6px;border-radius:3px;white-space:nowrap}
+.btn{justify-self:start;font-family:var(--f-display);font-size:22px;letter-spacing:.04em;background:var(--red);color:var(--cream);border:0;border-radius:6px;padding:12px 26px;cursor:pointer;box-shadow:3px 4px 0 var(--ink)}
+.btn:hover{background:var(--teal)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 2px 0 var(--ink)}
+.btn:focus-visible{outline:3px dashed var(--mustard);outline-offset:4px}
+.btn[disabled]{opacity:.55;cursor:wait}
+.fine{font-size:11.5px;color:color-mix(in srgb,var(--ink) 70%,transparent);margin:0}
+.touch-note{display:none;color:var(--red);font-size:12.5px;margin:0}
+@media (pointer:coarse){.touch-note{display:block}}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 1px 3px #000}
+#cross{position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--hud);opacity:.35}
+#cross.on{opacity:.95;box-shadow:0 0 6px var(--hud)}
+#prompt{position:absolute;left:0;right:0;top:calc(50% + 22px);text-align:center;font-size:15px}
+#prompt kbd{margin-right:6px}
+#obj{position:absolute;left:max(24px,env(safe-area-inset-left,0px));top:max(18px,env(safe-area-inset-top,0px));display:grid;gap:2px}
+#obj .label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--hud-dim)}
+#fuses{font-family:var(--f-display);font-size:30px;color:var(--mustard);font-variant-numeric:tabular-nums}
+#inv{font-size:12px;color:#8fe08a}
+#meters{position:absolute;left:max(24px,env(safe-area-inset-left,0px));bottom:max(22px,env(safe-area-inset-bottom,0px));display:flex;gap:22px;flex-wrap:wrap}
+.meter{display:grid;gap:6px;width:min(180px,36vw)}
+.meter span{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--hud-dim)}
+.bar{height:5px;background:color-mix(in srgb,var(--hud) 15%,transparent)}
+.bar i{display:block;height:100%;width:100%;background:var(--hud);transform-origin:left}
+.bar i.low{background:var(--red)}
+#msg{position:absolute;left:0;right:0;bottom:22%;text-align:center;font-family:var(--f-note);font-size:clamp(16px,2.2vw,22px);transition:opacity .6s;padding:0 16px}
+
+/* ---------- Notiz ---------- */
+.note{width:min(520px,100%);max-height:85vh;overflow:auto;background:var(--cream);color:var(--ink);font-family:var(--f-note);padding:34px 34px 22px;transform:rotate(1deg);box-shadow:0 30px 80px #000;display:grid;gap:14px;border-top:14px solid var(--mustard)}
+.note h2{margin:0;font-size:22px;font-weight:normal;text-wrap:balance}
+.note p{margin:0;white-space:pre-line;line-height:1.6;font-size:16px}
+.note .fine{justify-self:end}
+
+/* ---------- Ende / Pause ---------- */
+.big{font-family:var(--f-display);font-size:clamp(50px,11vw,124px);margin:0;text-align:center;line-height:1}
+.end{display:grid;gap:16px;justify-items:center;text-align:center}
+.end p{margin:0;max-width:56ch;line-height:1.5}
+#dead .big{color:var(--red);text-shadow:4px 4px 0 #000}
+#won{background:#f1e6cc;color:var(--ink)}
+#won .big{color:var(--teal);text-shadow:4px 4px 0 var(--mustard)}
+.stats{font-variant-numeric:tabular-nums;color:var(--hud-dim)}
+#won .stats{color:#6b604c}
+@media (prefers-reduced-motion:reduce){.box,.note{transform:none}}
+</style>
+
+<canvas id="view" aria-label="Spielansicht"></canvas>
+
+<div id="hud" hidden>
+  <div id="cross"></div>
+  <div id="prompt"></div>
+  <div id="obj"><span class="label">Akkupacks für den Aufzug</span><span id="fuses">0 / 3</span><span id="inv"></span></div>
+  <div id="meters">
+    <div class="meter"><span id="batLabel">Lampe</span><div class="bar"><i id="bat"></i></div></div>
+    <div class="meter" id="staWrap"><span>Atem</span><div class="bar"><i id="sta"></i></div></div>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div id="intro" class="layer shade">
+  <article class="box">
+    <div class="brand"><span>Fröhlich Spielwaren GmbH</span><small>Werk 3 · stillgelegt 1994</small></div>
+    <div class="age">ab<b>3</b>Jahren</div>
+    <h1>ONKEL<br>KURBEL</h1>
+    <p class="tag">„Dreh mich auf – und ich spiel für immer mit dir!"</p>
+    <p class="story">Du bist nachts in die alte Spielzeugfabrik eingestiegen. Hinter dir ist das Rolltor zugefallen. Der einzige Weg raus ist der <b>Lastenaufzug</b> in der Produktionshalle. Er braucht <b>3 Akkupacks</b>.<br>Irgendwo zwischen den Fließbändern tickt etwas.</p>
+    <ul class="keys">
+      <li><kbd>W A S D</kbd> gehen</li>
+      <li><kbd>Shift</kbd> rennen</li>
+      <li><kbd>C</kbd> ducken</li>
+      <li><kbd>F</kbd> Taschenlampe</li>
+      <li><kbd>E</kbd> benutzen</li>
+      <li><kbd>Esc</kbd> Pause</li>
+    </ul>
+    <button class="btn" id="startBtn" disabled>Wird geladen …</button>
+    <p class="fine">Hör auf das Ticken: Je schneller es tickt, desto näher ist er. Kopfhörer empfohlen.</p>
+    <p class="touch-note">Dieses Spiel braucht Tastatur und Maus und läuft nur am PC.</p>
+  </article>
+</div>
+
+<div id="note" class="layer shade" hidden>
+  <article class="note"><h2 id="noteTitle"></h2><p id="noteBody"></p><span class="fine">[E] schließen</span></article>
+</div>
+
+<div id="pause" class="layer shade" hidden>
+  <div class="end"><p class="big">PAUSE</p><button class="btn" id="resumeBtn">Weiter</button></div>
+</div>
+
+<div id="dead" class="layer" hidden>
+  <div class="end"><p class="big">AUFGEZOGEN</p><p>Onkel Kurbel will für immer mit dir spielen.</p><p class="stats" id="deadStats"></p><button class="btn" id="retryBtn">Nochmal [R]</button></div>
+</div>
+
+<div id="won" class="layer" hidden>
+  <div class="end"><p class="big">ENTKOMMEN</p><p>Der Aufzug ruckelt nach oben. Unter dir wird das Ticken leiser … und hört plötzlich auf.</p><p class="stats" id="wonStats"></p><button class="btn" id="againBtn">Nochmal [R]</button></div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
+const pick = arr => arr[(Math.random() * arr.length) | 0];
+const sleep = () => new Promise(r => setTimeout(r, 0));
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+
+/* =====================================================================
+   KARTE
+   # Wand  . Boden  D Durchgang  C Fließband  S Regal  K Kisten
+   T Spielzeugberg  X Riesen-Bauklotz  F Akkupack  A Batterie
+   N Notiz  E Lastenaufzug  P Spieler  M Onkel Kurbel
+   ===================================================================== */
+const MAP = [
+  "###################################",
+  "#.....#.T........T#.S.S.S.S.S.S...#",
+  "#.P...#...........#..............F#",
+  "#.....D....X......D.S.S.S.S.S.S...#",
+  "#..N..#...........#...............#",
+  "#.....#.T..A.....T#.S.S.S.S.S.S.N.#",
+  "###D#######D#######D########D######",
+  "#.................................#",
+  "#..CCCCCCC...CCCCCCC...CCCCCCC....#",
+  "#................................E#",
+  "#..CCCCCCC...CCCCCCC...CCCCCCC....#",
+  "#.................M...............#",
+  "#####D#########D#########D#########",
+  "#T..T....T#.K.K....K.K.#.K..K..K..#",
+  "#....F....#...........F#.........N#",
+  "#...X..N..D............D...A.....K#",
+  "#T.......T#.K.K....K.K.#.K..K..K..#",
+  "###################################",
+];
+const W = MAP[0].length, H = MAP.length, S = 3, CEIL = 5.5, DOOR_H = 3.4, NEEDED = 3;
+const BLOCKED = '#CSKTX';
+const cellAt = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? '#' : MAP[y][x];
+const isWall = (x, y) => cellAt(x, y) === '#';
+const c2w = (x, y) => new THREE.Vector3(x * S, 0, y * S);
+const w2c = p => ({ x: Math.round(p.x / S), y: Math.round(p.z / S) });
+const DIRS = [[1, 0], [-1, 0], [0, -1], [0, 1]];
+
+const NOTES = [
+  ["Rundschreiben der Werksleitung · März 1994", "Liebe Mitarbeiter,\n\nab sofort ist das Aufziehen des Onkel-Kurbel-Prototyps (Modell 9, 3,1 m) nach Schichtende strengstens untersagt.\n\nDer Schlüssel dreht sich auch ohne Hilfe weiter. Wir untersuchen das.\n\nLächeln ist Pflicht!\n– Die Werksleitung"],
+  ["Zettel am Spind", "Er tickt.\n\nSolange du das Ticken hörst, weißt du, wo er ist.\n\nWenn das Ticken aufhört, steht er direkt hinter dir."],
+  ["Kinderzeichnung (Besuchertag)", "Ein riesiger Mann mit Zylinder und einem Schlüssel im Rücken. Er hat viel zu viele Zähne.\n\nDarunter, in Wachsmalstift:\n\nONKEL KURBEL HAT MEINEN PAPA MITGENOMMEN ZUM SPIELEN"],
+  ["Notiz, mit Öl verschmiert", "Er sieht deine Taschenlampe von weitem. Mach sie aus.\n\nGeh in die Hocke [C] und versteck dich hinter den Kisten und Regalen. Er schaut nicht durch sie hindurch.\n\nUnd RENN NICHT, wenn er dich nicht gesehen hat."],
+  ["Wartungsprotokoll Lastenaufzug", "Hauptstrom getrennt.\n\nNotbetrieb nur mit 3 Akkupacks (gelb, Typ FS-12) möglich. Ersatzakkus liegen in Lager, Montage und im Spielzimmer.\n\nTür braucht nach dem Einsetzen ca. 10 Sekunden. Laut. SEHR laut."],
+];
+
+/* =====================================================================
+   PROZEDURALE TEXTUREN
+   ===================================================================== */
+function hash(x, y, s) {
+  let h = (x * 374761393 + y * 668265263 + s * 144269504) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+const mod = (a, m) => ((a % m) + m) % m;
+function vnoise(x, y, p, s) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const x0 = mod(xi, p), x1 = mod(xi + 1, p), y0 = mod(yi, p), y1 = mod(yi + 1, p);
+  const a = hash(x0, y0, s), b = hash(x1, y0, s), c = hash(x0, y1, s), d = hash(x1, y1, s);
+  const top = a + (b - a) * u, bot = c + (d - c) * u;
+  return top + (bot - top) * v;
+}
+function fbm(u, v, f, o, s) {
+  let sum = 0, amp = 0.5, n = 0;
+  for (let i = 0; i < o; i++) { sum += amp * vnoise(u * f, v * f, f, s + i * 31); n += amp; amp *= 0.5; f *= 2; }
+  return sum / n;
+}
+let maxAniso = 4;
+function texFromCanvas(c, srgb = true, repeat = true) {
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  t.anisotropy = maxAniso;
+  return t;
+}
+function canvasTex(size, data, srgb, repeat) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  c.getContext('2d').putImageData(new ImageData(data, size, size), 0, 0);
+  return texFromCanvas(c, srgb, repeat);
+}
+/** fn(u, v, x, y, out) -> out = [r, g, b, height, roughness, alpha]; v zeigt nach oben */
+function genTex(size, fn, nStr = 2, repeat = true) {
+  const col = new Uint8ClampedArray(size * size * 4), rough = new Uint8ClampedArray(size * size * 4), h = new Float32Array(size * size);
+  const o = [0, 0, 0, 0, 1, 1];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    o[5] = 1; fn(x / size, 1 - y / size, x, size - 1 - y, o);
+    const i = y * size + x, j = i * 4;
+    col[j] = o[0] * 255; col[j + 1] = o[1] * 255; col[j + 2] = o[2] * 255; col[j + 3] = o[5] * 255;
+    h[i] = o[3]; rough[j] = rough[j + 1] = rough[j + 2] = o[4] * 255; rough[j + 3] = 255;
+  }
+  const nrm = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const l = h[y * size + mod(x - 1, size)], r = h[y * size + mod(x + 1, size)];
+    const up = h[mod(y - 1, size) * size + x], dn = h[mod(y + 1, size) * size + x];
+    let nx = -(r - l) * nStr, ny = -(up - dn) * nStr, nz = 1;
+    const len = Math.hypot(nx, ny, nz), j = (y * size + x) * 4;
+    nrm[j] = (nx / len * 0.5 + 0.5) * 255; nrm[j + 1] = (ny / len * 0.5 + 0.5) * 255; nrm[j + 2] = (nz / len * 0.5 + 0.5) * 255; nrm[j + 3] = 255;
+  }
+  return { map: canvasTex(size, col, true, repeat), normalMap: canvasTex(size, nrm, false, repeat), roughnessMap: canvasTex(size, rough, false, repeat) };
+}
+const mix3 = (o, r, g, b, t) => { o[0] = lerp(o[0], r, t); o[1] = lerp(o[1], g, t); o[2] = lerp(o[2], b, t); };
+const set3 = (o, r, g, b, k = 1) => { o[0] = r * k; o[1] = g * k; o[2] = b * k; };
+
+/** Schmutz & Kratzer auf ein 2D-Canvas legen */
+function grime(ctx, w, h, amount = 1) {
+  for (let i = 0; i < 60 * amount; i++) {
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, `rgba(40,25,10,${rand(0.05, 0.25)})`); g.addColorStop(1, 'rgba(40,25,10,0)');
+    ctx.save(); ctx.translate(rand(0, w), rand(0, h)); ctx.scale(rand(10, w / 3), rand(10, h / 3)); ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(255,245,220,0.25)';
+  for (let i = 0; i < 25 * amount; i++) { ctx.lineWidth = rand(0.5, 2); ctx.beginPath(); const x = rand(0, w), y = rand(0, h); ctx.moveTo(x, y); ctx.lineTo(x + rand(-60, 60), y + rand(-20, 20)); ctx.stroke(); }
+}
+function mascotFace(ctx, cx, cy, r) {
+  ctx.fillStyle = '#efe0c2'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+  ctx.lineWidth = r * 0.06; ctx.strokeStyle = '#251c17'; ctx.stroke();
+  ctx.fillStyle = '#d2574a'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + s * r * 0.55, cy + r * 0.15, r * 0.17, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = '#111'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + s * r * 0.33, cy - r * 0.2, r * 0.15, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = '#c63f33'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.12, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.42, r * 0.62, r * 0.26, 0, 0, Math.PI); ctx.fill();
+  ctx.fillStyle = '#f6f0e0';
+  for (let i = -4; i <= 4; i++) { const x = cx + i * r * 0.12; ctx.beginPath(); ctx.moveTo(x - r * 0.05, cy + r * 0.42); ctx.lineTo(x + r * 0.05, cy + r * 0.42); ctx.lineTo(x, cy + r * 0.55); ctx.fill(); }
+  ctx.fillStyle = '#1a1512'; ctx.fillRect(cx - r * 0.42, cy - r * 1.55, r * 0.84, r * 0.75); ctx.fillRect(cx - r * 0.7, cy - r * 0.86, r * 1.4, r * 0.12);
+  ctx.fillStyle = '#c63f33'; ctx.fillRect(cx - r * 0.42, cy - r * 1.02, r * 0.84, r * 0.12);
+}
+function posterTex(kind) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 360; const x = c.getContext('2d');
+  const bg = ['#e8d6ae', '#c9dcd4', '#efc6a0'][kind];
+  x.fillStyle = bg; x.fillRect(0, 0, 256, 360);
+  x.strokeStyle = '#c63f33'; x.lineWidth = 10; x.strokeRect(8, 8, 240, 344);
+  x.textAlign = 'center'; x.fillStyle = '#251c17';
+  if (kind === 0) {
+    x.font = 'bold 30px "Lilita One", Arial, sans-serif'; x.fillStyle = '#c63f33'; x.fillText('SPIEL MIT', 128, 52); x.fillText('ONKEL KURBEL!', 128, 86);
+    mascotFace(x, 128, 210, 72);
+    x.font = '15px Arial, sans-serif'; x.fillStyle = '#251c17'; x.fillText('Fröhlich Spielwaren · seit 1961', 128, 330);
+  } else if (kind === 1) {
+    x.font = 'bold 34px "Lilita One", Arial, sans-serif'; x.fillText('LÄCHELN', 128, 60); x.fillText('IST PFLICHT', 128, 98);
+    mascotFace(x, 128, 230, 64);
+    x.font = '14px Arial, sans-serif'; x.fillText('Deine Werksleitung', 128, 335);
+  } else {
+    x.fillStyle = '#e0ad38'; x.fillRect(20, 20, 216, 70);
+    x.font = 'bold 26px Arial, sans-serif'; x.fillStyle = '#251c17'; x.fillText('ACHTUNG!', 128, 66);
+    x.font = 'bold 19px Arial, sans-serif';
+    ['NICHT IN DIE', 'MASCHINEN', 'GREIFEN.', '', 'NICHT DEN', 'PROTOTYP', 'AUFZIEHEN.'].forEach((l, i) => x.fillText(l, 128, 132 + i * 28));
+  }
+  grime(x, 256, 360, 1.3);
+  x.fillStyle = 'rgba(120,10,6,0.55)';
+  if (Math.random() < 0.5) for (let i = 0; i < 4; i++) { x.fillRect(rand(30, 220), rand(150, 250), rand(3, 6), rand(40, 110)); }
+  return texFromCanvas(c, true, false);
+}
+function abcTex(letter, color) {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle = color; x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = '#efe2c4'; x.lineWidth = 14; x.strokeRect(18, 18, 220, 220);
+  x.fillStyle = '#efe2c4'; x.font = 'bold 170px "Lilita One", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(letter, 128, 140);
+  grime(x, 256, 256, 0.8);
+  return texFromCanvas(c, true, false);
+}
+function stripeTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#e8dcc0' : '#b8352b'; x.fillRect(i * 32, 0, 32, 256); }
+  grime(x, 256, 256, 1.5);
+  return texFromCanvas(c, true, true);
+}
+function porcelainTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
+  x.fillStyle = '#ece0c8'; x.fillRect(0, 0, 512, 512);
+  grime(x, 512, 512, 0.7);
+  x.strokeStyle = 'rgba(30,20,15,0.85)';
+  for (let k = 0; k < 14; k++) {
+    let px = rand(0, 512), py = rand(0, 512); x.lineWidth = rand(0.8, 2.2); x.beginPath(); x.moveTo(px, py);
+    for (let i = 0; i < 12; i++) { px += rand(-22, 22); py += rand(-22, 22); x.lineTo(px, py); }
+    x.stroke();
+  }
+  return texFromCanvas(c, true, true);
+}
+
+const TEX = {};
+const texJobs = {
+  floor: () => genTex(512, (u, v, x, y, o) => {
+    const n = fbm(u, v, 8, 5, 11), fine = fbm(u, v, 48, 2, 12);
+    set3(o, 0.4, 0.39, 0.37, 0.75 + 0.45 * n + 0.1 * fine);
+    const crack = Math.pow(1 - Math.abs(fbm(u, v, 5, 4, 13) - 0.5) * 2, 30);
+    mix3(o, 0.06, 0.05, 0.05, crack * 0.9);
+    const oil = sstep(0.6, 0.72, fbm(u, v, 3, 4, 14));
+    mix3(o, 0.05, 0.045, 0.04, oil * 0.85);
+    const paint = sstep(0.82, 0.86, fbm(u, v, 6, 3, 15));
+    mix3(o, 0.75, 0.55, 0.1, paint * 0.7);
+    const blood = sstep(0.7, 0.74, fbm(u, v, 4, 4, 99));
+    mix3(o, 0.22, 0.02, 0.015, blood * 0.8);
+    o[3] = 1 - crack * 0.6 + fine * 0.08; o[4] = clamp(0.85 - oil * 0.6 - blood * 0.4, 0.15, 1);
+  }, 3),
+  wall: () => genTex(512, (u, v, x, y, o) => {
+    const n = fbm(u, v, 8, 4, 21);
+    let height = 1, rough = 0.8;
+    if (v < 0.035) { set3(o, 0.12, 0.11, 0.1); }
+    else if (v < 0.075) { const d = ((x + y * 1.0) / 24) % 2 < 1; d ? set3(o, 0.85, 0.65, 0.12) : set3(o, 0.08, 0.07, 0.06); }
+    else if (v < 0.36) { set3(o, 0.2, 0.5, 0.48); }
+    else if (v < 0.375) { set3(o, 0.1, 0.09, 0.08); }
+    else if (v < 0.6) {
+      const band = Math.floor((v - 0.375) / 0.0575);
+      const cols = [[0.75, 0.25, 0.2], [0.85, 0.65, 0.2], [0.25, 0.55, 0.5], [0.5, 0.3, 0.55]];
+      const c = cols[band % 4]; set3(o, c[0], c[1], c[2]);
+    } else {
+      const bw = 64, bh = 32, row = Math.floor(y / bh), bx = (x + (row % 2) * 32) % bw, by = y % bh;
+      const mortar = bx < 3 || by < 3;
+      set3(o, 0.42, 0.41, 0.39, 0.8 + 0.3 * hash(Math.floor((x + (row % 2) * 32) / bw), row, 3));
+      if (mortar) { set3(o, 0.25, 0.24, 0.22); height = 0.6; }
+      mix3(o, 0.1, 0.09, 0.08, sstep(0.6, 1, v) * 0.6);
+    }
+    set3(o, o[0], o[1], o[2], 0.82 + 0.3 * n);
+    const peel = fbm(u, v, 6, 4, 33);
+    if (peel > 0.65 && v > 0.075 && v < 0.6) { set3(o, 0.45, 0.44, 0.42, 0.7 + 0.4 * fbm(u, v, 32, 2, 34)); height = 0.7; rough = 0.95; }
+    const drip = sstep(0.55, 0.8, fbm(u, v * 0.08, 16, 3, 44)) * sstep(0.2, 0.9, v);
+    mix3(o, 0.13, 0.09, 0.05, drip * 0.7);
+    mix3(o, 0.06, 0.05, 0.04, Math.pow(1 - v, 10) * 0.7);
+    o[3] = height - n * 0.1; o[4] = rough - drip * 0.3;
+  }, 2.5),
+  ceiling: () => genTex(512, (u, v, x, y, o) => {
+    const corr = 0.5 + 0.5 * Math.sin(u * TAU * 16);
+    set3(o, 0.22, 0.21, 0.2, 0.6 + 0.4 * corr);
+    const rust = sstep(0.55, 0.8, fbm(u, v, 4, 4, 61));
+    mix3(o, 0.25, 0.12, 0.05, rust * 0.8);
+    if (v > 0.47 && v < 0.53) set3(o, 0.12, 0.11, 0.1);
+    o[3] = corr * 0.6 + (v > 0.47 && v < 0.53 ? 1 : 0); o[4] = 0.6 + rust * 0.3;
+  }, 2),
+  metal: () => genTex(256, (u, v, x, y, o) => {
+    const br = fbm(u, v * 0.05, 64, 2, 80), rust = sstep(0.5, 0.75, fbm(u, v, 4, 5, 81));
+    set3(o, 0.5, 0.5, 0.5, 0.8 + 0.3 * br);
+    const rk = 0.7 + 0.6 * fbm(u, v, 32, 2, 82); mix3(o, 0.3 * rk, 0.14 * rk, 0.06 * rk, rust);
+    o[3] = rust * 0.5 + br * 0.1; o[4] = 0.35 + rust * 0.6;
+  }, 2),
+  wood: () => genTex(256, (u, v, x, y, o) => {
+    const plank = Math.floor(u * 4), lx = (u * 4) % 1;
+    const grain = fbm(u * 0.3 + plank * 0.37, v, 8, 4, 90 + plank);
+    set3(o, 0.52, 0.38, 0.22, 0.65 + 0.5 * grain + 0.15 * hash(plank, 0, 91));
+    if (lx < 0.03 || lx > 0.97) { set3(o, 0.12, 0.08, 0.05); }
+    if (v < 0.08 || v > 0.92) set3(o, 0.4, 0.29, 0.17, 0.8);
+    o[3] = (lx < 0.03 || lx > 0.97) ? 0 : 0.8 + grain * 0.2; o[4] = 0.85;
+  }, 3),
+  plush: () => genTex(256, (u, v, x, y, o) => {
+    const f = fbm(u, v, 64, 2, 95), m = fbm(u, v, 4, 3, 96);
+    set3(o, 1, 1, 1, 0.75 + 0.35 * f);
+    mix3(o, 0.3, 0.25, 0.2, sstep(0.55, 0.75, m) * 0.6);
+    o[3] = f; o[4] = 1;
+  }, 4),
+  blood: () => {
+    const drops = []; let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 40; i++) { const a = r() * TAU, d = 0.18 + r() * 0.3; drops.push([0.5 + Math.cos(a) * d, 0.5 + Math.sin(a) * d, 0.005 + r() * 0.025]); }
+    return genTex(256, (u, v, x, y, o) => {
+      const n = fbm(u, v, 4, 4, 120);
+      let inside = Math.hypot(u - 0.5, v - 0.5) < 0.18 + (n - 0.5) * 0.35;
+      if (!inside) for (const d of drops) if (Math.hypot(u - d[0], v - d[1]) < d[2]) { inside = true; break; }
+      set3(o, 0.28, 0.01, 0.01, 0.55 + 0.6 * fbm(u, v, 16, 3, 121));
+      o[5] = inside ? 1 : 0; o[3] = inside ? 1 : 0; o[4] = 0.12;
+    }, 3, false);
+  },
+  cookie: () => genTex(256, (u, v, x, y, o) => {
+    const d = Math.hypot(u - 0.5, v - 0.5) * 2;
+    let k = sstep(1, 0.7, d) * (0.7 + 0.15 * Math.sin(d * 45) + 0.15 * fbm(u, v, 8, 3, 130)) + (1 - sstep(0, 0.3, d)) * 0.35;
+    k = clamp(k, 0, 1); if (x === 0 || y === 0 || x === 255 || y === 255) k = 0;
+    set3(o, k, k, k); o[3] = 0; o[4] = 1;
+  }, 0, false),
+};
+
+const MAT = {};
+const TOY_COLORS = ['#b8352b', '#d39a2c', '#2f7c78', '#6b4a86', '#3f6fb0', '#c86a8a'];
+function buildMaterials() {
+  const std = (t, extra = {}) => new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap, roughness: 1, ...extra });
+  MAT.wall = std(TEX.wall);
+  for (const k of ['floor', 'ceiling']) {
+    const t = TEX[k], r = {};
+    for (const m of ['map', 'normalMap', 'roughnessMap']) { r[m] = t[m].clone(); r[m].repeat.set(W, H); r[m].needsUpdate = true; }
+    MAT[k] = std(r);
+  }
+  MAT.metal = std(TEX.metal, { metalness: 0.75 });
+  MAT.darkMetal = std(TEX.metal, { metalness: 0.7, color: 0x4a4744 });
+  MAT.gate = std(TEX.metal, { metalness: 0.8, color: 0x8a8070 });
+  MAT.wood = std(TEX.wood);
+  MAT.cardboard = std(TEX.wood, { color: 0xc8a06a, normalScale: new THREE.Vector2(0.3, 0.3) });
+  MAT.rubber = new THREE.MeshStandardMaterial({ color: 0x141312, roughness: 0.75 });
+  MAT.hazard = new THREE.MeshStandardMaterial({ color: 0xd89c18, roughness: 0.55 });
+  MAT.plush = TOY_COLORS.map(c => std(TEX.plush, { color: c, normalScale: new THREE.Vector2(0.6, 0.6) }));
+  MAT.plastic = TOY_COLORS.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35 }));
+  MAT.abc = 'ABCDEFGHKLMOSUZ'.split('').map((l, i) => new THREE.MeshStandardMaterial({ map: abcTex(l, TOY_COLORS[i % TOY_COLORS.length]), roughness: 0.55 }));
+  MAT.poster = [0, 1, 2].map(k => new THREE.MeshStandardMaterial({ map: posterTex(k), roughness: 0.9 }));
+  MAT.porcelain = new THREE.MeshStandardMaterial({ map: porcelainTex(), roughness: 0.28 });
+  MAT.stripes = new THREE.MeshStandardMaterial({ map: stripeTex(), roughness: 0.7 });
+  MAT.cloth = new THREE.MeshStandardMaterial({ color: 0x1d2236, roughness: 0.9 });
+  MAT.glove = std(TEX.plush, { color: 0xe6dfcf });
+  MAT.brass = new THREE.MeshStandardMaterial({ color: 0xb08a3a, metalness: 0.9, roughness: 0.3 });
+  MAT.black = new THREE.MeshStandardMaterial({ color: 0x0b0a0a, roughness: 0.2 });
+  MAT.blush = new THREE.MeshStandardMaterial({ color: 0xc8473c, roughness: 0.5 });
+  MAT.tooth = new THREE.MeshStandardMaterial({ color: 0xf2ead6, roughness: 0.25 });
+  MAT.pupil = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.5, 0.25) });
+  MAT.dollEye = new THREE.MeshBasicMaterial({ color: 0x050505 });
+  MAT.blood = new THREE.MeshStandardMaterial({ map: TEX.blood.map, normalMap: TEX.blood.normalMap, roughness: 0.15, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  MAT.oil = new THREE.MeshStandardMaterial({ map: TEX.blood.map, color: 0x161412, roughness: 0.08, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  MAT.paper = new THREE.MeshStandardMaterial({ color: 0xe8dcbc, roughness: 0.95, emissive: 0x3a3424, emissiveIntensity: 0.7 });
+  MAT.akku = new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.45 });
+  MAT.akkuGlow = new THREE.MeshStandardMaterial({ color: 0x40ff60, emissive: 0x30ff50, emissiveIntensity: 2.5 });
+  MAT.battery = new THREE.MeshStandardMaterial({ color: 0x336677, emissive: 0x33ccff, emissiveIntensity: 1.6, roughness: 0.4 });
+  MAT.exitGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5.6, 4.6) });
+  MAT.shade = new THREE.MeshStandardMaterial({ color: 0x3f5a4a, metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide });
+}
+
+/* =====================================================================
+   PROZEDURALER SOUND
+   ===================================================================== */
+const SR = 44100;
+let aseed = 4242;
+const arnd = () => { aseed |= 0; aseed = aseed + 0x6D2B79F5 | 0; let t = Math.imul(aseed ^ aseed >>> 15, 1 | aseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const N = () => arnd() * 2 - 1;
+const tanh = x => Math.tanh(clamp(x, -10, 10));
+class Biquad {
+  constructor() { this.b0 = this.b1 = this.b2 = this.a1 = this.a2 = this.x1 = this.x2 = this.y1 = this.y2 = 0; }
+  lp(f, q) { const w = TAU * f / SR, al = Math.sin(w) / (2 * q), cs = Math.cos(w), a0 = 1 + al; this.b0 = (1 - cs) / 2 / a0; this.b1 = (1 - cs) / a0; this.b2 = this.b0; this.a1 = -2 * cs / a0; this.a2 = (1 - al) / a0; return this; }
+  bp(f, q) { const w = TAU * f / SR, al = Math.sin(w) / (2 * q), cs = Math.cos(w), a0 = 1 + al; this.b0 = al / a0; this.b1 = 0; this.b2 = -al / a0; this.a1 = -2 * cs / a0; this.a2 = (1 - al) / a0; return this; }
+  p(x) { const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2; this.x2 = this.x1; this.x1 = x; this.y2 = this.y1; this.y1 = y; return y; }
+}
+const norm = (d, peak) => { let m = 1e-4; for (const v of d) m = Math.max(m, Math.abs(v)); const k = peak / m; for (let i = 0; i < d.length; i++) d[i] *= k; return d; };
+const loopify = (d, fade) => { const len = d.length - fade, o = new Float32Array(len); for (let i = 0; i < len; i++) o[i] = i < fade ? d[i] * (i / fade) + d[len + i] * (1 - i / fade) : d[i]; return o; };
+function thump(d, t0, amp, f0) { let ph = 0; for (let i = Math.floor(t0 * SR); i < d.length; i++) { const dt = i / SR - t0; const env = Math.exp(-dt * 16) * (1 - Math.exp(-dt * 400)); ph += TAU * (f0 * Math.exp(-dt * 3) + 30) / SR; d[i] += Math.sin(ph) * env * amp; } }
+function tine(d, t0, f, amp, detune = 0) {
+  const parts = [[1, 1, 2.2], [2.0, 0.35, 4], [3.98, 0.22, 7], [6.1, 0.08, 11]];
+  for (let i = Math.floor(t0 * SR); i < d.length; i++) {
+    const t = i / SR - t0; if (t > 2.5) break;
+    let s = 0; for (const [m, a, dc] of parts) s += Math.sin(TAU * f * m * (1 + detune * Math.sin(t * 5)) * t) * a * Math.exp(-t * dc);
+    d[i] += s * amp * Math.min(1, t * 400);
+  }
+}
+
+const SND = {
+  drone() {
+    const fade = SR * 2, n = SR * 12 + fade, d = new Float32Array(n), lp = new Biquad().lp(260, 0.9), bp = new Biquad().bp(900, 8);
+    for (let i = 0; i < n; i++) {
+      const t = i / SR;
+      if (i % 64 === 0) lp.lp(180 + 140 * Math.sin(TAU * 0.07 * t), 1.1);
+      let s = 0.32 * Math.sin(TAU * 36.7 * t) + 0.28 * Math.sin(TAU * 37.2 * t) + 0.12 * Math.sin(TAU * 73.4 * t + Math.sin(TAU * 0.13 * t) * 2);
+      s += lp.p(N()) * 3.2 * (0.6 + 0.4 * Math.sin(TAU * 0.05 * t));
+      s += bp.p(N()) * 0.25 * Math.max(0, Math.sin(TAU * 0.04 * t + 1));
+      d[i] = s;
+    }
+    return norm(loopify(d, fade), 0.6);
+  },
+  heartbeat() { const d = new Float32Array(SR); thump(d, 0.02, 1, 45); thump(d, 0.3, 0.7, 40); return norm(d, 0.95); },
+  step() { const n = SR * 0.3 | 0, d = new Float32Array(n), lp = new Biquad().lp(1300, 0.8); for (let i = 0; i < n; i++) { const t = i / SR; d[i] = lp.p(N()) * Math.exp(-t * 38) + Math.sin(TAU * 95 * t) * Math.exp(-t * 40) * 0.4; } return norm(d, 0.8); },
+  monsterStep() {
+    const n = SR * 0.6 | 0, d = new Float32Array(n), lp = new Biquad().lp(380, 1), bp = new Biquad().bp(1800, 6);
+    for (let i = 0; i < n; i++) { const t = i / SR; d[i] = Math.sin(TAU * (45 + 30 * Math.exp(-t * 10)) * t) * Math.exp(-t * 9) + lp.p(N()) * 2 * Math.exp(-t * 16) + bp.p(N()) * 2.2 * Math.exp(-t * 35); }
+    return norm(d, 0.95);
+  },
+  tick() {
+    const d = new Float32Array(SR), bp = new Biquad().bp(3400, 9), bp2 = new Biquad().bp(2100, 9);
+    for (const [t0, which] of [[0.0, 0], [0.5, 1]]) {
+      const f = which ? bp2 : bp;
+      for (let i = Math.floor(t0 * SR); i < Math.floor((t0 + 0.12) * SR); i++) { const t = i / SR - t0; d[i] += f.p(N() * Math.exp(-t * 250)) * 3 + Math.sin(TAU * (which ? 1500 : 2300) * t) * Math.exp(-t * 90) * 0.4; }
+    }
+    return norm(d, 0.9);
+  },
+  musicbox() {
+    const notes = [76, 79, 81, 79, 76, 74, 72, 74, 76, 76, 74, 71, 72, 69, 68, 69];
+    const beats = [1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3];
+    let t = 0; const dur = beats.reduce((a, b) => a + b, 0) * 0.3 + 3, d = new Float32Array(Math.ceil(dur * SR));
+    notes.forEach((m, i) => {
+      const slow = 1 + i * 0.035;
+      tine(d, t, 440 * Math.pow(2, (m - 69) / 12) * (1 - i * 0.002), 0.5, 0.004 * i / 16);
+      t += beats[i] * 0.3 * slow;
+    });
+    return norm(d, 0.7);
+  },
+  scream() {
+    const n = SR * 1.9 | 0, d = new Float32Array(n), bp = new Biquad().bp(2200, 1.5), det = [1, 1.031, 0.968, 1.497, 2.01], ph = det.map(() => 0);
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, env = sstep(0, 0.03, t) * (t < 1.3 ? 1 : Math.exp(-(t - 1.3) * 6)), f0 = 430 * Math.exp(-t * 0.4) + 50 * Math.sin(TAU * 6 * t);
+      let s = 0; for (let k = 0; k < det.length; k++) { ph[k] += f0 * det[k] / SR; ph[k] -= Math.floor(ph[k]); s += (ph[k] * 2 - 1) * (k > 2 ? 0.4 : 1); }
+      d[i] = tanh((s * 0.35 + bp.p(N()) * 1.6) * 3) * env;
+    }
+    tine(d, 0.0, 1975, 0.6, 0.05); tine(d, 0.05, 2093, 0.6, 0.05);
+    return norm(d, 1);
+  },
+  stinger() {
+    const n = SR * 2.6 | 0, d = new Float32Array(n), fr = [1180, 1243, 1311, 1397, 1475], ph = fr.map(() => 0), bp = new Biquad().bp(1300, 0.8);
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, env = Math.pow(clamp(t / 2.2, 0, 1), 2) * (t > 2.2 ? Math.exp(-(t - 2.2) * 25) : 1);
+      let s = 0; for (let k = 0; k < fr.length; k++) { ph[k] += fr[k] * (1 + 0.01 * Math.sin(TAU * (5 + k) * t)) / SR; ph[k] -= Math.floor(ph[k]); s += ph[k] * 2 - 1; }
+      d[i] = tanh(bp.p(s) * env * 2 + Math.sin(TAU * 55 * t) * Math.exp(-t * 3) * 1.5 + N() * Math.exp(-t * 20));
+    }
+    return norm(d, 0.9);
+  },
+  creakSpring() {
+    const n = SR * 2, d = new Float32Array(n), bp = new Biquad().bp(820, 20), bp2 = new Biquad().bp(1950, 16); let next = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR; let x = 0; if (t >= next) { x = 1; next = t + 1 / (14 + 10 * Math.sin(TAU * 0.5 * t) + arnd() * 4); } d[i] = (bp.p(x) + bp2.p(x) * 0.6) * Math.sin(t / 2 * Math.PI); }
+    return norm(d, 0.6);
+  },
+  clank() {
+    const n = SR * 3, d = new Float32Array(n), bp = new Biquad().bp(1200, 2), fr = [341, 523, 912, 1480];
+    for (let i = 0; i < n; i++) { const t = i / SR; let s = bp.p(N()) * Math.exp(-t * 30) * 2; for (let k = 0; k < fr.length; k++) s += Math.sin(TAU * fr[k] * t) * Math.exp(-t * (2 + k)) * 0.5; d[i] = s; }
+    const a = 0.11 * SR | 0, b = 0.23 * SR | 0; for (let i = 0; i < n; i++) { if (i >= a) d[i] += d[i - a] * 0.4; if (i >= b) d[i] += d[i - b] * 0.3; }
+    return norm(d, 0.8);
+  },
+  bang() {
+    const n = SR * 3, d = new Float32Array(n), lp = new Biquad().lp(700, 1);
+    for (let i = 0; i < n; i++) { const t = i / SR; d[i] = lp.p(N()) * 3 * Math.exp(-t * 9) + Math.sin(TAU * 45 * t) * Math.exp(-t * 3); }
+    const a = 0.083 * SR | 0, b = 0.127 * SR | 0; for (let i = 0; i < n; i++) { if (i >= a) d[i] += d[i - a] * 0.45; if (i >= b) d[i] += d[i - b] * 0.35; }
+    return norm(d, 0.9);
+  },
+  giggle() {
+    const n = SR * 2, d = new Float32Array(n), bp = new Biquad(), bp2 = new Biquad(); let end = 0, start = 0, f0 = 400;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR;
+      if (t >= end) { start = t; end = t + 0.11 + arnd() * 0.05; f0 = 380 + arnd() * 120 - t * 60; bp.bp(f0 * 2.5, 5); bp2.bp(f0 * 6, 6); }
+      const st = (t - start) / (end - start), env = Math.sin(st * Math.PI) * sstep(0, 0.2, t) * (1 - sstep(1.4, 2, t));
+      const buzz = ((t * f0) % 1) * 2 - 1;
+      d[i] = (bp.p(buzz + N() * 0.6) + bp2.p(buzz) * 0.5) * env;
+    }
+    return norm(d, 0.5);
+  },
+  pickup() {
+    const d = new Float32Array(SR * 2.5 | 0);
+    [76, 81, 84].forEach((m, i) => tine(d, i * 0.09, 440 * Math.pow(2, (m - 69) / 12), 0.5));
+    for (let i = 0; i < d.length; i++) { const t = i / SR; d[i] += Math.sin(TAU * 98 * t) * Math.exp(-t * 2) * 0.4; }
+    return norm(d, 0.7);
+  },
+  click() { const n = SR * 0.08 | 0, d = new Float32Array(n), bp = new Biquad().bp(3000, 2); for (let i = 0; i < n; i++) d[i] = bp.p(N()) * Math.exp(-i / SR * 120); return norm(d, 0.6); },
+  siren() { const n = SR * 2, d = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR; ph += (600 + 300 * (0.5 - 0.5 * Math.cos(TAU * 0.5 * t))) / SR; ph -= Math.floor(ph); d[i] = tanh(Math.sin(ph * TAU) * 2) * 0.6; } return norm(d, 0.6); },
+};
+const RAW = {};
+
+const Audio = {
+  ctx: null, master: null, buf: {},
+  init() {
+    if (this.ctx) { this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
+    for (const k in RAW) { const b = this.ctx.createBuffer(1, RAW[k].length, SR); b.copyToChannel(RAW[k], 0); this.buf[k] = b; }
+  },
+  src(name, loop, rate = 1) { const s = this.ctx.createBufferSource(); s.buffer = this.buf[name]; s.loop = loop; s.playbackRate.value = rate; return s; },
+  play(name, vol = 1, rate = 1) { if (!this.ctx) return null; const s = this.src(name, false, rate), g = this.ctx.createGain(); g.gain.value = vol; s.connect(g).connect(this.master); s.start(); return { s, g }; },
+  loop(name, vol = 1) { if (!this.ctx) return null; const s = this.src(name, true), g = this.ctx.createGain(); g.gain.value = vol; s.connect(g).connect(this.master); s.start(); return { s, g }; },
+  panner(pos, maxD = 30) {
+    const p = this.ctx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'linear'; p.refDistance = 1.5; p.maxDistance = maxD; p.rolloffFactor = 1;
+    this.setPos(p, pos); p.connect(this.master); return p;
+  },
+  setPos(p, v) { if (p.positionX) { p.positionX.value = v.x; p.positionY.value = v.y; p.positionZ.value = v.z; } else p.setPosition(v.x, v.y, v.z); },
+  play3D(name, pos, vol = 1, rate = 1, maxD = 30) {
+    if (!this.ctx) return;
+    const p = this.panner(pos, maxD), s = this.src(name, false, rate), g = this.ctx.createGain(); g.gain.value = vol;
+    s.connect(g).connect(p); s.start(); s.onended = () => p.disconnect();
+  },
+  listen(cam) {
+    if (!this.ctx) return;
+    const l = this.ctx.listener, f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion), u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion), p = cam.position;
+    if (l.positionX) { l.positionX.value = p.x; l.positionY.value = p.y; l.positionZ.value = p.z; l.forwardX.value = f.x; l.forwardY.value = f.y; l.forwardZ.value = f.z; l.upX.value = u.x; l.upY.value = u.y; l.upZ.value = u.z; }
+    else { l.setPosition(p.x, p.y, p.z); l.setOrientation(f.x, f.y, f.z, u.x, u.y, u.z); }
+  },
+};
+
+/* =====================================================================
+   RENDERER & POST-FX
+   ===================================================================== */
+const canvas = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050403);
+scene.fog = new THREE.FogExp2(0x050403, 0.05);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.04, 100);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+scene.add(new THREE.AmbientLight(0x3a3228, 0.14));
+scene.add(new THREE.HemisphereLight(0x2c2a26, 0x0a0806, 0.2));
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.45, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const horrorPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, fear: { value: 0 }, glitch: { value: 0 }, jump: { value: 0 }, death: { value: 0 }, flash: { value: 0 }, white: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float time, fear, glitch, jump, death, flash, white; uniform vec2 res; varying vec2 vUv;
+    float rnd(vec2 c){ return fract(sin(dot(c, vec2(12.9898,78.233))) * 43758.5453); }
+    void main(){
+      vec2 c = vUv - 0.5; float r2 = dot(c,c);
+      float k = -0.06 - 0.22*fear*(0.5+0.5*sin(time*2.2)) - glitch*0.25 + jump*0.5*sin(time*40.0);
+      vec2 uv = 0.5 + c * (1.0 + k*r2) / (1.0 + k*0.25);
+      if (glitch > 0.0) { float band = floor(uv.y*24.0 + time*40.0); if (rnd(vec2(band, floor(time*30.0))) > 0.72) uv.x += (rnd(vec2(band,3.1)) - 0.5) * 0.09 * glitch; }
+      float ca = 0.0015 + 0.009*fear + 0.02*glitch + 0.03*jump;
+      vec3 col = vec3(texture2D(tDiffuse, uv + c*ca).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - c*ca).b);
+      float l = dot(col, vec3(0.299,0.587,0.114));
+      col = mix(vec3(l), col, clamp(0.85 - 0.45*fear + jump*0.4, 0.0, 1.3));
+      col *= vec3(1.0, 0.96, 0.9);
+      col = mix(col, vec3(l*1.6, l*0.15, l*0.12), clamp(max(death, flash*0.6), 0.0, 1.0));
+      float v = smoothstep(0.92, 0.18, length(c) * (1.0 + 0.35*fear + 0.3*death));
+      col = mix(mix(vec3(0.0), vec3(0.14,0.0,0.0), fear), col, mix(0.25, 1.0, v));
+      col += (rnd(vUv*res + fract(time*7.13)*100.0) - 0.5) * (0.06 + 0.08*fear + 0.15*jump + 0.08*glitch);
+      col *= 0.97 + 0.03*sin(vUv.y*res.y*1.2);
+      col = mix(col, vec3(1.0, 0.98, 0.94), white);
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+composer.addPass(horrorPass);
+const FXU = horrorPass.uniforms;
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight, false); composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); FXU.res.value.set(innerWidth, innerHeight);
+});
+
+/* =====================================================================
+   LEVEL
+   ===================================================================== */
+const GEO = {
+  box: new THREE.BoxGeometry(1, 1, 1),
+  cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 16),
+  sph: new THREE.SphereGeometry(0.5, 24, 16),
+  cap: new THREE.CapsuleGeometry(0.5, 1, 6, 14),
+  plane: new THREE.PlaneGeometry(1, 1),
+  shade: new THREE.CylinderGeometry(0.14, 0.55, 0.4, 20, 1, true),
+};
+let world, colliders = [], interact = [], fixtures = [], walk = [], walkCells = [], spawnP, spawnM, gate, spinners = [];
+
+function part(geo, parent, pos, scale, mat, rot, shadow = true) {
+  const m = new THREE.Mesh(GEO[geo], mat);
+  m.position.set(pos[0], pos[1], pos[2]); m.scale.set(scale[0], scale[1], scale[2]);
+  if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
+  m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m;
+}
+function addCollider(cx, cz, hx, hz) { colliders.push({ x0: cx - hx, x1: cx + hx, z0: cz - hz, z1: cz + hz }); }
+function wallDir(x, y) { for (const [dx, dy] of DIRS) if (isWall(x + dx, y + dy)) return new THREE.Vector3(dx, 0, dy); return null; }
+
+function dollHead(parent, pos, s = 0.28) {
+  const g = new THREE.Group(); g.position.set(pos[0], pos[1], pos[2]); g.rotation.set(rand(-0.6, 0.6), rand(0, TAU), rand(-0.6, 0.6)); parent.add(g);
+  part('sph', g, [0, 0, 0], [s, s * 1.1, s], MAT.porcelain);
+  for (const sx of [-1, 1]) part('sph', g, [sx * s * 0.2, s * 0.08, s * 0.44], [s * 0.16, s * 0.16, s * 0.08], MAT.dollEye, null, false);
+  part('box', g, [0, -s * 0.2, s * 0.45], [s * 0.3, s * 0.05, s * 0.05], MAT.blush, null, false);
+  return g;
+}
+function toy(parent, x, y, z, big = 1) {
+  const r = Math.random();
+  if (r < 0.35) { const s = rand(0.3, 0.6) * big; const m = part('box', parent, [x, y + s / 2, z], [s, s, s], pick(MAT.abc)); m.rotation.y = rand(0, TAU); return s; }
+  if (r < 0.6) { const s = rand(0.3, 0.55) * big; part('sph', parent, [x, y + s / 2, z], [s, s, s], pick(MAT.plastic)); return s; }
+  if (r < 0.8) { const s = rand(0.25, 0.4) * big; dollHead(parent, [x, y + s / 2, z], s); return s; }
+  const s = rand(0.4, 0.7) * big, mat = pick(MAT.plush), g = new THREE.Group(); g.position.set(x, y, z); g.rotation.set(rand(-0.3, 0.3), rand(0, TAU), rand(-0.4, 0.4)); parent.add(g);
+  part('cap', g, [0, s * 0.45, 0], [s * 0.6, s * 0.4, s * 0.5], mat);
+  part('sph', g, [0, s * 1.05, 0], [s * 0.55, s * 0.55, s * 0.55], mat);
+  for (const sx of [-1, 1]) { part('sph', g, [sx * s * 0.2, s * 1.35, 0], [s * 0.2, s * 0.32, s * 0.12], mat); part('sph', g, [sx * s * 0.11, s * 1.1, s * 0.25], [s * 0.08, s * 0.08, s * 0.05], MAT.dollEye, null, false); }
+  return s;
+}
+
+function buildLevel() {
+  world = new THREE.Group(); scene.add(world);
+  colliders = []; interact = []; fixtures = []; spinners = []; walkCells = [];
+  walk = MAP.map(r => [...r].map(c => !BLOCKED.includes(c)));
+  let noteIdx = 0;
+
+  const fl = new THREE.Mesh(GEO.plane, MAT.floor);
+  fl.scale.set(W * S, H * S, 1); fl.rotation.x = -Math.PI / 2; fl.position.set((W - 1) * S / 2, 0, (H - 1) * S / 2); fl.receiveShadow = true;
+  const ce = new THREE.Mesh(GEO.plane, MAT.ceiling);
+  ce.scale.set(W * S, H * S, 1); ce.rotation.x = Math.PI / 2; ce.position.set((W - 1) * S / 2, CEIL, (H - 1) * S / 2);
+  world.add(fl, ce);
+
+  const wallCells = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!isWall(x, y)) continue;
+    let near = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) near = true;
+    if (near) wallCells.push([x, y]);
+    addCollider(x * S, y * S, S / 2, S / 2);
+  }
+  const walls = new THREE.InstancedMesh(new THREE.BoxGeometry(S, CEIL, S), MAT.wall, wallCells.length);
+  const mtx = new THREE.Matrix4();
+  wallCells.forEach(([x, y], i) => { mtx.makeTranslation(x * S, CEIL / 2, y * S); walls.setMatrixAt(i, mtx); });
+  walls.castShadow = walls.receiveShadow = true; world.add(walls);
+
+  for (const [x, y] of wallCells) for (const [dx, dy] of DIRS) {
+    if (isWall(x + dx, y + dy)) continue;
+    const dir = new THREE.Vector3(dx, 0, dy), side = new THREE.Vector3(-dy, 0, dx), r = Math.random();
+    if (r < 0.14) {
+      const p = c2w(x, y).addScaledVector(dir, S / 2 + 0.012).addScaledVector(side, rand(-0.7, 0.7)); p.y = rand(2.1, 2.6);
+      const q = new THREE.Mesh(GEO.plane, pick(MAT.poster)); q.position.copy(p); q.scale.set(1.0, 1.4, 1);
+      q.lookAt(p.clone().add(dir)); q.rotateZ(rand(-0.08, 0.08)); q.receiveShadow = true; world.add(q);
+    } else if (r < 0.22) {
+      const p = c2w(x, y).addScaledVector(dir, S / 2 + 0.014).addScaledVector(side, rand(-0.9, 0.9)); p.y = rand(0.4, 2.2);
+      const sc = rand(0.8, 1.6), q = new THREE.Mesh(GEO.plane, MAT.blood); q.position.copy(p); q.scale.set(sc, sc * rand(0.8, 1.6), 1);
+      q.lookAt(p.clone().add(dir)); q.rotateZ(rand(0, TAU)); world.add(q);
+    }
+  }
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = MAP[y][x]; if (c === '#') continue;
+    const p = c2w(x, y);
+    switch (c) {
+      case 'D': doorway(x, y, p); break;
+      case 'C': conveyor(x, y, p); break;
+      case 'S': shelf(p); break;
+      case 'K': crates(p); break;
+      case 'T': toyPile(p); break;
+      case 'X': bigBlock(p); break;
+      case 'P': spawnP = p.clone(); break;
+      case 'M': spawnM = p.clone(); break;
+      case 'F': akku(x, y, p); break;
+      case 'A': battery(p); break;
+      case 'E': gate = buildGate(p, wallDir(x, y) || new THREE.Vector3(1, 0, 0)); break;
+      case 'N': note(x, y, p, NOTES[noteIdx++ % NOTES.length]); break;
+      case '.': clutter(x, y, p); break;
+    }
+    if (x % 3 === 1 && y % 3 === 1 && c !== 'D') lamp(p);
+  }
+  if (noteIdx < NOTES.length) {
+    const m = new THREE.Mesh(GEO.box, MAT.paper); m.position.copy(spawnP).add(new THREE.Vector3(1.2, 0.01, 0.8)); m.scale.set(0.3, 0.01, 0.4); m.rotation.y = rand(0, TAU);
+    m.userData.inter = noteInter(NOTES[NOTES.length - 1]); world.add(m); interact.push(m);
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (walk[y][x]) walkCells.push({ x, y });
+}
+
+function doorway(x, y, p) {
+  const alongX = isWall(x - 1, y) && isWall(x + 1, y), side = 0.75, half = S / 2;
+  for (const s of [-1, 1]) {
+    const off = s * (half - side / 2), cx = p.x + (alongX ? off : 0), cz = p.z + (alongX ? 0 : off), sx = alongX ? side : S, sz = alongX ? S : side;
+    part('box', world, [cx, CEIL / 2, cz], [sx, CEIL, sz], MAT.wall); addCollider(cx, cz, sx / 2, sz / 2);
+  }
+  part('box', world, [p.x, DOOR_H + (CEIL - DOOR_H) / 2, p.z], [S, CEIL - DOOR_H, S], MAT.wall);
+  const stripe = part('box', world, [p.x, DOOR_H - 0.1, p.z], alongX ? [S - 2 * side + 0.02, 0.2, S + 0.02] : [S + 0.02, 0.2, S - 2 * side + 0.02], MAT.hazard, null, false);
+  stripe.receiveShadow = true;
+}
+
+function lamp(p) {
+  const r = Math.random(), mode = r < 0.2 ? 'dead' : r < 0.5 ? 'flicker' : 'steady';
+  const hy = 4.3;
+  part('cyl', world, [p.x, (hy + CEIL) / 2, p.z], [0.03, CEIL - hy, 0.03], MAT.darkMetal, null, false);
+  part('shade', world, [p.x, hy, p.z], [1, 1, 1], MAT.shade, null, false);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffe6c0, emissive: 0xffd09a, emissiveIntensity: 0, roughness: 0.3 });
+  part('sph', world, [p.x, hy - 0.12, p.z], [0.18, 0.18, 0.18], mat, null, false);
+  fixtures.push({ pos: new THREE.Vector3(p.x, hy - 0.35, p.z), color: new THREE.Color(0xffd2a0), base: 26, dist: 13, mode, k: 1, on: true, next: 0, mat, emis: 4 });
+}
+
+function conveyor(x, y, p) {
+  const g = new THREE.Group(); g.position.copy(p); world.add(g);
+  addCollider(p.x, p.z, S / 2, 0.72);
+  part('box', g, [0, 0.82, 0], [S, 0.14, 1.3], MAT.darkMetal);
+  part('box', g, [0, 0.91, 0], [S + 0.01, 0.04, 1.12], MAT.rubber);
+  for (const s of [-1, 1]) part('box', g, [0, 0.97, s * 0.64], [S + 0.01, 0.16, 0.06], MAT.hazard);
+  for (const sx of [-1.2, 1.2]) for (const s of [-1, 1]) part('box', g, [sx, 0.38, s * 0.55], [0.08, 0.76, 0.08], MAT.darkMetal);
+  for (let i = -1; i <= 1; i++) part('cyl', g, [i, 0.72, 0], [0.12, 1.2, 0.12], MAT.metal, [Math.PI / 2, 0, 0]);
+  const n = Math.random() < 0.7 ? 1 + (Math.random() * 2 | 0) : 0;
+  for (let i = 0; i < n; i++) toy(g, rand(-1.1, 1.1), 0.93, rand(-0.35, 0.35), 0.8);
+  if (cellAt(x - 1, y) !== 'C') part('cyl', g, [-S / 2, 0.85, 0], [0.3, 1.25, 0.3], MAT.metal, [Math.PI / 2, 0, 0]);
+  if (cellAt(x + 1, y) !== 'C') part('cyl', g, [S / 2, 0.85, 0], [0.3, 1.25, 0.3], MAT.metal, [Math.PI / 2, 0, 0]);
+}
+
+function shelf(p) {
+  const g = new THREE.Group(); g.position.copy(p); world.add(g);
+  addCollider(p.x, p.z, 1.4, 0.58);
+  for (const sx of [-1.3, 1.3]) for (const sz of [-0.48, 0.48]) part('box', g, [sx, 1.9, sz], [0.07, 3.8, 0.07], MAT.hazard);
+  for (const ly of [0.25, 1.2, 2.15, 3.1]) {
+    part('box', g, [0, ly, 0], [2.7, 0.05, 1.0], MAT.darkMetal);
+    let x = -1.2;
+    while (x < 1.1) {
+      const w = rand(0.4, 0.8); if (x + w > 1.25) break;
+      if (Math.random() < 0.8) {
+        const h = rand(0.35, 0.8), boxMat = Math.random() < 0.6 ? MAT.cardboard : pick(MAT.plastic);
+        const b = part('box', g, [x + w / 2, ly + 0.025 + h / 2, rand(-0.15, 0.15)], [w * 0.92, h, rand(0.5, 0.85)], boxMat); b.rotation.y = rand(-0.1, 0.1);
+        if (Math.random() < 0.15) dollHead(g, [x + w / 2, ly + 0.025 + h + 0.15, 0], 0.26);
+      }
+      x += w + 0.04;
+    }
+  }
+}
+
+function crates(p) {
+  const g = new THREE.Group(); g.position.copy(p); g.rotation.y = rand(-0.3, 0.3); world.add(g);
+  addCollider(p.x, p.z, 0.85, 0.85);
+  const n = 1 + (Math.random() * 3 | 0); let y = 0;
+  for (let i = 0; i < n; i++) { const s = rand(1.0, 1.3) - i * 0.12; const b = part('box', g, [rand(-0.1, 0.1), y + s / 2, rand(-0.1, 0.1)], [s, s, s], MAT.wood); b.rotation.y = rand(-0.25, 0.25); y += s; }
+  if (Math.random() < 0.4) toy(g, 0, y, 0);
+}
+
+function toyPile(p) {
+  const g = new THREE.Group(); g.position.copy(p); world.add(g);
+  addCollider(p.x, p.z, 1.0, 1.0);
+  for (let i = 0; i < 14; i++) { const a = rand(0, TAU), r = rand(0, 1.0); toy(g, Math.cos(a) * r, Math.max(0, (1 - r) * 0.7 - 0.1) * rand(0.5, 1.2), Math.sin(a) * r, 1.3); }
+}
+
+function bigBlock(p) {
+  const m = part('box', world, [p.x, 0.9, p.z], [1.8, 1.8, 1.8], pick(MAT.abc)); m.rotation.y = rand(-0.4, 0.4);
+  addCollider(p.x, p.z, 1.1, 1.1);
+  if (Math.random() < 0.6) dollHead(world, [p.x + rand(-0.3, 0.3), 1.95, p.z + rand(-0.3, 0.3)], 0.35);
+}
+
+function floorDecal(mat, x, z, sc) {
+  const q = new THREE.Mesh(GEO.plane, mat); q.position.set(x, 0.006 + Math.random() * 0.004, z);
+  q.rotation.set(-Math.PI / 2, 0, rand(0, TAU)); q.scale.set(sc, sc, 1); q.receiveShadow = true; world.add(q);
+}
+
+function clutter(x, y, p) {
+  const r = Math.random();
+  if (r < 0.08) floorDecal(MAT.blood, p.x + rand(-0.8, 0.8), p.z + rand(-0.8, 0.8), rand(1.2, 2.4));
+  else if (r < 0.18) floorDecal(MAT.oil, p.x + rand(-0.8, 0.8), p.z + rand(-0.8, 0.8), rand(1.5, 3));
+  else if (r < 0.32) { const n = 1 + (Math.random() * 2 | 0); for (let i = 0; i < n; i++) toy(world, p.x + rand(-1.2, 1.2), 0, p.z + rand(-1.2, 1.2), 0.7); }
+}
+
+function akku(x, y, p) {
+  const wd = wallDir(x, y), pos = p.clone();
+  if (wd) pos.addScaledVector(wd, 1.0); else walk[y][x] = false;
+  const bench = new THREE.Group(); bench.position.set(pos.x, 0, pos.z); if (wd) bench.lookAt(pos.clone().sub(wd)); world.add(bench);
+  part('box', bench, [0, 0.88, 0], [1.4, 0.07, 0.75], MAT.wood);
+  for (const sx of [-0.62, 0.62]) for (const sz of [-0.3, 0.3]) part('box', bench, [sx, 0.43, sz], [0.06, 0.86, 0.06], MAT.darkMetal);
+  addCollider(pos.x, pos.z, 0.75, 0.75);
+  const g = new THREE.Group(); g.position.set(pos.x, 1.05, pos.z); world.add(g);
+  const vis = new THREE.Group(); g.add(vis);
+  part('box', vis, [0, 0, 0], [0.4, 0.22, 0.26], MAT.akku);
+  part('box', vis, [0, 0.03, 0.135], [0.3, 0.05, 0.01], MAT.akkuGlow, null, false);
+  part('box', vis, [0, 0.13, 0], [0.24, 0.04, 0.08], MAT.darkMetal);
+  const hit = part('box', g, [0, 0, 0], [0.55, 0.4, 0.5], new THREE.MeshBasicMaterial({ visible: false }), null, false);
+  const fx = { pos: new THREE.Vector3(pos.x, 1.5, pos.z), color: new THREE.Color(0x50ff70), base: 2.5, dist: 3.5, mode: 'steady', k: 1, on: true, next: 0 };
+  fixtures.push(fx); spinners.push(vis);
+  hit.userData.inter = { prompt: () => 'Akkupack nehmen', use: () => { Game.player.fuses++; Game.onFusePicked(); removePickup(g, hit, fx, vis); } };
+  interact.push(hit);
+}
+
+function battery(p) {
+  const g = new THREE.Group(); g.position.set(p.x + rand(-0.6, 0.6), 0.12, p.z + rand(-0.6, 0.6)); world.add(g);
+  const vis = new THREE.Group(); g.add(vis);
+  part('cyl', vis, [0, 0, 0], [0.06, 0.14, 0.06], MAT.battery);
+  const hit = part('box', g, [0, 0, 0], [0.4, 0.35, 0.4], new THREE.MeshBasicMaterial({ visible: false }), null, false);
+  const fx = { pos: new THREE.Vector3(g.position.x, 0.4, g.position.z), color: new THREE.Color(0x55ccff), base: 1.2, dist: 2, mode: 'steady', k: 1, on: true, next: 0 };
+  fixtures.push(fx); spinners.push(vis);
+  hit.userData.inter = { prompt: () => 'Batterie nehmen', use: () => { Game.player.battery = Math.min(1, Game.player.battery + 0.5); Game.message('Batterie eingelegt.'); Audio.play('click', 0.8); removePickup(g, hit, fx, vis); } };
+  interact.push(hit);
+}
+function removePickup(g, hit, fx, vis) { world.remove(g); interact = interact.filter(m => m !== hit); fixtures = fixtures.filter(f => f !== fx); spinners = spinners.filter(s => s !== vis); }
+
+const noteInter = n => ({ prompt: () => 'Lesen', use: () => Game.openNote(n[0], n[1]) });
+function note(x, y, p, n) {
+  const wd = wallDir(x, y), m = new THREE.Mesh(GEO.box, MAT.paper);
+  if (wd) { m.position.copy(p).addScaledVector(wd, S / 2 - 0.01); m.position.y = 1.5; m.scale.set(0.3, 0.4, 0.01); m.lookAt(m.position.clone().sub(wd)); m.rotateZ(rand(-0.14, 0.14)); }
+  else { m.position.copy(p); m.position.y = 0.01; m.scale.set(0.3, 0.01, 0.4); m.rotation.y = rand(0, TAU); }
+  m.userData.inter = noteInter(n); world.add(m); interact.push(m);
+}
+
+function buildGate(cell, wd) {
+  const g = new THREE.Group(); g.position.copy(cell).addScaledVector(wd, S / 2); world.add(g);
+  g.lookAt(g.position.clone().sub(wd));
+  const glow = new THREE.Mesh(GEO.plane, MAT.exitGlow); glow.position.set(0, 1.6, 0.02); glow.scale.set(2.5, 3.1, 1); glow.visible = false; g.add(glow);
+  part('box', g, [0, 3.45, 0.12], [3.0, 0.3, 0.3], MAT.hazard);
+  for (const s of [-1, 1]) part('box', g, [s * 1.4, 1.6, 0.12], [0.2, 3.3, 0.3], MAT.hazard);
+  const door = part('box', g, [0, 1.6, 0.1], [2.6, 3.2, 0.12], MAT.gate);
+  for (let i = 0; i < 6; i++) part('box', door, [0, -0.42 + i * 0.17, 0.6], [0.98, 0.012, 0.3], MAT.darkMetal, null, false);
+  const box = part('box', g, [2.0, 1.3, 0.12], [0.6, 0.8, 0.2], MAT.metal);
+  const lamps = [0, 1, 2].map(i => part('box', g, [1.85 + 0.15 * i, 1.5, 0.24], [0.08, 0.08, 0.08], new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.05, 0.02) }), null, false));
+  const sign = new THREE.Mesh(GEO.plane, new THREE.MeshStandardMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#e0ad38'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#251c17'; x.font = 'bold 30px Arial, sans-serif'; x.textAlign = 'center'; x.fillText('LASTENAUFZUG', 128, 43); grime(x, 256, 64, 0.4); return texFromCanvas(c, true, false); })(), roughness: 0.8 }));
+  sign.position.set(0, 3.95, 0.05); sign.scale.set(2.2, 0.55, 1); g.add(sign);
+  g.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(door);
+  colliders.push({ x0: bb.min.x, x1: bb.max.x, z0: bb.min.z, z1: bb.max.z });
+  const alarm = { pos: g.localToWorld(new THREE.Vector3(0, 4.2, 1.0)), color: new THREE.Color(0xff2a0a), base: 8, dist: 11, mode: 'alarm', k: 1, on: true, next: 0 };
+  fixtures.push(alarm);
+  const state = { inserted: 0, opening: false, open: false, door, glow, lamps, group: g, collider: colliders[colliders.length - 1], doorStart: door.position.y, t: 0 };
+  const inter = {
+    prompt: () => {
+      if (state.open) return 'EINSTEIGEN';
+      if (state.opening) return 'Die Tür öffnet sich … halte durch!';
+      if (Game.player.fuses > 0) return `Akkupack einsetzen (${state.inserted}/${NEEDED})`;
+      return `Notstromkasten · es fehlen ${NEEDED - state.inserted} Akkupacks`;
+    },
+    use: () => {
+      const pl = Game.player;
+      if (state.open) { Game.win(); return; }
+      if (state.opening || pl.fuses <= 0) return;
+      while (pl.fuses > 0 && state.inserted < NEEDED) { pl.fuses--; lamps[state.inserted].material.color.setRGB(0.1, 3, 0.3); state.inserted++; }
+      Audio.play('clank', 0.8); surgeAll(1.2);
+      if (state.inserted >= NEEDED) Game.openGate(state);
+      else { Game.message(`Der Aufzug brummt kurz … ${NEEDED - state.inserted} fehlen noch. Das Ticken wird schneller.`); Game.monster.hear(g.position, true); }
+    },
+  };
+  door.userData.inter = inter; box.userData.inter = inter; interact.push(door, box);
+  return state;
+}
+
+function isSolid(x, z) {
+  const cx = Math.round(x / S), cy = Math.round(z / S), c = cellAt(cx, cy);
+  if (c === '#' || c === 'S' || c === 'K' || c === 'X') return true;
+  if (c === 'D') { const alongX = isWall(cx - 1, cy) && isWall(cx + 1, cy); return Math.abs(alongX ? x - cx * S : z - cy * S) > S / 2 - 0.75; }
+  return false;
+}
+function lineClear(a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), n = Math.ceil(d / 0.2);
+  const sa = w2c(a), sb = w2c(b);
+  for (let i = 1; i < n; i++) {
+    const t = i / n, px = a.x + dx * t, pz = a.z + dz * t, c = w2c({ x: px, z: pz });
+    if ((c.x === sa.x && c.y === sa.y) || (c.x === sb.x && c.y === sb.y)) { if (cellAt(c.x, c.y) === '#') return false; continue; }
+    if (isSolid(px, pz)) return false;
+  }
+  return true;
+}
+
+/* ---------- Licht-Pool ---------- */
+const POOL = 8, pool = [];
+for (let i = 0; i < POOL; i++) { const l = new THREE.PointLight(0xffffff, 0, 12, 2); scene.add(l); pool.push(l); }
+let surgeT = 0, alarmOn = false;
+function surgeAll(d) { surgeT = Math.max(surgeT, d); }
+function updateFixtures(dt, t) {
+  const mpos = Game.monster ? Game.monster.root.position : null;
+  for (const f of fixtures) {
+    let k = 1;
+    if (f.mode === 'dead') k = 0;
+    else if (f.mode === 'flicker') { if (t > f.next) { f.on = Math.random() > 0.35; f.next = t + (f.on ? rand(0.05, 1.6) : rand(0.03, 0.25)); } k = f.on ? 1 : 0.04; }
+    else if (f.mode === 'alarm') k = (gate && gate.opening ? 1.6 : 0.7) * (0.6 + 0.4 * Math.sin(t * (gate && gate.opening ? 9 : 2)));
+    if (mpos && k > 0 && f.mat) { const d = Math.hypot(mpos.x - f.pos.x, mpos.z - f.pos.z); if (d < 9 && Math.random() < (1 - d / 9) * 0.45) k *= Math.random() * 0.25; }
+    if (surgeT > 0.25 && f.mat) k = Math.random() < 0.12 ? 1.5 : 0;
+    if (alarmOn && f.mat) k *= 0.55 + 0.45 * Math.sin(t * 5);
+    f.k = k; if (f.mat) f.mat.emissiveIntensity = f.emis * k;
+  }
+  surgeT = Math.max(0, surgeT - dt);
+  const pp = camera.position, cand = fixtures.filter(f => f.k > 0.02).map(f => ({ f, d: f.pos.distanceToSquared(pp) })).sort((a, b) => a.d - b.d);
+  for (let i = 0; i < POOL; i++) {
+    const l = pool[i], c = cand[i];
+    if (!c) { l.intensity = 0; continue; }
+    l.position.copy(c.f.pos); l.color.copy(c.f.color); l.distance = c.f.dist; l.intensity = c.f.base * c.f.k;
+  }
+}
+function setAlarm() { alarmOn = true; for (const f of fixtures) if (f.mat) { f.color.setRGB(1, 0.1, 0.04); f.mat.emissive.setRGB(1, 0.08, 0.03); if (f.mode === 'dead' && Math.random() < 0.5) f.mode = 'flicker'; } }
+
+/* =====================================================================
+   SPIELER
+   ===================================================================== */
+class Player {
+  constructor(pos) {
+    this.pos = pos.clone(); this.yaw = -Math.PI / 2; this.pitch = 0;
+    this.vel = new THREE.Vector3(); this.battery = 1; this.stamina = 1; this.fuses = 0;
+    this.crouch = false; this.crouchT = 0; this.sprint = false; this.exhausted = 0; this.bob = 0; this.lastStep = 0;
+    this.noise = 0; this.shake = 0; this.frozen = false; this.prompt = null;
+    this.flash = new THREE.SpotLight(0xf4f1e6, 75, 28, 0.56, 0.45, 2);
+    this.flash.castShadow = true; this.flash.shadow.mapSize.set(1024, 1024); this.flash.shadow.camera.near = 0.1; this.flash.shadow.bias = -0.0004;
+    this.flash.map = TEX.cookie.map;
+    scene.add(this.flash); scene.add(this.flash.target);
+    this.flashDir = new THREE.Vector3(1, 0, 0); this.flashOn = true;
+    this.ray = new THREE.Raycaster(); this.ray.far = 2.4;
+  }
+  get flashlightOn() { return this.flashOn; }
+  look(dx, dy) { this.yaw -= dx * 0.0022; this.pitch = clamp(this.pitch - dy * 0.0022, -1.45, 1.45); }
+  forceLook(target, dt) {
+    const d = target.clone().sub(camera.position), ty = Math.atan2(-d.x, -d.z), tp = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    let dyaw = ty - this.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+    this.yaw += dyaw * Math.min(1, dt * 12); this.pitch += (tp - this.pitch) * Math.min(1, dt * 12);
+  }
+  update(dt, t, active) {
+    const k = Input.keys;
+    let ix = 0, iy = 0;
+    if (active) { ix = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0); iy = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0); }
+    const il = Math.hypot(ix, iy); if (il > 1) { ix /= il; iy /= il; }
+    this.crouch = active && !!k.KeyC;
+    const want = active && (k.ShiftLeft || k.ShiftRight) && iy > 0.1 && !this.crouch && this.exhausted <= 0;
+    this.sprint = want && this.stamina > 0 && il > 0.01;
+    const speed = this.crouch ? 1.3 : this.sprint ? 5.4 : 2.7;
+    if (this.sprint) { this.stamina -= dt / 4.5; if (this.stamina <= 0) { this.stamina = 0; this.exhausted = 2.5; Game.message('Du bist außer Atem …'); } }
+    else { this.exhausted -= dt; if (this.exhausted <= 0) this.stamina = Math.min(1, this.stamina + dt / 7); }
+    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
+    const a = Math.min(1, dt * 10);
+    this.vel.x += ((rx * ix + fx * iy) * speed - this.vel.x) * a; this.vel.z += ((rz * ix + fz * iy) * speed - this.vel.z) * a;
+    this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt;
+    for (let it = 0; it < 2; it++) collideCircle(this.pos, 0.32);
+
+    this.crouchT += clamp((this.crouch ? 1 : 0) - this.crouchT, -dt * 5, dt * 5);
+    const camH = lerp(1.62, 0.95, this.crouchT), spd = Math.hypot(this.vel.x, this.vel.z);
+    this.bob += dt * spd * 2.3;
+    const bobAmt = spd > 0.2 ? lerp(0.025, 0.075, spd / 5.4) : 0, stepIdx = Math.floor(this.bob / Math.PI);
+    if (stepIdx !== this.lastStep && spd > 0.5) Audio.play('step', this.crouch ? 0.12 : this.sprint ? 0.8 : 0.4, rand(0.85, 1.1));
+    this.lastStep = stepIdx;
+    this.noise = spd < 0.4 ? 0 : this.crouch ? 1.5 : this.sprint ? 16 : 5;
+    this.shake = Math.max(0, this.shake - dt * 0.8);
+    const sh = this.shake, breathe = Math.sin(t * 1.3) * 0.004 * (1 + (1 - this.stamina) * 3);
+    camera.position.set(this.pos.x + Math.cos(this.bob) * bobAmt * 0.6 * rx + rand(-sh, sh) * 0.3, camH - Math.abs(Math.sin(this.bob)) * bobAmt + rand(-sh, sh) * 0.3, this.pos.z + Math.cos(this.bob) * bobAmt * 0.6 * rz);
+    camera.rotation.set(this.pitch + breathe + rand(-sh, sh) * 0.35, this.yaw + rand(-sh, sh) * 0.35, Math.sin(this.bob) * bobAmt * 0.17 + rand(-sh, sh) * 0.25);
+
+    if (active && Input.pressed.KeyF) { if (this.battery > 0) this.flashOn = !this.flashOn; Audio.play('click', 0.7); }
+    if (this.flashOn) { this.battery -= dt / 300; if (this.battery <= 0) { this.battery = 0; this.flashOn = false; Game.message('Die Batterie ist leer.'); } }
+    let fk = 1;
+    if (this.battery < 0.2 && Math.random() < 0.08) fk = Math.random() * 0.4;
+    if (Game.fear > 0.55 && Math.random() < (Game.fear - 0.5) * 0.25) fk *= Math.random() * 0.3;
+    this.flash.intensity = this.flashOn ? 75 * lerp(0.55, 1, clamp(this.battery * 3, 0, 1)) * fk : 0;
+    camera.updateMatrixWorld();
+    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    this.flashDir.lerp(camDir, Math.min(1, dt * 11)).normalize();
+    this.flash.position.copy(camera.localToWorld(new THREE.Vector3(0.22, -0.22, -0.1)));
+    this.flash.target.position.copy(this.flash.position).add(this.flashDir);
+
+    this.prompt = null;
+    if (active) {
+      this.ray.set(camera.position, camDir);
+      const hit = this.ray.intersectObjects(interact, false)[0];
+      if (hit) { const inter = hit.object.userData.inter; this.prompt = inter.prompt(); if (Input.pressed.KeyE) inter.use(); }
+    }
+  }
+}
+function collideCircle(p, r) {
+  for (const b of colliders) {
+    const cx = clamp(p.x, b.x0, b.x1), cz = clamp(p.z, b.z0, b.z1), dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= r * r) continue;
+    if (d2 > 1e-8) { const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.z += dz / d * (r - d); }
+    else { const l = p.x - b.x0, rr = b.x1 - p.x, u = p.z - b.z0, dd = b.z1 - p.z, m = Math.min(l, rr, u, dd); if (m === l) p.x = b.x0 - r; else if (m === rr) p.x = b.x1 + r; else if (m === u) p.z = b.z0 - r; else p.z = b.z1 + r; }
+  }
+}
+
+/* =====================================================================
+   ONKEL KURBEL
+   ===================================================================== */
+function findPath(s, g) {
+  const nearest = c => {
+    if (walk[c.y] && walk[c.y][c.x]) return c;
+    let best = walkCells[0], bd = 1e9;
+    for (const w of walkCells) { const d = (w.x - c.x) ** 2 + (w.y - c.y) ** 2; if (d < bd) { bd = d; best = w; } }
+    return best;
+  };
+  s = nearest(s); g = nearest(g);
+  if (s.x === g.x && s.y === g.y) return [g];
+  const key = (x, y) => y * W + x, gs = new Map([[key(s.x, s.y), 0]]), came = new Map(), closed = new Set(), open = [s];
+  while (open.length) {
+    let bi = 0, bf = 1e9;
+    for (let i = 0; i < open.length; i++) { const o = open[i], f = gs.get(key(o.x, o.y)) + Math.abs(o.x - g.x) + Math.abs(o.y - g.y); if (f < bf) { bf = f; bi = i; } }
+    const cur = open.splice(bi, 1)[0], ck = key(cur.x, cur.y);
+    if (cur.x === g.x && cur.y === g.y) { const res = []; let k = ck; while (k !== key(s.x, s.y)) { res.push({ x: k % W, y: (k / W) | 0 }); k = came.get(k); } return res.reverse(); }
+    closed.add(ck);
+    for (const [dx, dy] of DIRS) {
+      const nx = cur.x + dx, ny = cur.y + dy, nk = key(nx, ny);
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H || !walk[ny][nx] || closed.has(nk)) continue;
+      const ng = gs.get(ck) + 1;
+      if (ng < (gs.has(nk) ? gs.get(nk) : 1e9)) { gs.set(nk, ng); came.set(nk, ck); if (!open.some(o => o.x === nx && o.y === ny)) open.push({ x: nx, y: ny }); }
+    }
+  }
+  return [];
+}
+
+const FACE_Y = 3.0; // Höhe der Augen über dem Boden
+class Monster {
+  constructor(pos) {
+    this.root = new THREE.Group(); this.root.position.copy(pos); world.add(this.root);
+    this.state = 'patrol'; this.path = []; this.pi = 0; this.goal = pos.clone(); this.lastKnown = pos.clone();
+    this.repath = 0; this.lost = 0; this.search = 0; this.idle = 0; this.stepT = 0; this.twitch = 0; this.phase = 0; this.aggro = 0;
+    this.animSpeed = 0; this.seenByPlayer = false; this.headTarget = new THREE.Euler(); this.musicT = rand(20, 40);
+    this.build();
+  }
+  build() {
+    const r = this.root, pivot = (parent, x, y, z) => { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; };
+    this.upper = new THREE.Group(); r.add(this.upper);
+    this.legL = pivot(r, -0.2, 1.55, 0); this.legR = pivot(r, 0.2, 1.55, 0);
+    for (const l of [this.legL, this.legR]) {
+      part('cyl', l, [0, -0.78, 0], [0.13, 1.56, 0.13], MAT.cloth);
+      part('box', l, [0, -1.5, 0.08], [0.2, 0.12, 0.42], MAT.black);
+    }
+    // Rumpf: gestreifte Tonne
+    part('cyl', this.upper, [0, 2.05, 0], [0.86, 1.05, 0.66], MAT.stripes);
+    part('sph', this.upper, [0, 1.52, 0], [0.86, 0.3, 0.66], MAT.stripes);
+    for (let i = 0; i < 3; i++) part('sph', this.upper, [0, 2.35 - i * 0.28, 0.33], [0.1, 0.1, 0.06], MAT.brass);
+    for (let i = 0; i < 10; i++) { const a = i / 10 * TAU; part('sph', this.upper, [Math.cos(a) * 0.36, 2.6, Math.sin(a) * 0.28], [0.26, 0.12, 0.2], MAT.glove); }
+    // Aufziehschlüssel
+    this.key = pivot(this.upper, 0, 2.1, -0.36);
+    part('cyl', this.key, [0, 0, -0.15], [0.07, 0.3, 0.07], MAT.brass, [Math.PI / 2, 0, 0]);
+    for (const s of [-1, 1]) part('sph', this.key, [s * 0.22, 0, -0.3], [0.32, 0.22, 0.05], MAT.brass);
+    // Kopf
+    this.head = pivot(this.upper, 0, 2.66, 0.02);
+    part('sph', this.head, [0, 0.32, 0], [0.62, 0.68, 0.58], MAT.porcelain);
+    for (const s of [-1, 1]) {
+      part('sph', this.head, [s * 0.13, 0.4, 0.24], [0.14, 0.15, 0.08], MAT.black, null, false);
+      part('sph', this.head, [s * 0.13, 0.4, 0.28], [0.035, 0.035, 0.02], MAT.pupil, null, false);
+      part('sph', this.head, [s * 0.2, 0.24, 0.23], [0.12, 0.08, 0.04], MAT.blush, null, false);
+    }
+    part('sph', this.head, [0, 0.3, 0.3], [0.09, 0.09, 0.09], MAT.blush, null, false);
+    this.mouth = pivot(this.head, 0, 0.16, 0);
+    for (let i = 0; i <= 12; i++) {
+      const a = (-65 + i * (130 / 12)) * D2R, x = Math.sin(a) * 0.24, y = -Math.cos(a) * 0.08, z = 0.27 * Math.cos(a * 0.7);
+      part('box', this.mouth, [x, y, z], [0.05, 0.06, 0.02], MAT.black, [0, a * 0.8, 0], false);
+      part('box', this.mouth, [x, y + 0.035, z + 0.006], [0.025, 0.035, 0.015], MAT.tooth, [0, a * 0.8, 0], false);
+      part('box', this.mouth, [x, y - 0.035, z + 0.006], [0.025, 0.035, 0.015], MAT.tooth, [0, a * 0.8, 0], false);
+    }
+    const hat = pivot(this.head, 0.05, 0.66, -0.02); hat.rotation.z = -0.22;
+    part('cyl', hat, [0, 0.14, 0], [0.28, 0.3, 0.28], MAT.black);
+    part('cyl', hat, [0, 0, 0], [0.44, 0.03, 0.44], MAT.black);
+    part('cyl', hat, [0, 0.05, 0], [0.285, 0.06, 0.285], MAT.blush);
+    // Arme
+    this.armL = pivot(this.upper, -0.5, 2.45, 0); this.armR = pivot(this.upper, 0.5, 2.45, 0);
+    for (const arm of [this.armL, this.armR]) {
+      part('cyl', arm, [0, -0.55, 0], [0.09, 1.1, 0.09], MAT.stripes);
+      const fore = pivot(arm, 0, -1.1, 0); fore.rotation.x = -14 * D2R;
+      part('cyl', fore, [0, -0.5, 0], [0.075, 1.0, 0.075], MAT.stripes);
+      part('sph', fore, [0, -1.05, 0.02], [0.22, 0.26, 0.15], MAT.glove);
+      for (let f = -1.5; f <= 1.5; f++) part('cyl', fore, [f * 0.045, -1.33, 0.03], [0.035, 0.38, 0.035], MAT.glove, [-8 * D2R, 0, f * 6 * D2R]);
+    }
+  }
+  startAudio() {
+    if (!Audio.ctx) return;
+    this.panner = Audio.panner(this.root.position, 26);
+    this.tick = Audio.src('tick', true); this.tickGain = Audio.ctx.createGain(); this.tickGain.gain.value = 0.7;
+    this.tick.connect(this.tickGain).connect(this.panner); this.tick.start();
+  }
+  stopAudio() { try { this.tick && this.tick.stop(); this.panner && this.panner.disconnect(); } catch (e) { } }
+  hear(pos, loud) {
+    if (this.state === 'jumpscare') return;
+    this.lastKnown.copy(pos);
+    if (this.state !== 'chase') { this.state = 'investigate'; this.setGoal(pos); }
+    if (loud) this.aggro = Math.min(this.aggro + 0.15, 0.6);
+  }
+  setGoal(p) { this.goal.copy(p); this.path = findPath(w2c(this.root.position), w2c(p)); this.pi = 0; this.repath = 0.35; }
+  pickPatrol() {
+    const pc = w2c(Game.player.pos); let best = pick(walkCells);
+    if (Math.random() < 0.65) for (let i = 0; i < 30; i++) { const c = pick(walkCells), d = Math.hypot(c.x - pc.x, c.y - pc.y); if (d > 3 && d < 10) { best = c; break; } }
+    this.setGoal(c2w(best.x, best.y));
+  }
+  moveTo(tx, tz, speed, dt) {
+    const p = this.root.position, dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+    if (d > 0.001) {
+      const s = Math.min(d, speed * dt); p.x += dx / d * s; p.z += dz / d * s;
+      let dr = Math.atan2(dx, dz) - this.root.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); this.root.rotation.y += dr * Math.min(1, dt * 6);
+    }
+    this.animSpeed = speed; return d;
+  }
+  follow(speed, dt) {
+    if (this.pi >= this.path.length) return this.moveTo(this.goal.x, this.goal.z, speed, dt) < 0.2;
+    const c = this.path[this.pi], last = this.pi === this.path.length - 1;
+    if (this.moveTo(last ? this.goal.x : c.x * S, last ? this.goal.z : c.y * S, speed, dt) < 0.25) this.pi++;
+    return false;
+  }
+  canSee(dist) {
+    const pl = Game.player;
+    let range = pl.flashlightOn ? 22 : 10; if (pl.crouch) range *= 0.5; if (this.state === 'chase') range = 28;
+    if (dist > range) return false;
+    const to = new THREE.Vector3(pl.pos.x - this.root.position.x, 0, pl.pos.z - this.root.position.z);
+    const fwd = new THREE.Vector3(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y));
+    if (dist > 2.5 && to.angleTo(fwd) > (this.state === 'chase' ? Math.PI : 80 * D2R)) return false;
+    return lineClear(this.root.position, pl.pos);
+  }
+  playerSees() {
+    const chest = this.root.position.clone(); chest.y = 2.2;
+    const v = chest.clone().project(camera);
+    if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.1) return false;
+    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    if (chest.clone().sub(camera.position).dot(camDir) <= 0) return false;
+    return camera.position.distanceTo(chest) < 26 && lineClear(camera.position, chest);
+  }
+  update(dt, t) {
+    const pl = Game.player;
+    this.key.rotation.z += dt * (this.state === 'chase' ? 9 : 2.5);
+    if (this.state === 'jumpscare') { this.jumpUpdate(dt); return; }
+    if (Game.state !== 'playing') { this.animate(0, dt); return; }
+    this.animSpeed = 0;
+    const p = this.root.position, dist = Math.hypot(p.x - pl.pos.x, p.z - pl.pos.z);
+    const sees = this.canSee(dist);
+    this.seenByPlayer = this.playerSees();
+    const mul = 1 + this.aggro + Game.fusesFound * 0.1;
+    if (sees) { if (this.state !== 'chase') Game.onChase(); this.state = 'chase'; this.lastKnown.copy(pl.pos); this.lost = 0; }
+    else if (dist < pl.noise && this.state !== 'chase') this.hear(pl.pos, false);
+
+    switch (this.state) {
+      case 'patrol':
+        if (this.idle > 0) { this.idle -= dt; break; }
+        if (!this.path.length || this.follow(1.5 * mul, dt)) { this.idle = rand(1, 4); this.pickPatrol(); }
+        break;
+      case 'investigate':
+        if (this.follow(2.6 * mul, dt)) { this.state = 'search'; this.search = 10; this.idle = 1.5; this.path = []; }
+        break;
+      case 'chase':
+        if (!sees) {
+          this.lost += dt;
+          if (this.lost < 2.2) this.lastKnown.copy(pl.pos);
+          if (this.lost > 6) { this.state = 'search'; this.search = 12; this.setGoal(this.lastKnown); break; }
+        }
+        this.repath -= dt;
+        if (sees && dist < 4.5) { this.moveTo(pl.pos.x, pl.pos.z, 4.2 * mul, dt); this.path = []; }
+        else { if (this.repath <= 0 || !this.path.length) this.setGoal(this.lastKnown); this.follow(4.2 * mul, dt); }
+        break;
+      case 'search':
+        this.search -= dt;
+        if (this.idle > 0) { this.idle -= dt; break; }
+        if (!this.path.length || this.follow(2.1 * mul, dt)) {
+          this.idle = rand(0.5, 2); const lc = w2c(this.lastKnown);
+          this.setGoal(c2w(clamp(lc.x + ((Math.random() * 7) | 0) - 3, 0, W - 1), clamp(lc.y + ((Math.random() * 7) | 0) - 3, 0, H - 1)));
+        }
+        if (this.search <= 0) { this.state = 'patrol'; this.path = []; }
+        break;
+    }
+
+    const prox = clamp(1 - dist / 18, 0, 1);
+    let fear = prox * 0.65;
+    if (this.seenByPlayer) fear = Math.max(fear, 0.55 + prox * 0.45);
+    if (this.state === 'chase') fear = Math.max(fear, 0.6 + prox * 0.4);
+    Game.fearTarget = fear;
+    if (this.panner) Audio.setPos(this.panner, new THREE.Vector3(p.x, 2.2, p.z));
+    if (this.tick) {
+      const chase = this.state === 'chase', moving = this.animSpeed > 0.1;
+      this.tick.playbackRate.value = chase ? 2.2 : moving ? 1 : 0.6;
+      this.tickGain.gain.value = chase ? 1 : 0.75;
+    }
+    this.musicT -= dt;
+    if (this.musicT <= 0 && dist < 22) { this.musicT = rand(25, 50); Audio.play3D('musicbox', new THREE.Vector3(p.x, 2.5, p.z), 0.8, rand(0.85, 1), 30); }
+    this.animate(this.animSpeed, dt);
+    if (dist < 1.3) Game.caught(this);
+  }
+  animate(speed, dt) {
+    const chase = this.state === 'chase';
+    // ruckartig wie ein Aufziehspielzeug: Phase springt in kleinen Stufen
+    this.phase += dt * (1.4 + speed * 1.5);
+    const ph = Math.floor(this.phase * 6) / 6;
+    const sw = clamp(speed / 2, 0, 1) * 30 * D2R;
+    this.legL.rotation.x = Math.sin(ph) * sw; this.legR.rotation.x = -Math.sin(ph) * sw;
+    const as = (chase ? 50 : 14) * D2R * clamp(speed, 0, 1), reach = chase ? -55 * D2R : 0;
+    this.armL.rotation.set(-Math.sin(ph) * as + reach, 0, -10 * D2R);
+    this.armR.rotation.set(Math.sin(ph) * as + reach, 0, 10 * D2R);
+    this.upper.position.y = Math.abs(Math.sin(ph)) * 0.08 * clamp(speed, 0, 1);
+    this.upper.rotation.set((chase ? 14 : 4) * D2R, 0, Math.sin(ph * 0.5) * 6 * D2R);
+    this.twitch -= dt;
+    if (this.twitch <= 0) {
+      const fast = chase || this.seenByPlayer;
+      this.twitch = fast ? rand(0.05, 0.35) : rand(0.5, 2.5);
+      if (Math.random() < 0.6) this.headTarget.set(rand(-15, 25) * D2R, rand(-40, 40) * D2R, rand(-70, 70) * D2R); else this.headTarget.set(0, 0, 0);
+    }
+    const hr = this.head.rotation, k = Math.min(1, dt * 30);
+    hr.set(hr.x + (this.headTarget.x - hr.x) * k, hr.y + (this.headTarget.y - hr.y) * k, hr.z + (this.headTarget.z - hr.z) * k);
+    if (speed > 0.1) {
+      this.stepT -= dt * speed;
+      if (this.stepT <= 0) {
+        this.stepT = 1.15;
+        Audio.play3D('monsterStep', new THREE.Vector3(this.root.position.x, 0.2, this.root.position.z), chase ? 1 : 0.7, rand(0.8, 1.05), 30);
+        if (chase) Game.player.shake = Math.max(Game.player.shake, 0.035);
+      }
+    }
+  }
+  beginJumpscare() {
+    this.state = 'jumpscare';
+    if (this.tick) { this.tick.playbackRate.value = 4; this.tickGain.gain.value = 1; }
+    this.faceLight = new THREE.PointLight(0xff3a1a, 1.2, 3, 2); this.faceLight.position.set(0, FACE_Y - 0.5, 1.3); this.root.add(this.faceLight);
+  }
+  jumpUpdate(dt) {
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+    const p = camera.position.clone().addScaledVector(fwd, 1.25);
+    this.root.position.set(p.x, camera.position.y - FACE_Y + 0.05, p.z);
+    this.root.rotation.y = Math.atan2(-fwd.x, -fwd.z);
+    this.upper.position.y = 0; this.upper.rotation.set(0, 0, 0);
+    this.head.rotation.set(rand(-12, 12) * D2R, rand(-12, 12) * D2R, rand(-30, 30) * D2R);
+    this.mouth.scale.y = lerp(this.mouth.scale.y, 3.2, Math.min(1, dt * 8));
+    this.armL.rotation.set((-95 + rand(-10, 10)) * D2R, 0, -35 * D2R);
+    this.armR.rotation.set((-95 + rand(-10, 10)) * D2R, 0, 35 * D2R);
+    if (this.panner) Audio.setPos(this.panner, this.root.position);
+  }
+}
+
+/* =====================================================================
+   EINGABE
+   ===================================================================== */
+const Input = { keys: {}, pressed: {}, locked: false, drag: false, fallback: false, endFrame() { this.pressed = {}; } };
+addEventListener('keydown', e => { if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); if (!Input.keys[e.code]) Input.pressed[e.code] = true; Input.keys[e.code] = true; });
+addEventListener('keyup', e => { Input.keys[e.code] = false; });
+addEventListener('blur', () => { Input.keys = {}; });
+addEventListener('mousemove', e => { if (Game.state !== 'playing' || Game.noteOpen) return; if (Input.locked || (Input.fallback && Input.drag)) Game.player.look(e.movementX || 0, e.movementY || 0); });
+canvas.addEventListener('mousedown', () => { Input.drag = true; if (Game.state === 'playing' && !Input.locked) lockPointer(); });
+addEventListener('mouseup', () => { Input.drag = false; });
+document.addEventListener('pointerlockchange', () => { Input.locked = document.pointerLockElement === canvas; if (!Input.locked && Game.state === 'playing') { Game.closeNote(); Game.pause(); } });
+document.addEventListener('pointerlockerror', () => { Input.fallback = true; });
+function lockPointer() { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { Input.fallback = true; }); } catch (e) { Input.fallback = true; } }
+
+/* =====================================================================
+   SPIEL-ABLAUF
+   ===================================================================== */
+const ui = { hud: $('hud'), cross: $('cross'), prompt: $('prompt'), fuses: $('fuses'), inv: $('inv'), bat: $('bat'), batLabel: $('batLabel'), sta: $('sta'), staWrap: $('staWrap'), msg: $('msg') };
+const fmt = s => `${String((s / 60) | 0).padStart(2, '0')}:${String((s % 60) | 0).padStart(2, '0')}`;
+const show = (id, on) => { $(id).hidden = !on; };
+const Game = {
+  state: 'loading', fear: 0, fearTarget: 0, fusesFound: 0, noteOpen: false, player: null, monster: null,
+  time: 0, msgT: 0, ambientT: 15, chaseCd: 0, glitch: 0, flash: 0, jump: 0, death: 0, white: 0, heart: null, drone: null, siren: null,
+  build() {
+    if (world) { scene.remove(world); this.monster && this.monster.stopAudio(); }
+    if (this.player) { scene.remove(this.player.flash); scene.remove(this.player.flash.target); }
+    surgeT = 0; alarmOn = false;
+    buildLevel();
+    this.player = new Player(spawnP); this.monster = new Monster(spawnM);
+    this.fear = this.fearTarget = 0; this.fusesFound = 0; this.time = 0; this.chaseCd = 0; this.ambientT = rand(12, 25);
+    this.jump = this.death = this.white = this.flash = 0;
+    ui.fuses.textContent = `0 / ${NEEDED}`;
+  },
+  start() {
+    Audio.init();
+    if (!this.drone) { this.drone = Audio.loop('drone', 0.45); this.heart = Audio.loop('heartbeat', 0); }
+    if (this.drone) this.drone.g.gain.value = 0.45;
+    this.monster.startAudio();
+    this.state = 'playing';
+    show('intro', false); show('dead', false); show('won', false); ui.hud.hidden = false;
+    lockPointer();
+    this.message('Finde 3 Akkupacks für den Lastenaufzug. Hör auf das Ticken.');
+    Audio.play('musicbox', 0.35, 0.9);
+  },
+  restart() { if (this.siren) { try { this.siren.s.stop(); } catch (e) { } this.siren = null; } this.build(); this.start(); },
+  pause() { if (this.state !== 'playing') return; this.state = 'paused'; show('pause', true); if (Audio.ctx) Audio.ctx.suspend(); },
+  resume() { if (this.state !== 'paused') return; show('pause', false); if (Audio.ctx) Audio.ctx.resume(); this.state = 'playing'; lockPointer(); },
+  message(m) { ui.msg.textContent = m; this.msgT = 4; },
+  openNote(t, b) { $('noteTitle').textContent = t; $('noteBody').textContent = b; this.noteOpen = true; show('note', true); Audio.play('click', 0.5); },
+  closeNote() { if (!this.noteOpen) return; this.noteOpen = false; show('note', false); },
+  onFusePicked() {
+    this.fusesFound++; ui.fuses.textContent = `${this.fusesFound} / ${NEEDED}`;
+    Audio.play('pickup', 0.9); surgeAll(2); this.flash = 0.5; this.player.shake = 0.15;
+    this.monster.hear(this.player.pos, true);
+    Audio.play3D('giggle', this.monster.root.position.clone().setY(2.8), 1, 1, 40);
+    this.message(this.fusesFound < NEEDED ? `Akkupack ${this.fusesFound}/${NEEDED}. Irgendwo kichert etwas.` : 'Alle Akkupacks! Zum Lastenaufzug in der Produktionshalle!');
+  },
+  onChase() { if (this.chaseCd > 0) return; this.chaseCd = 18; Audio.play('stinger', 0.9); this.flash = 0.5; this.player.shake = 0.12; },
+  openGate(g) {
+    g.opening = true; setAlarm();
+    this.monster.hear(g.group.position, true); this.monster.state = 'chase';
+    this.message('Die Aufzugtür öffnet sich … ER KOMMT!');
+    Audio.play('scream', 0.5); this.siren = Audio.loop('siren', 0.35);
+    g.glow.visible = true; g.t = 0;
+  },
+  caught(m) {
+    if (this.state !== 'playing') return;
+    this.state = 'dead'; this.closeNote(); this.endTime = this.time;
+    this.player.frozen = true; m.beginJumpscare(); Audio.play('scream', 1);
+    if (this.drone) this.drone.g.gain.value = 0;
+    this.jumpT = 0;
+  },
+  win() {
+    if (this.state !== 'playing') return;
+    this.state = 'won'; this.endTime = this.time; this.winT = 0;
+    this.monster.root.visible = false; this.monster.stopAudio(); Audio.play('pickup', 1);
+    if (this.siren) { try { this.siren.s.stop(); } catch (e) { } this.siren = null; }
+  },
+  update(dt, t) {
+    const pl = this.player, playing = this.state === 'playing';
+    if (Input.pressed.KeyR && (this.state === 'dead' || this.state === 'won') && (this.death >= 1 || this.white >= 1)) this.restart();
+    const pauseKey = Input.pressed.KeyP || (Input.pressed.Escape && !this.noteOpen);
+    if (pauseKey && playing) { document.exitPointerLock && document.exitPointerLock(); this.pause(); }
+    else if (pauseKey && this.state === 'paused') this.resume();
+    if (this.noteOpen && (Input.pressed.KeyE || Input.pressed.Escape)) { this.closeNote(); Input.pressed.KeyE = false; }
+    if (this.state === 'paused' || this.state === 'loading') return;
+
+    const active = playing && !pl.frozen && !this.noteOpen;
+    if (playing) this.time += dt;
+    pl.update(dt, t, active);
+    this.monster.update(dt, t);
+    updateFixtures(dt, t);
+    for (const s of spinners) s.rotation.y = t * 1.6;
+
+    if (gate && gate.opening && !gate.open) {
+      gate.t += dt; const k = Math.min(1, gate.t / 10);
+      gate.door.position.y = gate.doorStart + 3.3 * k * k;
+      if (Math.random() < 0.05) pl.shake = Math.max(pl.shake, 0.05);
+      if (k >= 1) { gate.open = true; gate.collider.x0 = gate.collider.x1 = gate.collider.z0 = gate.collider.z1 = -999; this.message('DIE TÜR IST OFFEN. REIN DA!'); }
+    }
+    if (this.state === 'dead') {
+      this.jumpT += dt;
+      if (this.jumpT < 1.7) { this.jump = 1; pl.flash.intensity *= 0.12; pl.forceLook(this.monster.root.position.clone().add(new THREE.Vector3(0, FACE_Y, 0)), dt); pl.shake = 0.35; }
+      else {
+        if (this.monster.root.visible) { this.monster.root.visible = false; this.monster.stopAudio(); }
+        this.jump = 0; this.death = Math.min(1, this.death + dt);
+        if (this.death >= 1 && $('dead').hidden) { $('deadStats').textContent = `Überlebt ${fmt(this.endTime)} · Akkupacks ${this.fusesFound}/${NEEDED}`; show('dead', true); ui.hud.hidden = true; document.exitPointerLock && document.exitPointerLock(); }
+      }
+    }
+    if (this.state === 'won') {
+      this.winT += dt; this.white = Math.min(1, this.winT / 2.5);
+      if (this.drone) this.drone.g.gain.value = 0.45 * (1 - this.white);
+      if (this.white >= 1 && $('won').hidden) { $('wonStats').textContent = `Zeit ${fmt(this.endTime)}`; show('won', true); ui.hud.hidden = true; document.exitPointerLock && document.exitPointerLock(); }
+    }
+
+    const target = playing ? this.fearTarget : this.state === 'dead' ? 1 : 0;
+    this.fear += clamp(target - this.fear, -dt * 0.3, dt * 1.5);
+    if (this.heart) { this.heart.g.gain.value = clamp(this.fear * 0.9 + (1 - pl.stamina) * 0.25, 0, 1.1); this.heart.s.playbackRate.value = 0.75 + this.fear * 0.9 + (1 - pl.stamina) * 0.3; }
+
+    if (playing) {
+      this.chaseCd -= dt; this.ambientT -= dt;
+      if (this.ambientT <= 0) {
+        this.ambientT = rand(14, 38);
+        const n = pick(['clank', 'clank', 'creakSpring', 'bang', 'giggle']), a = rand(0, TAU), r = rand(5, 14);
+        Audio.play3D(n, new THREE.Vector3(pl.pos.x + Math.cos(a) * r, 2, pl.pos.z + Math.sin(a) * r), 0.9, rand(0.9, 1.1), 30);
+        if (Math.random() < 0.3) surgeAll(0.8);
+      }
+    }
+
+    if (Math.random() < this.fear * this.fear * 0.03) this.glitch = rand(0.05, 0.18);
+    this.glitch -= dt; this.flash = Math.max(0, this.flash - dt * 1.5);
+    FXU.time.value = t; FXU.fear.value = this.fear; FXU.glitch.value = this.glitch > 0 ? 1 : 0;
+    FXU.jump.value = this.jump; FXU.death.value = this.death; FXU.flash.value = this.flash; FXU.white.value = this.white;
+    bloom.strength = 0.6 + this.white * 3;
+    Audio.listen(camera);
+
+    if (playing) {
+      ui.cross.classList.toggle('on', !!pl.prompt);
+      ui.prompt.innerHTML = pl.prompt && !this.noteOpen ? `<kbd>E</kbd>${pl.prompt}` : '';
+      ui.inv.textContent = pl.fuses > 0 ? `Dabei: ${pl.fuses} Akkupack${pl.fuses > 1 ? 's' : ''}` : '';
+      ui.bat.style.transform = `scaleX(${pl.battery})`; ui.bat.classList.toggle('low', pl.battery < 0.2);
+      ui.batLabel.textContent = pl.flashOn ? 'Lampe' : 'Lampe (aus)';
+      ui.sta.style.transform = `scaleX(${pl.stamina})`; ui.staWrap.style.visibility = pl.stamina < 0.99 ? 'visible' : 'hidden';
+      this.msgT -= dt; ui.msg.style.opacity = clamp(this.msgT, 0, 1);
+    }
+  },
+};
+
+$('startBtn').addEventListener('click', () => Game.start());
+$('resumeBtn').addEventListener('click', () => Game.resume());
+$('retryBtn').addEventListener('click', () => Game.restart());
+$('againBtn').addEventListener('click', () => Game.restart());
+
+/* =====================================================================
+   LADEN & HAUPTSCHLEIFE
+   ===================================================================== */
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  if (Game.state === 'intro') {
+    // Kamerafahrt durch die Produktionshalle hinter dem Menü
+    camera.position.set(4 * S + Math.sin(t * 0.04) * 6 + 6, 2.4, 9 * S);
+    camera.rotation.set(-0.08, -Math.PI / 2 + Math.sin(t * 0.09) * 0.35, 0);
+    Game.player.flash.intensity = 0;
+    Game.monster.key.rotation.z += dt * 2;
+    updateFixtures(dt, t);
+    FXU.time.value = t; FXU.fear.value = 0.15 + 0.1 * Math.sin(t * 0.3);
+  } else if (Game.state !== 'loading') Game.update(dt, t);
+  Input.endFrame();
+  if (Game.state !== 'loading') composer.render(dt);
+}
+async function load() {
+  const btn = $('startBtn');
+  try { await Promise.race([document.fonts.load('40px "Lilita One"'), new Promise(r => setTimeout(r, 1500))]); } catch (e) { }
+  const keys = Object.keys(texJobs);
+  for (let i = 0; i < keys.length; i++) { btn.textContent = `Lädt Texturen … ${Math.round(i / keys.length * 55)} %`; await sleep(); TEX[keys[i]] = texJobs[keys[i]](); }
+  buildMaterials();
+  const snd = Object.keys(SND);
+  for (let i = 0; i < snd.length; i++) { btn.textContent = `Lädt Geräusche … ${55 + Math.round(i / snd.length * 40)} %`; await sleep(); RAW[snd[i]] = SND[snd[i]](); }
+  btn.textContent = 'Baue Fabrik …'; await sleep();
+  Game.build();
+  Game.state = 'intro';
+  btn.disabled = false; btn.textContent = 'Fabrik betreten'; btn.focus({ preventScroll: true });
+}
+window.__kurbel = Game;
+window.__kurbelDbg = { composer, bloom, horrorPass, scene, camera };
+frame();
+load();
+</script>
