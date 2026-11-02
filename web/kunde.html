@@ -523,9 +523,6 @@ body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100v
 @media (max-width:420px){#intro .logo-gross{font-size:22px;letter-spacing:.04em}.fuss{letter-spacing:.03em}.fuss span{flex-wrap:wrap}}
 
 /* ===================== NEO: Animationen & Effekte ===================== */
-@view-transition{navigation:auto}
-::view-transition-old(root){animation:vt-raus .28s cubic-bezier(.4,0,1,1) both}
-::view-transition-new(root){animation:vt-rein .45s cubic-bezier(.2,.8,.2,1) both}
 @keyframes vt-raus{to{opacity:0;filter:blur(6px);transform:scale(.985)}}
 @keyframes vt-rein{from{opacity:0;filter:blur(8px);transform:scale(1.015)}}
 #neo-licht{position:fixed;left:0;top:0;width:560px;height:560px;margin:-280px 0 0 -280px;z-index:0;pointer-events:none;border-radius:50%;

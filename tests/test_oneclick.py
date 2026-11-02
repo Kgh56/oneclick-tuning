@@ -448,6 +448,11 @@ class WebTests(Basis):
         A.aufraeumen()
         self.assertIsNone(A.finde_ticket(t["id"]))
 
+    def test_rechtstexte_im_programm_mit_zurueck(self):
+        for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
+            self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck
+            self.assertNotIn("Zurück zum Programm", self.kunde.get(url, headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
+
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
         self.assertEqual(self.angebot(aid), {"original": "Original (Rückrüsten)"})

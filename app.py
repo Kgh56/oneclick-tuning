@@ -2601,7 +2601,15 @@ nav a.an{color:var(--text);font-weight:600}
 .hero h1 span{background:none;color:#5aa0ff}
 input:focus,textarea:focus{border-color:#2f7bff;box-shadow:0 0 0 3px rgba(47,123,255,.2)}
 main>*{animation:none}
+.programm-leiste{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;padding:10px max(16px,calc((100% - var(--breite))/2));
+background:#101217;border-bottom:1px solid var(--rand)}
+.programm-leiste .leise{font-size:13px}
+.programm-leiste~header{display:none}
 </style></head><body>
+{% if im_programm and not session.admin %}<div class="programm-leiste pywebview-drag-region"><a class="btn klein" href="/" id="zurueck-programm">← Zurück zum Programm</a>
+<span class="leise">{{ programm_name }}</span></div>
+<script>document.addEventListener('keydown',function(e){if(e.key==='Escape')location.href='/';});
+document.getElementById('zurueck-programm').addEventListener('mousedown',function(e){e.stopPropagation();});</script>{% endif %}
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
@@ -3373,6 +3381,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
             "firma": lade_config().get("firmenname") or PROGRAMM_NAME,
+            "im_programm": ist_programm(), "programm_name": PROGRAMM_NAME,
             "zu_sortieren": eingang_anzahl() if session.get("admin") else 0,
             "tickets_offen": sum(1 for t in alle_tickets() if t["status"] == "OFFEN") if session.get("admin") else 0}
 
