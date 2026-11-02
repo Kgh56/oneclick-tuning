@@ -3270,15 +3270,15 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 "einstellungen.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Einstellungen</h1>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="speichern">
-<label class="feld">Firmenname (oben links und im Browser-Tab; das erste Wort wird rot)</label>
+<label class="feld">Firmenname (oben links im Admin-Bereich und im Browser-Tab)</label>
 <input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Solutions">
-<label class="feld">Adresse der Seite</label>
+<label class="feld">Adresse der Seite (hierhin schickt Stripe die Kunden nach dem Bezahlen zurück ins Programm)</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">
 <label class="feld">Telegram-Chat-ID</label>
 <input type="text" name="telegram_chat_id" value="{{ cfg.telegram_chat_id or '' }}" placeholder="wird unten automatisch gefunden">
-<label class="feld">WhatsApp-Nummer für Kunden mit Problemen nach dem Download (mit Ländervorwahl, z. B. 4915568540674; leer = Knopf aus)</label>
+<label class="feld">WhatsApp-Nummer für den Knopf „Fragen? Per WhatsApp schreiben“ auf der Werbeseite (mit Ländervorwahl, z. B. 4915568540674; leer = Knopf aus). Im Programm läuft der Support über Tickets.</label>
 <input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
