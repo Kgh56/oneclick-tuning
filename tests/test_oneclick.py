@@ -52,6 +52,7 @@ class Basis(unittest.TestCase):
         d = Path(self.tmp.name)
         oneclick.ARCHIV, oneclick.INDEX_DATEI = d / "archiv", d / "index.json"
         oneclick.OPTIONEN_DATEI = d / "optionen.json"
+        oneclick.NAMEN_DATEI = d / "loesung_namen.json"
         A.AUFTRAEGE, A.BENUTZER_DATEI, A.CONFIG_DATEI = d / "auftraege", d / "benutzer.json", d / "config.json"
         A.EINGANG = d / "eingang"
         A.EIGENE = d / "eigene"
@@ -1344,11 +1345,40 @@ class ZahlungTests(WebTests):
         self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["zahlung"], "bezahlt")
         self.assertEqual(self.laden(aid).status_code, 200)
 
+    def test_loesungen_umbenennen(self):
+        a = self.admin()
+        speichern = lambda **namen: html.unescape(a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "preise",
+            **{f"name_{k}": v for k, v in namen.items()}}, follow_redirects=True).text)
+        oneclick.option_anlegen("Drallklappen")
+        r = speichern(stage1="Stage 1 (+40 PS)", original="Serien-Software", drallklappen="Swirl Flaps", popsbangs="Pops & Bangs")
+        self.assertIn("3 Name(n) geändert", r)
+        namen = A.option_namen()
+        self.assertEqual((namen["stage1"], namen["original"], namen["drallklappen"], namen["popsbangs"]),
+                         ("Stage 1 (+40 PS)", "Serien-Software", "Swirl Flaps", "Pops & Bangs"))
+        self.assertIn('value="Stage 1 (+40 PS)"', a.get("/admin/archiv").text)
+        # Kunde sieht die neuen Namen, Schluessel bleiben gleich
+        aid = self.hochladen(self.golf)
+        angebot = {o["key"]: o["name"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]}
+        self.assertEqual(angebot["stage1"], "Stage 1 (+40 PS)")
+        self.assertEqual(self.kunde.get("/api/info").json["optionen"][0], {"key": "stage1", "name": "Stage 1 (+40 PS)"})
+        # ZIP-Import erkennt auch den neuen Namen
+        self.assertEqual(oneclick.loesung_aus_name("Golf_SwirlFlaps.bin"), "drallklappen")
+        self.assertEqual(oneclick.loesung_aus_name("Golf_Stage1.bin"), "stage1")
+        # Fehler: doppelt, Abgas, leere eigene Loesung -> nichts geaendert
+        self.assertIn("doppelt", speichern(stage2="stage 1 (+40 ps)"))
+        self.assertIn("Abgasreinigung", speichern(vmax="DPF off"))
+        self.assertIn("darf nicht leer", speichern(drallklappen="  "))
+        self.assertEqual((A.option_namen()["stage2"], A.option_namen()["vmax"]), ("Stage 2", "Vmax offen"))
+        # leer = Standardname zurueck
+        speichern(stage1="", original="")
+        self.assertEqual((A.option_namen()["stage1"], A.option_namen()["original"]), ("Stage 1", "Original (Rückrüsten)"))
+        self.assertEqual(json.loads(oneclick.NAMEN_DATEI.read_text()), {})
+
     def test_admin_preise_und_preis_beim_freigeben(self):
         a = self.admin()
         r = a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "preise", "preis_stage1": "299,00",
                                              "preis_original": "49", "preis_vmax": ""}, follow_redirects=True)
-        self.assertIn("Preise gespeichert", r.text)
+        self.assertIn("Gespeichert", r.text)
         self.assertEqual(A.lade_config()["preise"], {"stage1": 29900, "original": 4900})
         self.assertIn("kein Preis", a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "preise", "preis_stage1": "abc"},
                                            follow_redirects=True).text.replace("gültiger Preis", "kein Preis"))

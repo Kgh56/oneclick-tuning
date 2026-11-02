@@ -40,6 +40,7 @@ BASE = Path(__file__).resolve().parent
 ARCHIV = BASE / "archiv"
 INDEX_DATEI = BASE / "index.json"
 OPTIONEN_DATEI = BASE / "optionen.json"   # selbst angelegte Loesungen (z. B. Drallklappen)
+NAMEN_DATEI = BASE / "loesung_namen.json"  # eigene Anzeigenamen fuer feste Loesungen und "Original"
 
 # Feste Loesungen (Dateiname im Archivordner = <schluessel>.bin)
 STANDARD_OPTIONEN = {
@@ -301,9 +302,73 @@ def eigene_optionen() -> dict:
     return json.loads(OPTIONEN_DATEI.read_text()) if OPTIONEN_DATEI.exists() else {}
 
 
+def _json_schreiben(pfad: Path, daten: dict):
+    tmp = pfad.with_suffix(".tmp")
+    tmp.write_text(json.dumps(daten, indent=2, ensure_ascii=False))
+    tmp.replace(pfad)
+
+
+def namen_aenderungen() -> dict:
+    """Vom Admin geaenderte Namen fester Loesungen: {schluessel: name}."""
+    try:
+        return json.loads(NAMEN_DATEI.read_text()) if NAMEN_DATEI.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def optionen() -> dict:
-    """Alle Loesungen: {schluessel: Anzeigename}, feste zuerst."""
-    return {**STANDARD_OPTIONEN, **eigene_optionen()}
+    """Alle Loesungen: {schluessel: Anzeigename}, feste zuerst. Der Schluessel bleibt immer gleich,
+    nur der angezeigte Name laesst sich aendern."""
+    alle = {**STANDARD_OPTIONEN, **eigene_optionen()}
+    for key, name in namen_aenderungen().items():
+        if key in STANDARD_OPTIONEN and name:
+            alle[key] = name
+    return alle
+
+
+def original_name() -> str:
+    return namen_aenderungen().get(ORIGINAL) or ORIGINAL_NAME
+
+
+def namen_speichern(neu: dict) -> int:
+    """Anzeigenamen aendern: {schluessel: neuer name}. Leer = Standardname (bei festen Loesungen).
+    Rueckgabe: Anzahl geaenderter Namen. Wirft ValueError bei ungueltigen Namen."""
+    eigene, aenderungen = eigene_optionen(), namen_aenderungen()
+    standard = {**STANDARD_OPTIONEN, ORIGINAL: ORIGINAL_NAME}
+    vorher = {**optionen(), ORIGINAL: original_name()}
+    ergebnis = dict(vorher)
+    for key, name in neu.items():
+        if key not in vorher:
+            continue
+        name = " ".join(str(name or "").split())[:40]
+        if not name:
+            if key in eigene:
+                raise ValueError(f"„{vorher[key]}“: Der Name darf nicht leer sein.")
+            name = standard[key]
+        if abgas_abschaltung(name):
+            raise ValueError(f"„{name}“: Lösungen, die die Abgasreinigung abschalten, werden nicht unterstützt.")
+        ergebnis[key] = name
+    gesehen = {}
+    for key, name in ergebnis.items():
+        if name.casefold() in gesehen:
+            raise ValueError(f"Der Name „{name}“ kommt doppelt vor. Bitte jeder Lösung einen eigenen Namen geben.")
+        gesehen[name.casefold()] = key
+    geaendert, eigene_neu = 0, False
+    for key, name in ergebnis.items():
+        if name == vorher[key]:
+            continue
+        geaendert += 1
+        if key in eigene:
+            eigene[key], eigene_neu = name, True
+        elif name == standard[key]:
+            aenderungen.pop(key, None)
+        else:
+            aenderungen[key] = name
+    if eigene_neu:
+        _json_schreiben(OPTIONEN_DATEI, eigene)
+    if geaendert:
+        _json_schreiben(NAMEN_DATEI, aenderungen)
+    return geaendert
 
 
 def option_anlegen(name: str) -> str:
@@ -348,6 +413,7 @@ def loesung_aus_name(name: str):
     if stamm in alle:
         return stamm
     treffer = {k for k in eigene_optionen() if k in schluessel(stamm)}
+    treffer |= {k for k, n in alle.items() if len(schluessel(n)) >= 4 and schluessel(n) in schluessel(stamm)}   # auch umbenannte
     treffer |= {opt for opt, muster in MUSTER_OPTION.items() if muster.search(stamm)}
     return kombi_schluessel(treffer) if treffer else None
 

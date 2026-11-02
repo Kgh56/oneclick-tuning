@@ -71,7 +71,7 @@ class OptionNamen(dict):
 
 
 def option_namen() -> OptionNamen:
-    return OptionNamen({**oneclick.optionen(), oneclick.ORIGINAL: oneclick.ORIGINAL_NAME})
+    return OptionNamen({**oneclick.optionen(), oneclick.ORIGINAL: oneclick.original_name()})
 
 
 # ENTWURF: hochgeladen, Kunde waehlt noch die Option; danach entscheidet der Admin
@@ -655,7 +655,7 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
         if not auswahl or len(auswahl) != len(gewaehlt):
             raise Abgelehnt("Bitte eine oder mehrere der angezeigten Lösungen wählen.")
         if oneclick.ORIGINAL in auswahl and len(auswahl) > 1:
-            raise Abgelehnt(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
+            raise Abgelehnt(f"„{oneclick.original_name()}“ kann nicht mit anderen Lösungen kombiniert werden.")
         ordner = AUFTRAEGE / aid
         if len(auswahl) == 1:
             (ordner / f"loesung_{auswahl[0]}.bin").replace(ordner / "ergebnis.bin")
@@ -1990,7 +1990,7 @@ def eigenes_file_download(eid):
         flash("Bitte mindestens eine Lösung auswählen.")
         return render_template("eigenes.html", e=e, namen=option_namen())
     if oneclick.ORIGINAL in auswahl and len(auswahl) > 1:
-        flash(f"„{oneclick.ORIGINAL_NAME}“ kann nicht mit anderen Lösungen kombiniert werden.")
+        flash(f"„{oneclick.original_name()}“ kann nicht mit anderen Lösungen kombiniert werden.")
         return render_template("eigenes.html", e=e, namen=option_namen())
     if len(auswahl) == 1:
         daten = (ordner / f"loesung_{auswahl[0]}.bin").read_bytes()
@@ -2018,6 +2018,7 @@ def admin_archiv():
     return render_template("archiv.html", eintraege=eintraege, doppelt=doppelt, preise=preise(),
                            zahlung=zahlung_aktiv(), euro=euro,
                            eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen(),
+                           standard_namen={**oneclick.STANDARD_OPTIONEN, oneclick.ORIGINAL: oneclick.ORIGINAL_NAME},
                            sicherungen=sicherungen(), neuaufbau=status)
 
 
@@ -2033,12 +2034,20 @@ def loesungen_verwalten():
                     neu[key] = cent_aus(wert)
                 except ValueError as e:
                     fehler.append(f"{option_namen()[key]}: {e}")
+        namen = {key: request.form[f"name_{key}"] for key in [*oneclick.optionen(), oneclick.ORIGINAL]
+                 if f"name_{key}" in request.form}
         if fehler:
             for f in fehler:
                 flash(f"Nicht gespeichert – {f}")
-        else:
-            speichere_config({"preise": neu})
-            flash("Preise gespeichert.")
+            return redirect(url_for("admin_archiv") + "#preise")
+        try:
+            with index_sperre:
+                umbenannt = oneclick.namen_speichern(namen)
+        except ValueError as e:
+            flash(f"Nicht gespeichert – {e}")
+            return redirect(url_for("admin_archiv") + "#preise")
+        speichere_config({"preise": neu})
+        flash("Gespeichert." + (f" {umbenannt} Name(n) geändert – Kunden sehen die neuen Namen sofort im Programm." if umbenannt else ""))
         return redirect(url_for("admin_archiv") + "#preise")
     try:
         with index_sperre:
@@ -2837,7 +2846,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <div class="hinweis">Mit Archivname landet das Paar im Archiv – der nächste Kunde mit diesem File bekommt es dann sofort automatisch
 (nur bei einer einzelnen Lösung, nicht bei Kombinationen).</div>
 {% if zahlung %}<label class="feld" style="margin-top:12px">Preis in € (bezahlt der Kunde, bevor er herunterladen kann)</label>
-<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}">{% endif %}
+<input type="text" name="preis" inputmode="decimal" value="{{ '%.2f'|format((a.preis or 0) / 100)|replace('.', ',') }}">{% endif %}
 <button class="btn gruen" style="margin-top:10px">Hochladen &amp; an Kunden schicken</button></form>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-top:26px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
@@ -2854,7 +2863,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="ok">
 {% if zahlung %}<label class="leise" style="display:flex;gap:8px;align-items:center;font-size:14px">Preis
-<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}" style="width:110px;margin:0"> €</label>{% endif %}
+<input type="text" name="preis" inputmode="decimal" value="{{ '%.2f'|format((a.preis or 0) / 100)|replace('.', ',') }}" style="width:110px;margin:0"> €</label>{% endif %}
 <button class="btn gruen">✓ Bestätigen</button></form>
 </div>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" style="margin-bottom:22px">
@@ -2867,7 +2876,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <p><input type="file" name="datei"></p>
 <input type="text" name="archiv_name" placeholder="Archivname, z. B. golf7_20tdi_03L906018JL (leer = nicht ins Archiv)">
 {% if zahlung %}<label class="feld">Preis in € für diesen Auftrag</label>
-<input type="text" name="preis" inputmode="decimal" value="{{ ((a.preis or 0) / 100)|round(2)|string|replace('.', ',') }}">{% endif %}
+<input type="text" name="preis" inputmode="decimal" value="{{ '%.2f'|format((a.preis or 0) / 100)|replace('.', ',') }}">{% endif %}
 <button class="btn grau">Hochladen &amp; freigeben</button></form>
 {% endif %}
 </div>
@@ -2984,21 +2993,29 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <button class="btn grau">Lösung anlegen</button></form>
 <form method="post" action="{{ url_for('loesungen_verwalten') }}" id="preise" style="margin-top:22px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="preise">
-<h2 style="margin-top:8px">Preise</h2>
+<h2 style="margin-top:8px">Name und Preis</h2>
+<p class="leise" style="margin-top:-6px">So heißen die Lösungen im Programm. Namen kannst du jederzeit ändern – Archiv und alte Aufträge bleiben erhalten.
+Leeres Namensfeld = Standardname.</p>
 {% if not zahlung %}<p class="leise" style="margin-top:-6px">Bezahlen ist noch aus. Erst unter Einstellungen → Stripe den Schlüssel eintragen,
 dann gelten diese Preise.</p>{% endif %}
 <div class="dateien">
 {% for key, titel in archiv_optionen.items() %}<label class="datei" style="cursor:default"><span>{{ titel }}</span>
-<input type="text" name="preis_{{ key }}" inputmode="decimal" placeholder="Preis in €" value="{{ (preise[key] / 100)|round(2)|string|replace('.', ',') if key in preise else '' }}" style="margin:0">
+<small class="leise">Name im Programm</small>
+<input type="text" name="name_{{ key }}" value="{{ titel }}" maxlength="40" placeholder="{{ standard_namen.get(key, titel) }}" aria-label="Name" style="margin:0">
+<small class="leise">Preis in €</small>
+<input type="text" name="preis_{{ key }}" inputmode="decimal" placeholder="Preis in €" value="{{ '%.2f'|format(preise[key] / 100)|replace('.', ',') if key in preise else '' }}" style="margin:0">
 {% if zahlung and key not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>{% endfor %}
 <label class="datei" style="cursor:default"><span>{{ optionen[original] }}</span>
-<input type="text" name="preis_{{ original }}" inputmode="decimal" placeholder="Preis in €" value="{{ (preise[original] / 100)|round(2)|string|replace('.', ',') if original in preise else '' }}" style="margin:0">
+<small class="leise">Name im Programm</small>
+<input type="text" name="name_{{ original }}" value="{{ optionen[original] }}" maxlength="40" placeholder="{{ standard_namen[original] }}" aria-label="Name" style="margin:0">
+<small class="leise">Preis in €</small>
+<input type="text" name="preis_{{ original }}" inputmode="decimal" placeholder="Preis in €" value="{{ '%.2f'|format(preise[original] / 100)|replace('.', ',') if original in preise else '' }}" style="margin:0">
 {% if zahlung and original not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>
 </div>
-<button class="btn">Preise speichern</button>
+<button class="btn">Namen und Preise speichern</button>
 <div class="hinweis">Bei mehreren Lösungen werden die Preise addiert. Files aus dem Archiv kaufen Kunden sofort; Anfragen bezahlen sie nach deiner Freigabe.
 Für einzelne Aufträge kannst du den Preis beim Freigeben ändern.</div></form>
-<div class="hinweis">„Original (Rückrüsten)“ gibt es automatisch: Lädt ein Kunde ein getuntes File hoch, das zu einem Tuning-File im Archiv passt, kann er das Original bekommen.
+<div class="hinweis">„{{ optionen[original] }}“ gibt es automatisch: Lädt ein Kunde ein getuntes File hoch, das zu einem Tuning-File im Archiv passt, kann er das Original bekommen.
 Beim ZIP-Import erkennt die Seite eigene Lösungen am Dateinamen, z. B. <code>Golf7_Drallklappen.bin</code>.
 Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nicht unterstützt.</div></div>
 

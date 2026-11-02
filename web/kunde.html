@@ -1858,7 +1858,7 @@ function auswahlZeigen(a) {
   });
   $("#aw-titel").textContent = a.angebot.length > 1 ? "Verfügbare Lösungen – eine oder mehrere wählen" : "Verfügbare Lösung";
   $("#nx-bericht-text").textContent = a.angebot.some(o => o.key === zustand.original)
-    ? "Getuntes File erkannt – Original (Rückrüsten) verfügbar"
+    ? "Getuntes File erkannt – " + (a.angebot.find(o => o.key === zustand.original).name || "Original") + " verfügbar"
     : "File erkannt – " + a.angebot.length + (a.angebot.length === 1 ? " Lösung" : " Lösungen") + " im Archiv verfügbar";
   const feld = $("#aw-loesungen"); feld.innerHTML = "";
   a.angebot.forEach((o, i) => {
