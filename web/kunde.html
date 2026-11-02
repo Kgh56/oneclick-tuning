@@ -893,6 +893,170 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
 .aurora{transform:translate(calc(var(--px,0) * 40px),calc(var(--py,0) * 30px))}
 @media (max-width:980px),(hover:none){.fuss .kuerzel{display:none}.lauflicht,.impulse{display:none}}
 @media (prefers-reduced-motion:reduce){.lauflicht,.impulse,.funken{display:none}#titel,#titel.neu,#senden:not(:disabled){animation:none}}
+
+/* ===================== NITRO-AUFBAU (Blau) ===================== */
+:root{--nx-bg:#0d0f14;--nx-panel:#12151b;--nx-karte:#171a21;--nx-karte2:#1c2029;--nx-rand:#262b36;--nx-rand2:#333b4b;--nx-text:#e8ecf4;--nx-leise:#8b93a5;
+  --nx-blau:#2f7bff;--nx-blau2:#5aa0ff;--nx-gruen:#22c55e;--text:var(--nx-text);--leise:var(--nx-leise);--rand:var(--nx-rand);--rand2:var(--nx-rand2)}
+body{background:var(--nx-bg)}
+.deko,#netz,.lauflicht,.impulse,.scanstrahl,.spot::before,.spot::after,#neo-licht{display:none!important}
+.app{background:radial-gradient(1200px 500px at 85% -10%,rgba(47,123,255,.07),transparent 60%),var(--nx-bg)}
+/* Kopfleiste */
+header.nx-top{height:64px;padding:0 18px;gap:12px;background:#101217;border-bottom:1px solid #1f232c;border-image:none;backdrop-filter:none;flex-wrap:nowrap}
+.marke{padding:7px 16px 7px 10px;border-radius:11px;border:1px solid rgba(47,123,255,.4);background:linear-gradient(180deg,#151b29,#10131c);
+  box-shadow:0 0 22px rgba(47,123,255,.18),inset 0 1px 0 rgba(255,255,255,.04);font-size:15.5px}
+.marke .logo{width:30px;height:30px}
+.kopf-rechts{gap:10px;margin-left:auto}
+.nx-pille{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:9px;background:#15181f;border:1px solid var(--nx-rand);font-size:12.5px;font-weight:700;color:#dfe5f0;white-space:nowrap}
+.nx-pille>i{width:7px;height:7px;border-radius:50%;background:var(--nx-gruen);box-shadow:0 0 8px var(--nx-gruen)}
+.nx-pille b.blau{color:var(--nx-blau2)}.nx-pille b.gruen{color:var(--nx-gruen)}
+.nx-pille.verbindung{font-weight:600;color:var(--nx-leise)}
+.nx-glocke{position:relative;width:38px;height:38px;border-radius:9px;border:1px solid transparent;background:none;color:#dfe5f0;cursor:pointer;display:grid;place-items:center}
+.nx-glocke:hover{background:#181c24;border-color:var(--nx-rand)}
+.nx-glocke svg,.nx-fenster svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nx-glocke b{position:absolute;top:3px;right:3px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--nx-blau);font-size:10px;line-height:16px;color:#fff}
+.nx-glocke b:empty,.nx-glocke b.null{display:none}
+.nx-fenster{display:none;gap:2px;margin-left:6px;padding-left:10px;border-left:1px solid var(--nx-rand)}
+.app-modus .nx-fenster{display:flex}
+.nx-fenster button{width:40px;height:34px;border:0;border-radius:8px;background:none;color:#c9d1df;cursor:pointer;display:grid;place-items:center}
+.nx-fenster button:hover{background:#1b1f28}.nx-fenster button.zu{color:#ff5a52}.nx-fenster button.zu:hover{background:#e5372d;color:#fff}
+/* Raster: Menue | Inhalt */
+main{grid-template-columns:262px minmax(0,1fr)!important;gap:18px;padding:16px 18px 8px}
+.nx-inhalt{min-width:0;min-height:0;display:flex;flex-direction:column}
+.nx-seite{display:none;min-height:0}
+.nx-seite.aktiv{display:flex;flex-direction:column;flex:1;gap:16px}
+#seite-ecu .links{flex:1;min-height:0;display:flex;flex-direction:column}
+/* Karten: ruhig, flach, feiner Rand */
+.karte,.seite{background:var(--nx-karte);border:1px solid var(--nx-rand);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:20px 22px}
+.karte:hover{border-color:var(--nx-rand)}
+/* Menue links */
+.seite{background:var(--nx-panel);gap:12px;padding:14px 12px}
+.nx-menukopf{display:flex;align-items:center;gap:12px;padding:4px 4px 12px;border-bottom:1px solid var(--nx-rand);margin-bottom:4px}
+.nx-menukopf b{font-size:18px;font-weight:800}
+.nx-quadrat{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;background:linear-gradient(180deg,#3b86ff,#1f5fe0);box-shadow:0 6px 18px rgba(47,123,255,.35)}
+.nx-quadrat svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nx-quadrat.gross{width:64px;height:64px;border-radius:50%}.nx-quadrat.gross svg{width:30px;height:30px}
+.seite-nav{gap:9px}
+.seite-nav button,.seite-nav a{display:flex;align-items:center;gap:13px;width:100%;height:52px;padding:0 16px;border-radius:11px;border:1px solid var(--nx-rand);
+  background:var(--nx-karte);color:#e3e7ef;font:inherit;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none;transition:border-color .2s,background .2s,box-shadow .2s;transform:none!important}
+.seite-nav button svg,.seite-nav a svg{width:21px;height:21px;color:#aab3c5}
+.seite-nav button:hover,.seite-nav a:hover{border-color:var(--nx-rand2);background:#1b1f27}
+.seite-nav button.an{background:linear-gradient(90deg,rgba(47,123,255,.30),rgba(47,123,255,.12));border-color:var(--nx-blau);color:#fff;
+  box-shadow:0 0 22px rgba(47,123,255,.22),inset 0 0 14px rgba(47,123,255,.12)}
+.seite-nav button.an svg{color:var(--nx-blau2)}
+.seite-nav button::before{display:none}
+.nx-zaehler{margin-top:auto;padding:14px;border-radius:12px;background:#151820;border:1px solid var(--nx-rand);display:flex;flex-direction:column;gap:10px}
+.nx-zaehler .stat{padding:0;background:none;border:0;display:flex;justify-content:space-between;align-items:center}
+.nx-zaehler .s-kopf{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#c4cbd8;font-weight:600}
+.nx-zaehler .s-kopf svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nx-zaehler .stat b{font-size:15px;font-weight:800;color:#fff}
+.nx-zaehler .stat.gruen b{color:var(--nx-gruen)}
+.nx-balken{height:4px;border-radius:4px;background:#252a35;overflow:hidden}
+.nx-balken i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--nx-gruen),#4ade80);border-radius:4px;transition:width .6s}
+/* Hauptbereich ECU */
+.rahmen-haupt{padding:18px 22px 20px}
+.rahmen-kopf{margin:0 -22px 16px;padding:0 22px 14px;background:none;border-bottom:1px solid var(--nx-rand)}
+.rahmen-kopf h1,#titel{font-size:21px;font-weight:800;filter:none;background:none;-webkit-background-clip:initial;background-clip:initial;color:#fff;animation:none}
+#titel.neu{animation:titel-rein .45s cubic-bezier(.2,.8,.2,1) both}
+.btn.zurueck{background:#1b1f28;border:1px solid var(--nx-rand);box-shadow:none;color:#dfe5f0}
+.btn.zurueck:hover{border-color:var(--nx-blau);background:#1e2430}
+/* Knoepfe */
+.btn{border-radius:10px;font-weight:700;font-size:13.5px;padding:11px 20px;background:linear-gradient(180deg,#3b86ff,#1f5fe0);border:1px solid #4d92ff;
+  box-shadow:0 6px 20px rgba(47,123,255,.3);display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn:hover{background:linear-gradient(180deg,#4b91ff,#2a68ea);box-shadow:0 8px 26px rgba(47,123,255,.45)}
+.btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn.grau{background:#1b1f28;border:1px solid var(--nx-rand);color:#dfe5f0;box-shadow:none}
+.btn.grau:hover{border-color:var(--nx-rand2);background:#20252f}
+#senden:not(:disabled){animation:none}
+.btn::after{display:none}
+/* Upload-Feld */
+.zone{border-radius:14px;border:1.5px dashed #3a4357;box-shadow:none;margin-top:6px}
+.zone::after{background:radial-gradient(500px 260px at 50% 45%,rgba(47,123,255,.12),transparent 70%),#14171e;border-radius:13px}
+.zone:hover{box-shadow:none;border-color:var(--nx-blau)}
+.zone.ziehen{border-color:var(--nx-blau2);border-style:solid}
+.zone b{color:#fff;text-shadow:none;letter-spacing:.06em;font-size:clamp(16px,1.5vw,20px)}
+.zone .leise{color:var(--nx-leise)}
+.ecu{opacity:.95}.ecu .bahn{stroke:#2a3141}.ecu .knoten{fill:#14171e;stroke:#4b5872}.ecu .pin{fill:#4b5872}.ecu .chip{fill:#181c25;stroke:#3a4357}
+.zonen-scan{opacity:.35}
+.unter-titel{color:var(--nx-leise)}
+/* Verarbeitung */
+.analyse>div{background:#171a21;border:1px solid var(--nx-rand2);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+/* Auswahl im Nitro-Aufbau */
+.nx-felder{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:14px;padding:14px;border-radius:12px;background:#14171e;border:1px solid var(--nx-rand)}
+.nx-label{display:block;font-size:12.5px;font-weight:700;color:#cfd6e3;margin-bottom:8px}
+.nx-wert{display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-radius:10px;background:#181c24;border:1px solid var(--nx-rand);font-weight:700;font-size:13.5px;min-width:0}
+.nx-wert>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nx-wert.ok{border-color:var(--nx-gruen);box-shadow:0 0 0 1px rgba(34,197,94,.25)}
+.nx-wert.ok>svg{width:22px;height:22px;flex:none;padding:3px;border-radius:50%;background:var(--nx-gruen);fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.nx-tausch{font-size:12px;font-weight:700;color:var(--nx-blau2);cursor:pointer;padding:6px 10px;border-radius:8px;background:rgba(47,123,255,.12)}
+.nx-tausch:hover{background:rgba(47,123,255,.22)}
+.nx-feld .chips{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:10px;margin:0}
+.nx-feld .chip{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 12px;border-radius:10px;background:#181c24;border:1px solid var(--nx-rand);
+  font-size:12px;color:var(--nx-leise);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nx-feld .chip b{color:#fff;font-size:13.5px;overflow:hidden;text-overflow:ellipsis}
+.nx-leiste{display:flex;gap:10px;align-items:center;margin-top:14px;padding:12px;border-radius:12px;background:#14171e;
+  border:1px solid rgba(47,123,255,.55);box-shadow:0 0 0 1px rgba(47,123,255,.12),0 8px 26px rgba(47,123,255,.08)}
+.nx-leiste .feld{flex:1;min-width:120px;margin:0;height:42px}
+.nx-leiste .btn{white-space:nowrap;height:42px;padding:0 16px}
+#senden{background:linear-gradient(180deg,#3b86ff,#1f5fe0);border-color:#4d92ff;box-shadow:0 6px 20px rgba(47,123,255,.35)}
+#senden:hover{background:linear-gradient(180deg,#4b91ff,#2a68ea)}
+.nx-abschnitt{margin:20px 0 10px;font-size:15px;font-weight:700;color:#dfe5f0}
+.nx-loesungsfeld{padding:16px;border-radius:12px;background:#14171e;border:1px solid var(--nx-rand);min-height:90px;display:flex;flex-direction:column;gap:14px}
+#v-auswahl .loesungen{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0}
+.loesung{width:auto;padding:9px 14px;border-radius:9px;background:#1b1f28;border:1px solid var(--nx-rand);font-size:13px;font-weight:700;text-transform:none;
+  color:#cfd6e3;box-shadow:none;gap:10px}
+.loesung:hover{border-color:var(--nx-blau);box-shadow:none}
+.loesung.an{background:rgba(47,123,255,.16);border-color:var(--nx-blau);color:#fff;box-shadow:0 0 16px rgba(47,123,255,.25)}
+.loesung[data-key^="stage"].an{background:rgba(47,123,255,.22);border-color:var(--nx-blau2);color:#fff;box-shadow:0 0 18px rgba(47,123,255,.35)}
+.loesung[data-key^="stage"].an .preis{color:#cfe0ff}
+.loesung .preis{color:var(--nx-blau2);font-size:11.5px}
+.haken{width:34px;height:19px;order:2}.haken::before{width:13px;height:13px}.loesung.an .haken::before{transform:translateX(15px)}
+.loesung.an .haken{background:var(--nx-gruen)}
+.gesamt{background:#181c24;border-color:var(--nx-rand)}
+.nx-bericht{border-radius:12px;background:#14171e;border:1px solid var(--nx-rand);overflow:hidden}
+.nx-bericht-kopf{display:flex;align-items:center;gap:12px;padding:14px 16px;font-weight:700;font-size:14px;color:#4ade80}
+.nx-bericht-kopf>svg{width:22px;height:22px;flex:none;padding:3px;border-radius:50%;background:var(--nx-gruen);fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.nx-bericht-kopf span{flex:1}
+.nx-details{margin-left:auto;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:800;font-size:12.5px;cursor:pointer;color:#fff;background:linear-gradient(180deg,#3b86ff,#1f5fe0)}
+.nx-bericht .konsole{display:none;margin:0 14px 14px;border-color:var(--nx-rand);background:#101318}
+.nx-bericht.offen .konsole{display:block}
+.konsole>b{display:none}
+.hinweis.warnung{margin-top:14px}
+/* Auftraege-Seite */
+.nx-kopfzeile{display:flex;align-items:center;gap:14px}
+.nx-kopfzeile .nx-h{font-size:21px;font-weight:800;color:#fff;margin:0}
+.nx-kopfzeile .leise{font-size:13px}
+.nx-kopfzeile .btn{margin-left:auto}
+.nx-karten{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nx-kz{display:flex;align-items:center;justify-content:center;gap:14px;padding:16px;border-radius:12px;background:var(--nx-karte);border:1px solid}
+.nx-kz svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nx-kz b{display:block;font-size:24px;font-weight:800;color:#fff;line-height:1.1}.nx-kz span{font-size:12.5px;color:var(--nx-leise);font-weight:600}
+.nx-kz.blau{border-color:rgba(47,123,255,.6);color:var(--nx-blau2)}.nx-kz.orange{border-color:rgba(255,154,31,.55);color:#ff9a1f}
+.nx-kz.lila{border-color:rgba(167,112,255,.55);color:#a770ff}.nx-kz.gruen{border-color:rgba(34,197,94,.55);color:var(--nx-gruen)}
+.nx-zwei{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;flex:1;min-height:0}
+#meine{display:flex;flex-direction:column;min-height:0}
+#meine .liste{flex:1;min-height:0}
+.nx-info{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px}
+.nx-info b{font-size:19px;font-weight:800}
+.nx-info ol{text-align:left;color:#c4cbd8;font-size:14px;line-height:1.7;margin:0;padding-left:20px}
+.nx-info .leise{max-width:380px;font-size:13px}
+.auftrag{background:#1b1f28;border-color:var(--nx-rand);border-left:3px solid var(--nx-gruen)}
+.auftrag:hover{box-shadow:none;background:#1f242e}
+.reiter{background:#14171e;border-color:var(--nx-rand)}
+.reiter .schieber{background:linear-gradient(180deg,#3b86ff,#1f5fe0);box-shadow:none}
+/* Fussleiste */
+.fuss{border-top:1px solid #1f232c;padding:8px 18px 10px;background:#101217}
+.seite-nav button{text-align:left;line-height:1.2}
+.nx-pille.verbindung,.nx-pille.verbindung span{text-transform:none!important;letter-spacing:0!important;font-family:var(--kopf)!important;font-size:12.5px}
+.nx-programm{text-decoration:none;color:#fff;border-color:rgba(47,123,255,.6);background:linear-gradient(180deg,rgba(59,134,255,.25),rgba(31,95,224,.15))}
+.nx-programm:hover{border-color:var(--nx-blau2)}
+.nx-programm svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.app-modus .nur-browser{display:none!important}
+a.btn{text-decoration:none}
+.app-modus .fuss .kuerzel{display:none}
+/* Kleine Fenster (nur falls die Seite fuers Handy freigeschaltet ist) */
+@media (max-width:1180px){.nx-pille:not(.verbindung){display:none}.nx-zwei{grid-template-columns:minmax(0,1fr)}.nx-info{display:none}}
+@media (max-width:980px){.nx-seite{display:flex!important;flex-direction:column}.nx-karten{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nx-felder{grid-template-columns:minmax(0,1fr)}.nx-leiste{flex-wrap:wrap}.nx-leiste .feld{flex-basis:100%}main{grid-template-columns:minmax(0,1fr)!important}}
 </style>
 </head>
 <body>
@@ -935,38 +1099,42 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
 <div id="toasts"></div>
 
 <div class="app">
-  <header>
+  <header class="nx-top pywebview-drag-region">
     <div class="marke"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#fff4dc"/></svg><span class="glanz" id="firma">OneClick Tuning</span></div>
-    <nav class="kopf-nav">
-      <a href="#" id="nav-start"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Start</a>
-      <a href="#meine" id="nav-auftraege"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Aufträge</a>
-      <a href="#" id="nav-support" target="_blank" rel="noopener" style="display:none"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01"/></svg>Support</a>
-    </nav>
     <div class="kopf-rechts">
-      <div class="kopf-pille"><span class="kp-icon"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg></span><b id="kp-offen">0</b><small>offen</small></div>
-      <div class="kopf-pille verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
+      <div class="nx-pille"><i></i>Automatische Prüfung <b class="blau">24/7</b></div>
+      <div class="nx-pille"><i></i>Ticket-Service <b class="gruen">Online</b></div>
+      <div class="nx-pille verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
+      <a class="nx-pille nx-programm nur-browser" href="https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe"
+        title="OneClick Tuning als Windows-Programm herunterladen"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>Windows-Programm</a>
+      <button type="button" class="nx-glocke" id="nx-glocke" title="Offene Aufträge"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><b id="kp-offen">0</b></button>
+      <div class="nx-fenster nur-app"><button type="button" data-fenster="minimieren" title="Minimieren"><svg viewBox="0 0 24 24"><path d="M6 17h12"/></svg></button>
+        <button type="button" data-fenster="maximieren" title="Maximieren"><svg viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/></svg></button>
+        <button type="button" data-fenster="schliessen" class="zu" title="Schließen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     </div>
   </header>
 
   <main>
     <aside class="seite">
-      <div class="seite-marke"><span id="seite-firma">OneClick</span><small>File-Portal</small></div>
+      <div class="nx-menukopf"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><b>Menü</b></div>
       <nav class="seite-nav">
-        <button type="button" id="sn-neu"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>Neues File</button>
+        <button type="button" id="sn-neu" class="an"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/><path d="M12.5 8.5 10 12.5h4l-2.5 3.5"/></svg>ECU File</button>
         <button type="button" id="sn-auftraege"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Meine Aufträge</button>
+        <button type="button" id="sn-anfragen"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg>Anfragen</button>
+        <button type="button" id="sn-original"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>Original wiederherstellen</button>
+        <a id="sn-support" href="#" target="_blank" rel="noopener" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg>Support</a>
       </nav>
-      <div class="gruss"><i></i><span id="gruss">Willkommen</span></div>
-      <div class="stats">
-        <div class="stat rot"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span>Aufträge</div><b id="stat-gesamt">0</b></div>
-        <div class="stat gelb" id="stat-wartet-karte"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>In Prüfung</div><b id="stat-wartet">0</b></div>
-        <div class="stat gruen"><div class="s-kopf"><span class="s-icon"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Freigegeben</div><b id="stat-frei">0</b></div>
+      <div class="nx-zaehler">
+        <div class="stat rot"><span class="s-kopf"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Aufträge</span><b id="stat-gesamt">0</b></div>
+        <div class="stat gelb" id="stat-wartet-karte"><span class="s-kopf"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>In Prüfung</span><b id="stat-wartet">0</b></div>
+        <div class="stat gruen"><span class="s-kopf"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Freigegeben</span><b id="stat-frei">0</b></div>
+        <div class="nx-balken"><i id="nx-balken"></i></div>
       </div>
-      <div class="seite-schritte">
-        <b>So geht's</b>
-        <span><i>1</i>Original laden</span><span><i>2</i>Lösungen wählen</span><span><i>3</i>Freigabe, bezahlen, laden</span>
-      </div>
-      <a class="seite-hilfe" id="seite-hilfe" href="#" target="_blank" rel="noopener" style="display:none">Hilfe per WhatsApp</a>
+      <span class="gruss" style="display:none"><span id="gruss"></span></span>
+      <span id="seite-firma" style="display:none"></span>
     </aside>
+    <div class="nx-inhalt">
+    <section class="nx-seite aktiv" id="seite-ecu">
     <div class="links">
     <!-- Links: Ablauf -->
     <section class="karte spot rahmen-haupt">
@@ -1024,32 +1192,27 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
         </div>
 
         <div class="ansicht" id="v-auswahl">
-          <div class="aw-raster">
-          <div class="aw-links">
-            <div class="datei-zeile"><label class="btn blau klein" for="datei"><svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.8-7.9A6 6 0 0 1 17.7 9 4.5 4.5 0 0 1 17 18z"/></svg>Anderes File</label>
-              <span class="datei-pille" id="aw-datei"></span></div>
-            <div class="chips" id="aw-chips"></div>
-            <div class="konsole"><b>Konsole</b><div id="konsole"></div></div>
+          <div class="nx-felder">
+            <div class="nx-feld"><span class="nx-label">Datei</span><div class="nx-wert ok"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="aw-datei"></span>
+              <label for="datei" class="nx-tausch" title="Anderes File laden">Ändern</label></div></div>
+            <div class="nx-feld breit"><span class="nx-label">Steuergerät · Software</span><div class="chips" id="aw-chips"></div></div>
           </div>
-          <div class="aw-rechts">
-          <div class="tabs"><span class="an">Lösungen</span></div>
-          <h2 id="aw-titel">Verfügbare Lösungen</h2>
-          <div class="loesungen" id="aw-loesungen" style="margin-top:10px"></div>
-          <div class="gesamt" id="aw-gesamt" style="display:none"><span>Preis</span><b id="aw-summe"></b>
-            <span style="flex-basis:100%">Bezahlt wird erst, nachdem wir deinen Auftrag freigegeben haben.</span></div>
-          <input class="feld" id="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
-          <div class="knoepfe">
+          <div class="nx-leiste">
+            <input class="feld" id="kontakt" placeholder="Name / Firma / Telefon (optional, falls wir dich erreichen müssen)">
+            <button class="btn grau" id="abbrechen"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>Zurücksetzen</button>
+            <button class="btn grau" id="andere-anfrage"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg>Anfrage stellen</button>
             <button class="btn" id="senden">Auftrag senden</button>
-            <button class="btn grau" id="abbrechen">Abbrechen</button>
           </div>
+          <h3 class="nx-abschnitt" id="aw-titel">Verfügbare Lösungen</h3>
+          <div class="nx-loesungsfeld"><div class="loesungen" id="aw-loesungen"></div>
+            <div class="gesamt" id="aw-gesamt" style="display:none"><span>Preis</span><b id="aw-summe"></b>
+              <span style="flex-basis:100%">Bezahlt wird erst, nachdem wir deinen Auftrag freigegeben haben.</span></div></div>
+          <h3 class="nx-abschnitt">File-Analyse</h3>
+          <div class="nx-bericht"><div class="nx-bericht-kopf"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="nx-bericht-text">File analysiert</span>
+            <button type="button" class="nx-details" id="nx-details">Details</button></div>
+            <div class="konsole"><div id="konsole"></div></div></div>
           <div class="hinweis warnung"><b>Hinweis:</b> Checksumme beim Schreiben vom Flash-Tool korrigieren lassen. Nach dem Senden geben wir deinen Auftrag kurz frei.
             Es gelten unsere <a href="/agb" target="_blank">AGB</a> und die <a href="/haftung" target="_blank">Hinweise zu Einsatz und Haftung</a>.</div>
-          <button class="anfrage-link" id="andere-anfrage">
-            <span class="af-icon"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></span>
-            <span class="af-text"><b>Nicht dabei, was du brauchst?</b><span>Stell uns eine Anfrage – wir machen dir das File und melden uns hier, sobald es fertig ist.</span></span>
-            <span class="af-pfeil"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-          </button>
-          </div></div>
         </div>
 
         <div class="ansicht" id="v-anfrage">
@@ -1094,8 +1257,18 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
     </section>
     </div>
 
-    <!-- Rechts: Meine Auftraege -->
-    <section class="karte spot" id="meine">
+    </section>
+    <section class="nx-seite" id="seite-auftraege">
+      <div class="nx-kopfzeile"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span><div><h2 class="nx-h">Meine Aufträge</h2><span class="leise">Status, Bezahlung und Download deiner Files</span></div>
+        <button type="button" class="btn" id="nx-neu-auftrag">+ Neues File</button></div>
+      <div class="nx-karten">
+        <div class="nx-kz blau"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><div><b id="nx-z-gesamt">0</b><span>Gesamt</span></div></div>
+        <div class="nx-kz orange"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><div><b id="nx-z-wartet">0</b><span>In Prüfung</span></div></div>
+        <div class="nx-kz lila"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg><div><b id="nx-z-offen">0</b><span>Zu bezahlen</span></div></div>
+        <div class="nx-kz gruen"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><div><b id="nx-z-fertig">0</b><span>Fertig</span></div></div>
+      </div>
+      <div class="nx-zwei">
+    <section class="karte" id="meine">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h2>Meine Aufträge</h2>
         <span class="leise" style="font-size:12.5px" id="anzahl"></span>
@@ -1110,6 +1283,16 @@ main{grid-template-columns:236px minmax(0,1fr) minmax(320px,380px);gap:18px;padd
       <div class="suche"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="suche" placeholder="Datei oder Lösung suchen …"></div>
       <div class="liste" id="liste"></div>
     </section>
+    <section class="karte nx-info">
+      <span class="nx-quadrat gross"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></span>
+      <b>So läuft dein Auftrag</b>
+      <ol><li>Original laden und Lösungen wählen</li><li>Wir prüfen und geben frei – du bekommst hier Bescheid</li><li>Bezahlen und File herunterladen</li></ol>
+      <span class="leise">Nichts Passendes dabei? Stell eine Anfrage mit deinen Fahrzeugdaten – wir erstellen dein File.</span>
+      <a class="btn grau" id="nx-info-support" href="#" target="_blank" rel="noopener" style="display:none">Support per WhatsApp</a>
+    </section>
+      </div>
+    </section>
+    </div>
   </main>
   <footer class="fuss">
     <span id="fuss-firma">© OneClick Tuning</span>
@@ -1207,6 +1390,10 @@ const WEB = {
     return {auftraege: lokal.lesen().auftraege, geaendert};
   },
   async herunterladen(aid) {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.speichern) {
+      try { return await window.pywebview.api.speichern(new URL(`/api/auftrag/${encodeURIComponent(aid)}/download`, location.href).href); }
+      catch (e) { return {fehler: String(e && e.message || e)}; }
+    }
     try {
       const {r} = await server(`/api/auftrag/${encodeURIComponent(aid)}/download`);
       const kopf = r.headers.get("Content-Disposition") || "";
@@ -1477,6 +1664,7 @@ async function pruefen(datei) {
   if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
   $("#analyse-datei").innerHTML = SYMBOL_DATEI + "<span></span>";
   $("#analyse-datei span").textContent = datei.name;
+  seite("ecu"); $("#sn-neu").classList.add("an");
   zeige("v-analyse"); schrittAnimation();
   log("Upload gestartet: " + datei.name);
   const beginn = Date.now();
@@ -1520,6 +1708,9 @@ function auswahlZeigen(a) {
     $("#aw-chips").appendChild(c);
   });
   $("#aw-titel").textContent = a.angebot.length > 1 ? "Verfügbare Lösungen – eine oder mehrere wählen" : "Verfügbare Lösung";
+  $("#nx-bericht-text").textContent = a.angebot.some(o => o.key === zustand.original)
+    ? "Getuntes File erkannt – Original (Rückrüsten) verfügbar"
+    : "File erkannt – " + a.angebot.length + (a.angebot.length === 1 ? " Lösung" : " Lösungen") + " im Archiv verfügbar";
   const feld = $("#aw-loesungen"); feld.innerHTML = "";
   a.angebot.forEach((o, i) => {
     const k = document.createElement("div");
@@ -1584,12 +1775,17 @@ function listeMalen(hervorheben) {
   const alle = zustand.auftraege, zahl = st => alle.filter(a => a.status === st).length;
   zaehlen($("#stat-gesamt"), alle.length); zaehlen($("#stat-wartet"), zahl("WARTET")); zaehlen($("#stat-frei"), zahl("FREIGEGEBEN"));
   $("#stat-wartet-karte").classList.toggle("aktiv", zahl("WARTET") > 0);
-  $("#kp-offen").textContent = alle.filter(a => a.status === "WARTET" || a.zahlung === "offen").length;
+  const offen = alle.filter(a => a.status === "WARTET" || a.zahlung === "offen").length;
+  $("#kp-offen").textContent = offen; $("#kp-offen").classList.toggle("null", !offen);
   $("#z-alle").textContent = alle.length || "";
+  $("#nx-z-gesamt").textContent = alle.length; $("#nx-z-wartet").textContent = zahl("WARTET");
+  $("#nx-z-offen").textContent = alle.filter(a => a.zahlung === "offen").length;
+  $("#nx-z-fertig").textContent = alle.filter(a => a.status === "FREIGEGEBEN" && a.zahlung !== "offen").length;
+  $("#nx-balken").style.width = (alle.length ? Math.round(zahl("FREIGEGEBEN") / alle.length * 100) : 0) + "%";
   ["WARTET", "FREIGEGEBEN", "ABGELEHNT"].forEach(st => $("#z-" + st).textContent = zahl(st) || "");
   $("#anzahl").textContent = "";
   const q = zustand.suche.trim().toLowerCase();
-  const auftraege = alle.filter(a => (zustand.filter === "alle" || a.status === zustand.filter) &&
+  const auftraege = alle.filter(a => (zustand.filter === "alle" || (zustand.filter === "anfrage" ? a.typ === "anfrage" : a.status === zustand.filter)) &&
     (!q || (a.datei + " " + (a.option_name || "")).toLowerCase().includes(q)));
   if (!auftraege.length) {
     const text = alle.length ? "Keine passenden Aufträge" : "Noch keine Aufträge";
@@ -1659,7 +1855,8 @@ async function herunterladen(a, b) {
   try { erg = await rufe("herunterladen", a.id); }
   finally { b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen"; }
   if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
-  else if (erg.pfad) toast("ok", "Heruntergeladen", erg.pfad + " liegt in deinem Download-Ordner. Checksumme beim Schreiben korrigieren lassen.", 12000,
+  else if (erg.abgebrochen) return;
+  else if (erg.pfad) toast("ok", "Heruntergeladen", (erg.app ? "Gespeichert: " + erg.pfad : erg.pfad + " liegt in deinem Download-Ordner.") + " Checksumme beim Schreiben korrigieren lassen.", 12000,
                            zustand.support ? {text: "Probleme am Auto? Schreib uns per WhatsApp", klick: () => window.open(supportUrl(a), "_blank", "noopener")} : null);
 }
 let aktualisiertGerade = false;
@@ -1823,11 +2020,36 @@ $("#senden").addEventListener("click", senden);
 $("#abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#nochmal").addEventListener("click", () => zeige("v-upload"));
 $("#zurueck").addEventListener("click", () => zeige("v-upload"));
-["#nav-start", "#sn-neu"].forEach(s => $(s).addEventListener("click", e => { e.preventDefault(); if (aktuelle !== "v-analyse") zeige("v-upload"); }));
-["#nav-auftraege", "#sn-auftraege"].forEach(s => $(s).addEventListener("click", e => {
-  e.preventDefault(); const m = $("#meine"); m.scrollIntoView({behavior: "smooth", block: "start"});
-  m.classList.remove("blinken"); void m.offsetWidth; m.classList.add("blinken");
-}));
+/* Seiten im Menue links: ECU File | Meine Auftraege | Anfragen | Original wiederherstellen */
+function seite(name, filter) {
+  document.querySelectorAll(".nx-seite").forEach(x => x.classList.toggle("aktiv", x.id === "seite-" + name));
+  document.querySelectorAll(".seite-nav button").forEach(b => b.classList.remove("an"));
+  if (filter !== undefined) {
+    zustand.filter = filter;
+    document.querySelectorAll("#reiter button").forEach(x => x.classList.toggle("an", x.dataset.filter === filter));
+    listeMalen(); requestAnimationFrame(schieberSetzen);
+  }
+}
+$("#sn-neu").addEventListener("click", () => { seite("ecu"); $("#sn-neu").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload"); });
+$("#nx-neu-auftrag").addEventListener("click", () => $("#sn-neu").click());
+$("#sn-auftraege").addEventListener("click", () => { seite("auftraege", "alle"); $("#sn-auftraege").classList.add("an"); });
+$("#nx-glocke").addEventListener("click", () => $("#sn-auftraege").click());
+$("#sn-anfragen").addEventListener("click", () => { seite("auftraege", "anfrage"); $("#sn-anfragen").classList.add("an"); });
+$("#sn-original").addEventListener("click", () => {
+  seite("ecu"); $("#sn-original").classList.add("an"); if (aktuelle !== "v-analyse") zeige("v-upload");
+  toast("info", "Original wiederherstellen", "Lade dein getuntes File hoch – liegt das Original bei uns, bekommst du „Original (Rückrüsten)“ angeboten.", 9000);
+});
+$("#nx-details").addEventListener("click", () => $(".nx-bericht").classList.toggle("offen"));
+/* Als Windows-Programm: Fensterknoepfe + Speichern ueber den Windows-Dialog */
+function appModus() {
+  if (!window.pywebview || !window.pywebview.api) return;
+  if (document.body.classList.contains("app-modus")) return;
+  document.body.classList.add("app-modus");
+  // Knoepfe in der Kopfleiste duerfen das Fenster nicht verschieben (Kopfleiste = Ziehen-Bereich)
+  document.querySelectorAll("header button, header a, header input").forEach(b => b.addEventListener("mousedown", e => e.stopPropagation()));
+  document.querySelectorAll("[data-fenster]").forEach(b => b.addEventListener("click", () => window.pywebview.api[b.dataset.fenster]()));
+}
+window.addEventListener("pywebviewready", appModus); appModus();
 
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
@@ -1841,7 +2063,7 @@ function starten(d, mitIntro) {
   $("#kontakt").value = d.kontakt || "";
   requestAnimationFrame(schieberSetzen);
   if (d.firma) firma(d.firma);
-  if (zustand.support) ["#nav-support", "#seite-hilfe"].forEach(s => { $(s).href = "https://wa.me/" + zustand.support; $(s).style.display = ""; });
+  if (zustand.support) ["#sn-support", "#nx-info-support"].forEach(s => { $(s).href = "https://wa.me/" + zustand.support; $(s).style.display = ""; });
   verbindung(!d.verbindung, d.verbindung ? "Offline" : "Verbunden");
   if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
   listeMalen();

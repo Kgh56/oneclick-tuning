@@ -483,12 +483,39 @@ def schrift(name):
     return antwort
 
 
+PROGRAMM_UA = "OneClickProgramm/"   # Kennung, mit der sich das Windows-Programm meldet
+PROGRAMM_DOWNLOAD = "https://github.com/Kgh56/oneclick-tuning/releases/download/programm/OneClick-Tuning.exe"
 HANDY_UA = re.compile(r"iPhone|iPod|iPad|Android|Mobile|Windows Phone|BlackBerry|BB10|Opera Mini|IEMobile|webOS|Kindle|Silk|Tablet|PlayBook", re.I)
 
 
 def nur_pc() -> bool:
     """Kundenseite nur am Laptop/PC (Admin -> Einstellungen). Standard: an. Der Admin kommt immer rein."""
     return lade_config().get("nur_pc", True) is not False and not session.get("admin")
+
+
+def nur_programm() -> bool:
+    """Kundenseite nur im Windows-Programm (Admin -> Einstellungen). Standard: an. Der Admin kommt immer rein."""
+    return lade_config().get("nur_programm", True) is not False and not session.get("admin")
+
+
+def ist_programm() -> bool:
+    return PROGRAMM_UA in request.headers.get("User-Agent", "")
+
+
+@app.route("/bilder/<name>")
+def bild(name):
+    if not re.fullmatch(r"[a-z0-9-]+\.webp", name) or not (BASE / "web" / "bilder" / name).is_file():
+        abort(404)
+    return send_file(BASE / "web" / "bilder" / name, mimetype="image/webp", max_age=86400)
+
+
+@app.route("/programm")
+def programm_seite():
+    """Werbeseite fuer das Windows-Programm (das zeigt der Browser statt des Portals)."""
+    cfg = lade_config()
+    return render_template("werbung.html", download=PROGRAMM_DOWNLOAD, firma=cfg.get("firmenname") or "OneClick Tuning",
+                           jahr=datetime.now().year,
+                           whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
 
 
 @app.route("/nur-pc")
@@ -502,10 +529,12 @@ def nur_pc_seite():
 @app.route("/")
 def start():
     """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
-    if nur_pc() and HANDY_UA.search(request.headers.get("User-Agent", "")):
+    if nur_programm() and not ist_programm():
+        return programm_seite()   # Browser: nur die Werbeseite, das Portal gibt es im Programm
+    if nur_pc() and not ist_programm() and HANDY_UA.search(request.headers.get("User-Agent", "")):
         return redirect(url_for("nur_pc_seite"))
     seite = KUNDENSEITE.read_text(encoding="utf-8")
-    if nur_pc():   # zusaetzlich im Browser: reine Touch-Geraete ohne Maus/Touchpad (z. B. iPad, das sich als Mac ausgibt)
+    if nur_pc() and not ist_programm():   # zusaetzlich im Browser: reine Touch-Geraete ohne Maus/Touchpad (z. B. iPad, das sich als Mac ausgibt)
         seite = seite.replace("<head>", '<head>\n<script>if(!matchMedia("(any-pointer: fine)").matches&&navigator.maxTouchPoints>0)'
                                         'location.replace("/nur-pc")</script>', 1)
     name = html.escape(lade_config().get("firmenname") or "OneClick Tuning")
@@ -2164,6 +2193,7 @@ def einstellungen():
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
                 "nur_pc": request.form.get("nur_pc") == "1",
+                "nur_programm": request.form.get("nur_programm") == "1",
                 "support_whatsapp": re.sub(r"[^0-9]", "", request.form.get("support_whatsapp", ""))[:20],
             })
             flash("Gespeichert.")
@@ -3089,6 +3119,141 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 </form>{% else %}<p>Für dieses File gibt es im Archiv noch keine passende Lösung.</p>{% endif %}
 </div>{% endif %}
 {% endblock %}""",
+"werbung.html": """<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ firma }} – Windows-Programm</title>
+<meta name="description" content="OneClick Tuning: Chiptuning-Files als Windows-Programm. Original laden, Lösung wählen, nach Freigabe bezahlen und herunterladen. Kein Abo.">
+<meta name="theme-color" content="#0d0f14">
+<style>
+@font-face{font-family:"Montserrat";font-weight:500;font-display:swap;src:url(/fonts/montserrat-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Montserrat";font-weight:600;font-display:swap;src:url(/fonts/montserrat-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Montserrat";font-weight:700;font-display:swap;src:url(/fonts/montserrat-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Montserrat";font-weight:800;font-display:swap;src:url(/fonts/montserrat-latin-800-normal.woff2) format("woff2")}
+:root{--bg:#0d0f14;--karte:#161920;--rand:#262b36;--text:#e8ecf4;--leise:#8b93a5;--blau:#2f7bff;--blau2:#5aa0ff;--gruen:#22c55e}
+*{box-sizing:border-box}html{scroll-behavior:smooth;overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--text);font:500 16px/1.6 Montserrat,system-ui,"Segoe UI",sans-serif;overflow-x:hidden;
+ background-image:radial-gradient(1000px 600px at 80% -10%,rgba(47,123,255,.16),transparent 60%),radial-gradient(800px 500px at 0% 30%,rgba(47,123,255,.07),transparent 60%)}
+a{color:inherit}
+.breit{max-width:1180px;margin:0 auto;padding:0 20px}
+nav{position:sticky;top:0;z-index:10;background:rgba(13,15,20,.82);backdrop-filter:blur(14px);border-bottom:1px solid #1f232c}
+nav .breit{display:flex;align-items:center;gap:22px;height:66px}
+.marke{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;text-decoration:none;padding:6px 14px 6px 8px;border:1px solid rgba(47,123,255,.4);
+ border-radius:11px;background:linear-gradient(180deg,#151b29,#10131c);box-shadow:0 0 22px rgba(47,123,255,.16)}
+.marke svg{width:30px;height:30px}
+nav .links{display:flex;gap:22px;margin-left:auto;font-weight:600;font-size:14.5px}
+nav .links a{text-decoration:none;color:#c9d1df}nav .links a:hover{color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:11px;padding:13px 24px;font:inherit;font-weight:700;font-size:15px;color:#fff;text-decoration:none;
+ background:linear-gradient(180deg,#3b86ff,#1f5fe0);border:1px solid #4d92ff;box-shadow:0 8px 26px rgba(47,123,255,.35);transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(47,123,255,.5)}
+.btn.klein{padding:9px 16px;font-size:14px}
+.btn.grau{background:#1b1f28;border-color:var(--rand);box-shadow:none}.btn.grau:hover{border-color:#3a4357}
+.btn svg,.f svg,.schritt svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.held{padding:70px 0 40px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:48px;align-items:center}
+.kicker{display:inline-flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid rgba(47,123,255,.45);background:rgba(47,123,255,.1);
+ color:var(--blau2);font-size:12.5px;font-weight:800;letter-spacing:.06em}
+.kicker i{width:7px;height:7px;border-radius:50%;background:var(--gruen);box-shadow:0 0 8px var(--gruen)}
+h1{font-size:clamp(34px,5vw,58px);line-height:1.08;margin:18px 0 18px;font-weight:800;letter-spacing:-.02em}
+h1 span{background:linear-gradient(90deg,#5aa0ff,#2f7bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.held p{color:#b7c0d1;font-size:17.5px;max-width:540px;margin:0 0 28px}
+.knoepfe{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.klein-info{margin-top:14px;font-size:13px;color:var(--leise)}
+.handy-hinweis{display:none;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,194,61,.35);background:rgba(255,194,61,.08);color:#ffd88a;font-size:14.5px}
+.fenster{border-radius:14px;overflow:hidden;border:1px solid #2a3040;box-shadow:0 40px 100px rgba(0,0,0,.6),0 0 60px rgba(47,123,255,.18);transform:perspective(1400px) rotateY(-6deg) rotateX(2deg)}
+.fenster img{display:block;width:100%;height:auto}
+section{padding:60px 0}
+h2{font-size:clamp(26px,3.4vw,38px);margin:0 0 10px;font-weight:800;letter-spacing:-.01em}
+.unter{color:var(--leise);margin:0 0 34px;max-width:620px}
+.raster{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.f{padding:22px;border-radius:14px;background:var(--karte);border:1px solid var(--rand);transition:border-color .2s,transform .2s}
+.f:hover{border-color:rgba(47,123,255,.6);transform:translateY(-3px)}
+.f .ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(180deg,#3b86ff,#1f5fe0);box-shadow:0 6px 18px rgba(47,123,255,.35);margin-bottom:14px}
+.f .ic svg{stroke:#fff}
+.f b{display:block;font-size:17px;margin-bottom:6px}.f span{color:var(--leise);font-size:14.5px}
+.bilder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.bilder figure{margin:0}.bilder img{width:100%;height:auto;display:block;border-radius:12px;border:1px solid var(--rand);box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.bilder figcaption{margin-top:10px;color:var(--leise);font-size:14px}
+.schritte{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;counter-reset:s}
+.schritt{padding:22px;border-radius:14px;background:var(--karte);border:1px solid var(--rand);position:relative}
+.schritt::before{counter-increment:s;content:counter(s);position:absolute;top:18px;right:18px;font-size:34px;font-weight:800;color:rgba(90,160,255,.18)}
+.schritt b{display:block;margin:10px 0 6px}.schritt span{color:var(--leise);font-size:14.5px}
+.schritt svg{color:var(--blau2);width:26px;height:26px}
+.hinweis{margin-top:22px;padding:16px 18px;border-radius:12px;border:1px solid rgba(255,194,61,.35);background:rgba(255,194,61,.07);color:#ffd88a;font-size:14.5px}
+.hinweis b{color:#ffc23d}
+.faq details{border:1px solid var(--rand);background:var(--karte);border-radius:12px;padding:16px 18px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:700}.faq p{color:var(--leise);margin:10px 0 0}
+.cta{text-align:center;padding:50px 24px;border-radius:18px;border:1px solid rgba(47,123,255,.45);
+ background:radial-gradient(600px 240px at 50% 0%,rgba(47,123,255,.22),transparent 70%),var(--karte)}
+.cta p{color:var(--leise);margin:0 0 24px}
+footer{border-top:1px solid #1f232c;padding:26px 0 40px;color:var(--leise);font-size:13.5px}
+footer .breit{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}footer a{color:var(--leise);text-decoration:none}footer a:hover{color:#fff}
+footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
+@media (max-width:980px){.held{grid-template-columns:1fr;padding-top:40px}.fenster{transform:none}.raster,.bilder{grid-template-columns:1fr 1fr}.schritte{grid-template-columns:1fr 1fr}nav .links{display:none}}
+@media (max-width:620px){.raster,.bilder,.schritte{grid-template-columns:1fr}footer .rechts{margin-left:0}}
+</style></head><body>
+<nav><div class="breit"><a class="marke" href="/programm"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#fff4dc"/></svg><span>{{ firma }}</span></a>
+<div class="links"><a href="#funktionen">Funktionen</a><a href="#ablauf">So geht's</a><a href="#faq">FAQ</a></div>
+<a class="btn klein pc" href="{{ download }}">Download</a></div></nav>
+<header class="breit held">
+ <div>
+  <span class="kicker"><i></i>WINDOWS-PROGRAMM · KOSTENLOS</span>
+  <h1>Dein Chiptuning-File <span>mit einem Klick.</span></h1>
+  <p>Original laden, Lösung wählen, nach unserer Freigabe bezahlen und herunterladen – alles in einem Programm.
+  <b>Kein Abo:</b> du zahlst nur für das File, das du wirklich brauchst.</p>
+  <div class="knoepfe pc"><a class="btn" href="{{ download }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> Programm herunterladen</a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
+  <div class="handy-hinweis">Das Programm läuft auf Windows-PCs und Laptops. Öffne diese Seite einfach am PC, um es herunterzuladen.</div>
+  <div class="klein-info pc">Für Windows 10 und 11 · Updates installiert das Programm selbst</div>
+ </div>
+ <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Tuning Programm: Lösungen für ein ECU-File wählen"></div>
+</header>
+<section id="funktionen"><div class="breit">
+ <h2>Alles, was du für dein File brauchst</h2><p class="unter">Ein Programm, ein klarer Ablauf – vom Original bis zum fertigen File.</p>
+ <div class="raster">
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg></div><b>Sofort-Check</b><span>Original laden – das Programm erkennt Steuergerät und Software und zeigt sofort, welche Lösungen es gibt.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></div><b>Einzeln kaufen, kein Abo</b><span>Keine Monatsgebühr, keine Credits. Du bezahlst nur das File, das du bestellst.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><b>Jedes File geprüft</b><span>Kein Download ohne unsere Freigabe. Bezahlt wird erst, wenn wir dein File geprüft haben.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg></div><b>Sicher bezahlen</b><span>Bezahlung über Stripe mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></div><b>Anfrage, wenn nichts passt</b><span>Fahrzeugdaten eintragen, Anfrage senden – wir erstellen dein File und melden uns im Programm.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
+ </div></div></section>
+<section><div class="breit">
+ <h2>So sieht's aus</h2><p class="unter">Dunkel, klar, schnell – gemacht für die Arbeit in der Werkstatt.</p>
+ <div class="bilder">
+  <figure><img src="/bilder/programm-laden.webp" width="1440" height="900" loading="lazy" alt="File laden"><figcaption>File laden – einfach hineinziehen</figcaption></figure>
+  <figure><img src="/bilder/programm-auftraege.webp" width="1440" height="900" loading="lazy" alt="Meine Aufträge"><figcaption>Meine Aufträge – Status, Bezahlung, Download</figcaption></figure>
+  <figure><img src="/bilder/programm-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"><figcaption>Startbildschirm – Verbindung wird geprüft</figcaption></figure>
+ </div></div></section>
+<section id="ablauf"><div class="breit">
+ <h2>In vier Schritten zum File</h2><p class="unter">Ohne Konto, ohne Anmeldung.</p>
+ <div class="schritte">
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen und starten. Fertig – keine Installation nötig.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und Auftrag senden.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Nach unserer Freigabe bezahlen und das File herunterladen.</span></div>
+ </div>
+ <div class="hinweis"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
+ Dann auf <b>„Weitere Informationen“</b> und <b>„Trotzdem ausführen“</b> klicken – das passiert nur beim ersten Mal.</div>
+</div></section>
+<section id="faq" class="faq"><div class="breit">
+ <h2>Häufige Fragen</h2><p class="unter">Noch etwas offen? Schreib uns einfach.</p>
+ <details><summary>Was kostet das Programm?</summary><p>Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo.</p></details>
+ <details><summary>Brauche ich ein Konto?</summary><p>Nein. Deine Aufträge merkt sich das Programm auf deinem PC.</p></details>
+ <details><summary>Für welche Steuergeräte gibt es Files?</summary><p>Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File.</p></details>
+ <details><summary>Muss ich die Checksumme korrigieren?</summary><p>Ja, lass die Checksumme beim Schreiben von deinem Flash-Tool korrigieren.</p></details>
+ <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Nein, OneClick Tuning gibt es als Programm für Windows 10 und 11.</p></details>
+</div></section>
+<section><div class="breit"><div class="cta">
+ <h2>Bereit für dein nächstes File?</h2><p>Programm laden, Original rein, fertig.</p>
+ <a class="btn pc" href="{{ download }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> Jetzt herunterladen – kostenlos</a>
+ <div class="handy-hinweis" style="max-width:520px;margin:0 auto">Bitte öffne diese Seite am Windows-PC oder Laptop.</div>
+ {% if whatsapp %}<p style="margin:18px 0 0"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Per WhatsApp schreiben</a></p>{% endif %}
+</div></div></section>
+<footer><div class="breit"><span>© {{ jahr }} {{ firma }}</span>
+ <span class="rechts"><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="/agb">AGB</a><a href="/widerruf">Widerruf</a><a href="/haftung">Haftung</a><a href="/login">Admin</a></span></div></footer>
+<script>
+if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.querySelectorAll('.pc').forEach(function(e){e.style.display='none'});
+ document.querySelectorAll('.handy-hinweis').forEach(function(e){e.style.display='block'});}
+</script>
+</body></html>""",
 "nur_pc.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte" style="max-width:560px;margin:4vh auto 0;text-align:center">
 <svg viewBox="0 0 64 48" style="width:84px;height:63px;margin:6px auto 14px;display:block;fill:none;stroke:#8fb4ff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 12px rgba(47,107,255,.8))">
@@ -3243,6 +3408,10 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
+<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 12px;cursor:pointer">
+<input type="checkbox" name="nur_programm" value="1" {{ 'checked' if cfg.get('nur_programm', True) }} style="margin-top:4px">
+<span><b>Kundenseite nur im Windows-Programm</b><br><span class="leise" style="font-size:13px">An: Kunden können OneClick nur noch mit dem
+Programm benutzen. Wer die Seite im Browser öffnet, bekommt nur die Download-Seite für das Programm. Du als Admin kommst im Browser immer rein.</span></span></label>
 <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 12px;cursor:pointer">
 <input type="checkbox" name="nur_pc" value="1" {{ 'checked' if cfg.get('nur_pc', True) }} style="margin-top:4px">
 <span><b>Kundenseite nur am Laptop / PC</b><br><span class="leise" style="font-size:13px">An: Kunden mit Handy oder Tablet sehen nur den Hinweis,

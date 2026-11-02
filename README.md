@@ -136,6 +136,16 @@ die Seite fragt den Status selbst ab und meldet sich.
 - **Admin-Bereich** (`/login`): Ton + Browser-Benachrichtigung bei neuen Aufträgen,
   Bestätigen/Ablehnen direkt in der Liste, oder eigenes File hochladen (= freigeben, optional ins Archiv lernen)
 
+## Windows-Programm für Kunden
+
+Kunden nutzen OneClick nur noch über das Windows-Programm (`programm/oneclick_programm.py`):
+- **Programm:** eigenes Fenster ohne Browser-Leisten, eigene Titelleiste, „Speichern unter …“ für Files,
+  installiert Updates selbst. Die Oberfläche kommt live vom Server (`web/kunde.html`) – Design-Updates sind sofort bei allen.
+- **Bauen:** macht GitHub automatisch bei Änderungen in `programm/` (Actions → „Windows-Programm bauen“),
+  Download unter Releases → `programm` → `OneClick-Tuning.exe`.
+- **Browser:** zeigt unter der Portal-Adresse nur die Werbeseite mit Download (`/programm`). Rechtstexte bleiben erreichbar,
+  der Admin kommt im Browser immer rein. Abschaltbar unter Admin → Einstellungen → „Kundenseite nur im Windows-Programm“.
+
 ## Anfragen (Tickets)
 Kein Treffer im Archiv – oder der Kunde braucht etwas, das nicht angeboten wird? Dann klickt er auf der Seite
 **„Anfrage stellen“**:

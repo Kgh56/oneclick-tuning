@@ -46,6 +46,7 @@ class Basis(unittest.TestCase):
         A.EIGENE = d / "eigene"
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
+        A.speichere_config({"nur_programm": False})   # die meisten Tests pruefen das Portal selbst
         A.AUFTRAEGE.mkdir()
         A.versuche.clear()
         self.telegram = []
@@ -361,6 +362,28 @@ class WebTests(Basis):
         self.assertEqual(A.sicherungen(), [])
         self.assertEqual(self.kunde.post("/admin/archiv/alles", data={"csrf": self.kunde.csrf, "aktion": "loeschen",
                                                                       "bestaetigung": "ALLES"}).status_code, 302)
+
+    def test_browser_bekommt_werbeseite_programm_das_portal(self):
+        A.speichere_config({"nur_programm": True})
+        pc = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36 Edg/130"}
+        programm = {"User-Agent": pc["User-Agent"] + " OneClickProgramm/3.12"}
+        handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148"}
+        for ua in (pc, handy):
+            r = self.kunde.get("/", headers=ua)
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("Windows-Programm", r.text)
+            self.assertIn(A.PROGRAMM_DOWNLOAD, r.text)
+            self.assertNotIn('id="zone"', r.text)                     # kein Portal im Browser
+        r = self.kunde.get("/", headers=programm)
+        self.assertIn('id="zone"', r.text)                            # das Programm bekommt das Portal
+        self.assertNotIn('location.replace("/nur-pc")', r.text)
+        self.assertIn('id="zone"', self.admin().get("/", headers=pc).text)   # Admin im Browser: Portal
+        self.assertEqual(self.kunde.get("/bilder/programm-auswahl.webp").status_code, 200)
+        self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
+        self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)   # Rechtstexte bleiben
+        self.assertEqual(self.kunde.get("/api/info", headers=pc).status_code, 200)   # Programm braucht die API
+        A.speichere_config({"nur_programm": False})
+        self.assertIn('id="zone"', self.kunde.get("/", headers=pc).text)
 
     def test_kundenseite_nur_am_pc(self):
         handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"}
@@ -1209,8 +1232,8 @@ class ApiTests(Basis):
         self.assertEqual((r.status_code, r.headers["Cache-Control"]), (200, "no-cache"))
         for teil in ('id="zone"', "/api/pruefen", "/api/auftrag/", "Anfrage stellen", "/impressum", "/datenschutz"):
             self.assertIn(teil, r.text)
-        for alt in ("pywebview", "OneClick-Tuning.exe", "Windows-Programm"):
-            self.assertNotIn(alt, r.text)
+        for teil in ("window.pywebview.api", "releases/download/programm/OneClick-Tuning.exe", 'data-fenster="schliessen"'):
+            self.assertIn(teil, r.text)                    # Windows-Programm: Download-Knopf + Fensterknoepfe
         A.speichere_config({"firmenname": "Muster <Tuning>"})
         self.assertIn("<title>Muster &lt;Tuning&gt;</title>", self.c.get("/").text)
 
