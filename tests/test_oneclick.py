@@ -975,7 +975,10 @@ class WebTests(Basis):
         self.loesung(a, name="Kickdown")
         self.assertIn("gibt es schon", self.loesung(a, name="kickdown"))
         self.assertIn("gelöscht", self.loesung(a, "loeschen", key="kickdown"))
-        self.assertIn("Feste Lösungen", self.loesung(a, "loeschen", key="stage1"))
+        self.assertIn("entfernt", self.loesung(a, "loeschen", key="stage1"))   # feste: nur ausblenden
+        self.assertNotIn("stage1", oneclick.optionen())
+        self.loesung(a, "zurueck", key="stage1")
+        self.assertIn("stage1", oneclick.optionen())
         self.assertEqual(set(oneclick.eigene_optionen()), set())
 
     def test_eigene_loesung_im_zip(self):
@@ -1373,6 +1376,42 @@ class ZahlungTests(WebTests):
         speichern(stage1="", original="")
         self.assertEqual((A.option_namen()["stage1"], A.option_namen()["original"]), ("Stage 1", "Original (Rückrüsten)"))
         self.assertEqual(json.loads(oneclick.NAMEN_DATEI.read_text()), {})
+
+    def test_feste_loesung_entfernen_und_zurueckholen(self):
+        a = self.admin()
+        # Archiv mit Stage 2 fuer den Golf
+        st2 = bytearray(self.golf); st2[0x30000:0x30040] = bytes(64)
+        oneclick.lerne(bytes(self.golf), bytes(st2), "Golf7", "stage2")
+        aid = self.hochladen(self.golf)
+        self.assertIn("stage2", {o["key"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]})
+        r = html.unescape(a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "loeschen", "key": "stage2"}, follow_redirects=True).text)
+        self.assertIn("„Stage 2“ entfernt", r)
+        self.assertIn("1 Fahrzeug(e)", r)
+        self.assertNotIn("stage2", oneclick.optionen())
+        # nicht mehr angeboten: weder beim Kauf noch bei Anfragen noch im Archiv-Formular
+        aid2 = self.hochladen(self.golf)
+        self.assertNotIn("stage2", {o["key"] for o in self.kunde.get(f"/api/auftrag/{aid2}").json["angebot"]})
+        self.assertNotIn("stage2", {o["key"] for o in self.kunde.get("/api/info").json["optionen"]})
+        self.assertNotIn('name="stage2"', a.get("/admin/archiv").text)
+        self.assertIn("↺ Stage 2", a.get("/admin/archiv").text)
+        # Files bleiben; Dateiname "Stage2" wird weiter als Stage 2 erkannt (nicht als Stage 1)
+        self.assertTrue((oneclick.ARCHIV / "Golf7" / "stage2.bin").exists())
+        self.assertEqual(oneclick.klassifiziere(["x_ORI.bin", "x_Stage2.bin"])[1], {"stage2": "x_Stage2.bin"})
+        # eigene Loesung mit gleichem Schluessel geht nicht
+        with self.assertRaises(ValueError):
+            oneclick.option_anlegen("Stage 2")
+        # zurueckholen
+        a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "zurueck", "key": "stage2"})
+        aid3 = self.hochladen(self.golf)
+        self.assertIn("stage2", {o["key"] for o in self.kunde.get(f"/api/auftrag/{aid3}").json["angebot"]})
+        # beim Server-Start wird Stage 2 genau einmal entfernt; holt der Admin sie zurueck, bleibt sie
+        A.einmalige_anpassungen()
+        self.assertNotIn("stage2", oneclick.optionen())
+        oneclick.option_zurueck("stage2"); A.einmalige_anpassungen()
+        self.assertIn("stage2", oneclick.optionen())
+        # Original kann nicht entfernt werden
+        self.assertIn("nicht gelöscht", html.unescape(a.post("/admin/loesungen", data={"csrf": a.csrf, "aktion": "loeschen", "key": "original"},
+                                                             follow_redirects=True).text))
 
     def test_admin_preise_und_preis_beim_freigeben(self):
         a = self.admin()

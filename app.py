@@ -71,7 +71,7 @@ class OptionNamen(dict):
 
 
 def option_namen() -> OptionNamen:
-    return OptionNamen({**oneclick.optionen(), oneclick.ORIGINAL: oneclick.original_name()})
+    return OptionNamen({**oneclick.alle_optionen(), oneclick.ORIGINAL: oneclick.original_name()})
 
 
 # ENTWURF: hochgeladen, Kunde waehlt noch die Option; danach entscheidet der Admin
@@ -2019,6 +2019,7 @@ def admin_archiv():
                            zahlung=zahlung_aktiv(), euro=euro,
                            eigene=oneclick.eigene_optionen(), archiv_optionen=oneclick.optionen(),
                            standard_namen={**oneclick.STANDARD_OPTIONEN, oneclick.ORIGINAL: oneclick.ORIGINAL_NAME},
+                           entfernt=oneclick.entfernte(),
                            sicherungen=sicherungen(), neuaufbau=status)
 
 
@@ -2051,9 +2052,19 @@ def loesungen_verwalten():
         return redirect(url_for("admin_archiv") + "#preise")
     try:
         with index_sperre:
-            if request.form.get("aktion") == "loeschen":
-                name = oneclick.eigene_optionen().get(request.form.get("key", ""), "")
-                oneclick.option_loeschen(request.form.get("key", ""))
+            key = request.form.get("key", "")
+            if request.form.get("aktion") == "loeschen" and key in oneclick.STANDARD_OPTIONEN:
+                name = option_namen()[key]
+                noch = oneclick.option_entfernen(key)
+                flash(f"„{name}“ entfernt – Kunden bekommen es nicht mehr angeboten."
+                      + (f" {noch} Fahrzeug(e) im Archiv haben noch Files dafür; die bleiben gespeichert." if noch else "")
+                      + " Du kannst es unten jederzeit zurückholen.")
+            elif request.form.get("aktion") == "zurueck":
+                oneclick.option_zurueck(key)
+                flash(f"„{option_namen()[key]}“ wird wieder angeboten.")
+            elif request.form.get("aktion") == "loeschen":
+                name = oneclick.eigene_optionen().get(key, "")
+                oneclick.option_loeschen(key)
                 flash(f"Lösung „{name}“ gelöscht.")
             else:
                 key = oneclick.option_anlegen(request.form.get("name", ""))
@@ -2983,10 +2994,14 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
 {% for key, name in archiv_optionen.items() %}
 <span class="status s-ENTWURF" style="display:inline-flex;align-items:center;gap:8px">{{ name }}
-{% if key in eigene %}<form method="post" action="{{ url_for('loesungen_verwalten') }}" class="inline" onsubmit="return confirm('Lösung „{{ name }}“ löschen?')">
+{% if archiv_optionen|length > 1 %}<form method="post" action="{{ url_for('loesungen_verwalten') }}" class="inline" onsubmit="return confirm('Lösung „{{ name }}“ {{ 'löschen' if key in eigene else 'entfernen? Kunden bekommen sie dann nicht mehr angeboten – du kannst sie jederzeit zurückholen.' }}')">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="loeschen"><input type="hidden" name="key" value="{{ key }}">
-<button title="Löschen" style="background:none;border:0;color:inherit;cursor:pointer;font-size:15px;padding:0">✕</button></form>{% endif %}</span>
+<button title="{{ 'Löschen' if key in eigene else 'Entfernen' }}" style="background:none;border:0;color:inherit;cursor:pointer;font-size:15px;padding:0">✕</button></form>{% endif %}</span>
 {% endfor %}</div>
+{% if entfernt %}<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:-6px 0 16px"><span class="leise" style="font-size:14px">Entfernt:</span>
+{% for key in entfernt %}<form method="post" action="{{ url_for('loesungen_verwalten') }}" class="inline">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="zurueck"><input type="hidden" name="key" value="{{ key }}">
+<button class="btn klein grau" title="Wieder anbieten">↺ {{ optionen[key] }}</button></form>{% endfor %}</div>{% endif %}
 <form method="post" action="{{ url_for('loesungen_verwalten') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="neu">
 <input type="text" name="name" placeholder="Neue Lösung, z. B. Drallklappen" maxlength="40" style="flex:1;min-width:220px">
@@ -3587,6 +3602,17 @@ def telegram_id():
     print('-> in config.json bei "telegram_chat_id" eintragen.')
 
 
+def einmalige_anpassungen():
+    """Aenderungen, die genau einmal beim Server-Start passieren sollen (danach entscheidet der Admin)."""
+    erledigt = lade_config().get("erledigt", [])
+    if "stage2_entfernt" not in erledigt:   # Wunsch: Stage 2 nicht mehr anbieten (im Admin zurueckholbar)
+        try:
+            oneclick.option_entfernen("stage2")
+        except (ValueError, OSError) as e:
+            print("Stage 2 entfernen:", e)
+        speichere_config({"erledigt": [*erledigt, "stage2_entfernt"]})
+
+
 if __name__ == "__main__":
     befehl = sys.argv[1] if len(sys.argv) > 1 else ""
     if befehl == "admin" and len(sys.argv) >= 3:
@@ -3599,6 +3625,7 @@ if __name__ == "__main__":
         print("Gesendet." if ok and ok.get("ok") else f"Fehler: {ok}")
     else:
         AUFTRAEGE.mkdir(exist_ok=True)
+        einmalige_anpassungen()
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
         host = os.environ.get("ONECLICK_HOST", "0.0.0.0")

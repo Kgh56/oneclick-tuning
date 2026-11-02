@@ -193,6 +193,7 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
                 return False
         return True
 
+    angeboten = optionen()   # entfernte Loesungen werden nicht mehr angeboten (Files bleiben im Archiv)
     kandidaten = [e for e in lade_index()["eintraege"] if e["groesse"] == len(neu)]
     kandidaten.sort(key=lambda e: e["sha256"] != info["sha256"])   # identische zuerst
     loesungen = {}
@@ -200,7 +201,7 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
         identisch = e["sha256"] == info["sha256"]
         if not identisch and (nur_identisch or not nummern_passen(e)):
             continue
-        offen = [o for o in e["optionen"] if o not in loesungen]
+        offen = [o for o in e["optionen"] if o not in loesungen and all(t in angeboten for t in o.split("+"))]
         if not offen:
             continue
         ori = None if identisch else archiv_datei(e).read_bytes()
@@ -316,14 +317,44 @@ def namen_aenderungen() -> dict:
         return {}
 
 
-def optionen() -> dict:
-    """Alle Loesungen: {schluessel: Anzeigename}, feste zuerst. Der Schluessel bleibt immer gleich,
-    nur der angezeigte Name laesst sich aendern."""
+def alle_optionen() -> dict:
+    """Alle bekannten Loesungen inkl. entfernter fester: {schluessel: Anzeigename}. Fuer Dateinamen-Erkennung
+    und Anzeige alter Auftraege. Der Schluessel bleibt immer gleich, nur der Name laesst sich aendern."""
     alle = {**STANDARD_OPTIONEN, **eigene_optionen()}
     for key, name in namen_aenderungen().items():
-        if key in STANDARD_OPTIONEN and name:
+        if key in STANDARD_OPTIONEN and isinstance(name, str) and name:
             alle[key] = name
     return alle
+
+
+def entfernte() -> list:
+    """Feste Loesungen, die der Admin entfernt hat (werden nicht mehr angeboten)."""
+    aus = namen_aenderungen().get("_entfernt", [])
+    return [k for k in aus if k in STANDARD_OPTIONEN] if isinstance(aus, list) else []
+
+
+def optionen() -> dict:
+    """Angebotene Loesungen: {schluessel: Anzeigename}, feste zuerst."""
+    aus = set(entfernte())
+    return {k: v for k, v in alle_optionen().items() if k not in aus}
+
+
+def option_entfernen(key: str) -> int:
+    """Feste Loesung nicht mehr anbieten (Files im Archiv bleiben). Rueckgabe: Fahrzeuge, die sie noch haben."""
+    if key not in STANDARD_OPTIONEN:
+        raise ValueError("Diese Lösung kann so nicht entfernt werden.")
+    if len(optionen()) <= 1:
+        raise ValueError("Mindestens eine Lösung muss bleiben.")
+    aenderungen = namen_aenderungen()
+    aenderungen["_entfernt"] = sorted(set(entfernte()) | {key})
+    _json_schreiben(NAMEN_DATEI, aenderungen)
+    return sum(1 for e in lade_index()["eintraege"] if any(key in o.split("+") for o in e["optionen"]))
+
+
+def option_zurueck(key: str):
+    aenderungen = namen_aenderungen()
+    aenderungen["_entfernt"] = [k for k in entfernte() if k != key]
+    _json_schreiben(NAMEN_DATEI, aenderungen)
 
 
 def original_name() -> str:
@@ -379,7 +410,7 @@ def option_anlegen(name: str) -> str:
     if abgas_abschaltung(name):
         raise ValueError("Lösungen, die die Abgasreinigung abschalten (DPF, AGR, AdBlue/SCR, Kat, Lambda …), "
                          "werden nicht unterstützt.")
-    if key in ("ori", ORIGINAL) or MUSTER_ORI.search(key) or key in optionen():
+    if key in ("ori", ORIGINAL) or MUSTER_ORI.search(key) or key in alle_optionen():
         raise ValueError(f"„{name}“ gibt es schon oder der Name ist nicht erlaubt.")
     eigene = eigene_optionen()
     eigene[key] = name
@@ -391,7 +422,7 @@ def option_anlegen(name: str) -> str:
 
 def kombi_schluessel(teile) -> str:
     """{'popsbangs', 'stage1'} -> 'stage1+popsbangs' (Reihenfolge wie bei den Loesungen)."""
-    reihenfolge = list(optionen())
+    reihenfolge = list(alle_optionen())
     teile = set(teile)
     return "+".join(k for k in reihenfolge if k in teile)
 
@@ -406,7 +437,7 @@ def loesung_aus_name(name: str):
     """Loesung(en), die der Dateiname eindeutig nennt: 'Golf_stage1_pops.bin' -> 'stage1+popsbangs', sonst None.
     Raet nicht: ohne Hinweis im Namen kommt None zurueck."""
     stamm = Path(name).stem.lower()
-    alle = optionen()
+    alle = alle_optionen()
     teile = stamm.split("+")
     if len(teile) > 1 and all(x in alle for x in teile):
         return kombi_schluessel(teile)
@@ -420,7 +451,7 @@ def loesung_aus_name(name: str):
 
 def reihen_index(key: str) -> float:
     """Sortierung fuer Angebote: Kombinationen direkt hinter ihrer ersten Loesung, Original ans Ende."""
-    reihenfolge = [*optionen(), ORIGINAL]
+    reihenfolge = [*alle_optionen(), ORIGINAL]
     erste = key.split("+")[0]
     return (reihenfolge.index(erste) if erste in reihenfolge else len(reihenfolge)) + (0.5 if "+" in key else 0)
 
@@ -460,7 +491,7 @@ def klassifiziere(namen: list) -> tuple:
             continue
         stamm = Path(n).stem.lower()
         teile = stamm.split("+")
-        if len(teile) > 1 and all(x in optionen() for x in teile):   # kombiniertes File, z. B. stage1+popsbangs.bin
+        if len(teile) > 1 and all(x in alle_optionen() for x in teile):   # kombiniertes File, z. B. stage1+popsbangs.bin
             gefunden[kombi_schluessel(teile)] = n
             continue
         key = next((k for k in eigene if k in schluessel(stamm) and k not in gefunden), None)
