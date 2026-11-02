@@ -1077,6 +1077,13 @@ a.btn{text-decoration:none}
 .tk-blase.kunde{align-self:flex-end;background:rgba(47,123,255,.16);border-color:rgba(47,123,255,.45)}
 .tk-blase .tk-wer{display:block;font-size:11.5px;color:var(--nx-leise);margin-bottom:4px}
 .tk-blase div{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.5}
+.tk-anhang{display:flex;align-items:center;gap:10px;margin-top:8px;width:100%;min-width:220px;padding:9px 12px;border-radius:10px;border:1px solid rgba(47,123,255,.55);background:rgba(47,123,255,.12);color:inherit;font:inherit;font-size:13.5px;cursor:pointer;text-align:left;transition:background .15s,border-color .15s,transform .15s}
+.tk-blase .tk-anhang:first-of-type{margin-top:4px}
+.tk-anhang:hover{background:rgba(47,123,255,.24);border-color:#2f7bff;transform:translateY(-1px)}
+.tk-anhang.laedt{opacity:.6;cursor:progress}
+.tk-anhang-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#2f7bff;color:#fff;font-size:14px;flex:none}
+.tk-anhang-name{flex:1;overflow-wrap:anywhere;font-weight:600}
+.tk-anhang-gr{color:var(--nx-leise);font-size:12px;flex:none}
 .tk-antwort{display:flex;gap:10px;margin-top:12px;align-items:flex-end}.tk-antwort .feld{flex:1;margin:0;resize:vertical}
 button.hilfe{font:inherit;cursor:pointer;color:var(--nx-blau2);border-color:rgba(47,123,255,.45);background:rgba(47,123,255,.1)}
 button.hilfe svg{width:15px;height:15px}
@@ -1482,13 +1489,15 @@ const WEB = {
     }
     return {auftraege: lokal.lesen().auftraege, geaendert};
   },
-  async herunterladen(aid) {
+  herunterladen(aid) { return WEB.dateiHolen(`/api/auftrag/${encodeURIComponent(aid)}/download`); },
+  ticketDatei(tid, fid) { return WEB.dateiHolen(`/api/ticket/${encodeURIComponent(tid)}/datei/${encodeURIComponent(fid)}`); },
+  async dateiHolen(pfad) {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.speichern) {
-      try { return await window.pywebview.api.speichern(new URL(`/api/auftrag/${encodeURIComponent(aid)}/download`, location.href).href); }
+      try { return await window.pywebview.api.speichern(new URL(pfad, location.href).href); }
       catch (e) { return {fehler: String(e && e.message || e)}; }
     }
     try {
-      const {r} = await server(`/api/auftrag/${encodeURIComponent(aid)}/download`);
+      const {r} = await server(pfad);
       const kopf = r.headers.get("Content-Disposition") || "";
       const m = kopf.match(/filename\*=UTF-8''([^;]+)/i) || kopf.match(/filename="?([^";]+)"?/i);
       const name = m ? decodeURIComponent(m[1]) : "file.bin";
@@ -2182,7 +2191,7 @@ function tkListeMalen() {
     el.querySelector(".a-datei").textContent = "#" + t.kurz + " · " + t.thema_text;
     el.querySelector(".pille span").textContent = ungelesen(t) ? "Neue Antwort" : t.status_text;
     el.querySelector(".a-info").textContent = (t.datei ? t.datei + " · " : "") + zeitKurz(letzte.zeit);
-    el.querySelector(".tk-vorschau").textContent = (letzte.von === "admin" ? "Wir: " : "Du: ") + letzte.text;
+    el.querySelector(".tk-vorschau").textContent = (letzte.von === "admin" ? "Wir: " : "Du: ") + (letzte.text || (letzte.datei ? "📎 " + letzte.datei.name : ""));
     el.addEventListener("click", () => zeigeTicket(t.id));
     l.appendChild(el);
   });
@@ -2198,11 +2207,36 @@ function zeigeTicket(id) {
     const b = document.createElement("div"); b.className = "tk-blase " + n.von;
     b.innerHTML = '<span class="tk-wer"></span><div></div>';
     b.querySelector(".tk-wer").textContent = (n.von === "admin" ? "Support" : "Du") + " · " + zeitKurz(n.zeit);
-    b.querySelector("div").textContent = n.text; v.appendChild(b);
+    b.querySelector("div").textContent = n.text;
+    if (!n.text) b.querySelector("div").remove();
+    if (n.datei) {
+      const k = document.createElement("button"); k.type = "button"; k.className = "tk-anhang";
+      k.innerHTML = '<span class="tk-anhang-icon">⬇</span><span class="tk-anhang-name"></span><span class="tk-anhang-gr"></span>';
+      k.querySelector(".tk-anhang-name").textContent = n.datei.name;
+      k.querySelector(".tk-anhang-gr").textContent = groesseText(n.datei.groesse);
+      k.title = "Datei speichern";
+      k.addEventListener("click", () => tkAnhangLaden(t.id, n.datei, k));
+      b.appendChild(k);
+    }
+    v.appendChild(b);
   });
   v.scrollTop = v.scrollHeight;
   if (t.gesehen < t.nachrichten.length) { t.gesehen = t.nachrichten.length; lokal.ticketGesehen(t.id, t.gesehen); }
   tkListeMalen();
+}
+function groesseText(b) {
+  b = +b || 0;
+  return b >= 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+}
+async function tkAnhangLaden(tid, d, k) {
+  if (k.disabled) return;
+  k.disabled = true; k.classList.add("laedt");
+  let erg;
+  try { erg = await rufe("ticketDatei", tid, d.id); }
+  finally { k.disabled = false; k.classList.remove("laedt"); }
+  if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
+  else if (erg.abgebrochen) return;
+  else if (erg.pfad) toast("ok", "Heruntergeladen", erg.app ? "Gespeichert: " + erg.pfad : erg.pfad + " liegt in deinem Download-Ordner.", 10000);
 }
 function neuesTicket(aid = "", thema = "file") {
   seite("support"); $("#sn-support").classList.add("an");
@@ -2218,7 +2252,8 @@ async function ticketsLaden(melden) {
   if (melden && !tkErsterLauf) tickets.forEach(t => {
     const sichtbar = t.id === tkAktiv && $("#seite-support").classList.contains("aktiv") && !$("#tk-detail").hidden;
     if (ungelesen(t) && t.nachrichten.length > (vorher.get(t.id) || 0) && !sichtbar) {
-      toast("info", "Neue Antwort vom Support", "Ticket #" + t.kurz + " · " + t.thema_text, 10000, {text: "Antwort lesen", klick: () => { seite("support"); $("#sn-support").classList.add("an"); zeigeTicket(t.id); }});
+      const mitDatei = t.nachrichten.slice(vorher.get(t.id) || 0).some(n => n.datei);
+      toast("info", mitDatei ? "Neues File vom Support" : "Neue Antwort vom Support", "Ticket #" + t.kurz + " · " + t.thema_text, 10000, {text: mitDatei ? "File ansehen" : "Antwort lesen", klick: () => { seite("support"); $("#sn-support").classList.add("an"); zeigeTicket(t.id); }});
       ton(true);
     }
   });

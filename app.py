@@ -377,7 +377,7 @@ def sicherheits_header(antwort):
 
 @app.before_request
 def upload_limit():
-    if request.path in ("/admin/archiv/import", "/admin/archiv/neu") and session.get("admin"):
+    if (request.path in ("/admin/archiv/import", "/admin/archiv/neu") or request.path.startswith("/admin/ticket/")) and session.get("admin"):
         request.max_content_length = 4 * 1024 * 1024 * 1024
 
 
@@ -1053,7 +1053,20 @@ def api_ticket(t: dict) -> dict:
     return {"id": t["id"], "kurz": t["id"][:6], "thema": t["thema"], "thema_text": TICKET_THEMEN.get(t["thema"], t["thema"]),
             "status": t["status"], "status_text": TICKET_STATUS.get(t["status"], t["status"]), "zeit": t["zeit"],
             "auftrag": t.get("auftrag") or "", "datei": (a or {}).get("datei", ""),
-            "nachrichten": [{"von": n["von"], "text": n["text"], "zeit": n["zeit"]} for n in t.get("nachrichten", [])]}
+            "nachrichten": [{"von": n["von"], "text": n["text"], "zeit": n["zeit"], **({"datei": n["datei"]} if n.get("datei") else {})}
+                            for n in t.get("nachrichten", [])]}
+
+
+def ticket_anhang(t: dict, fid: str):
+    """(Pfad, Dateiname) eines Anhangs im Ticket - nur Dateien, die wirklich an einer Nachricht haengen."""
+    if not re.fullmatch(r"[0-9a-f]{12}", fid or ""):
+        return None
+    for n in t.get("nachrichten", []):
+        d = n.get("datei")
+        if d and d.get("id") == fid:
+            pfad = TICKETS / "anhang" / t["id"] / fid
+            return (pfad, d["name"]) if pfad.exists() else None
+    return None
 
 
 def ticket_text(t: dict, neu: bool) -> str:
@@ -1110,6 +1123,15 @@ def api_ticket_lesen(tid):
     return jsonify(api_ticket(t))
 
 
+@app.route("/api/ticket/<tid>/datei/<fid>")
+def api_ticket_datei(tid, fid):
+    t = finde_ticket(tid)
+    anhang = ticket_anhang(t, fid) if t else None
+    if anhang is None:
+        return jsonify(fehler="Datei nicht gefunden (vielleicht schon gelöscht)."), 404
+    return send_file(anhang[0], as_attachment=True, download_name=anhang[1], mimetype="application/octet-stream")
+
+
 @app.route("/api/ticket/<tid>/nachricht", methods=["POST"])
 def api_ticket_nachricht(tid):
     daten = request.get_json(silent=True)
@@ -1159,6 +1181,16 @@ def admin_tickets_stand():
     return jsonify(stand=[[t["id"], len(t.get("nachrichten", [])), t["status"]] for t in alle_tickets()])
 
 
+@app.route("/admin/ticket/<tid>/datei/<fid>")
+@admin_noetig
+def admin_ticket_datei(tid, fid):
+    t = finde_ticket(tid)
+    anhang = ticket_anhang(t, fid) if t else None
+    if anhang is None:
+        abort(404)
+    return send_file(anhang[0], as_attachment=True, download_name=anhang[1], mimetype="application/octet-stream")
+
+
 @app.route("/admin/ticket/<tid>", methods=["GET", "POST"])
 @admin_noetig
 def admin_ticket(tid):
@@ -1171,12 +1203,31 @@ def admin_ticket(tid):
             t = finde_ticket(tid)
             if aktion == "antworten":
                 text = request.form.get("text", "").strip()[:5000]
-                if text:
-                    t["nachrichten"].append({"von": "admin", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")})
+                datei = request.files.get("datei")
+                anhang = None
+                if datei and datei.filename:
+                    name = sicherer_name(PurePosixPath(datei.filename.replace("\\", "/")).name)[:150]
+                    daten = datei.read()
+                    if oneclick.abgas_datei(name):
+                        flash("Nicht gesendet – Files zur Abschaltung der Abgasreinigung werden nicht unterstützt.")
+                        return redirect(url_for("admin_ticket", tid=tid))
+                    if not daten:
+                        flash("Nicht gesendet – die Datei ist leer.")
+                        return redirect(url_for("admin_ticket", tid=tid))
+                    fid = uuid.uuid4().hex[:12]
+                    ordner = TICKETS / "anhang" / tid
+                    ordner.mkdir(parents=True, exist_ok=True)
+                    (ordner / fid).write_bytes(daten)
+                    anhang = {"id": fid, "name": name, "groesse": len(daten)}
+                if text or anhang:
+                    n = {"von": "admin", "text": text, "zeit": datetime.now().isoformat(timespec="seconds")}
+                    if anhang:
+                        n["datei"] = anhang
+                    t["nachrichten"].append(n)
                     t["status"] = "BEANTWORTET"
-                    flash("Antwort gesendet – der Kunde sieht sie im Programm.")
+                    flash("Antwort gesendet – der Kunde sieht sie im Programm." + (f" Datei „{anhang['name']}“ ist angehängt." if anhang else ""))
                 else:
-                    flash("Bitte eine Antwort eintippen.")
+                    flash("Bitte eine Antwort eintippen oder eine Datei anhängen.")
             elif aktion == "schliessen":
                 t["status"] = "GESCHLOSSEN"
                 flash("Ticket geschlossen.")
@@ -1288,6 +1339,7 @@ def aufraeumen() -> int:
         letzte = t["nachrichten"][-1]["zeit"] if t.get("nachrichten") else t["zeit"]
         if datetime.fromisoformat(letzte) < grenze:
             (TICKETS / f"{t['id']}.json").unlink(missing_ok=True)
+            shutil.rmtree(TICKETS / "anhang" / t["id"], ignore_errors=True)
     return geloescht
 
 
@@ -3135,9 +3187,11 @@ pruefen(); setInterval(pruefen,8000);})();
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
 {% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ auftrag.ecu }}, #{{ auftrag.id[:8] }}){% endif %}</p>
 <div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
-<div>{{ n.text }}</div></div>{% endfor %}</div>
-<form method="post" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
-<label class="feld">Antwort an den Kunden</label><textarea name="text" required></textarea>
+<div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ url_for('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ (n.datei.groesse / 1024)|round|int }} KB</a>{% endif %}</div>{% endfor %}</div>
+<form method="post" enctype="multipart/form-data" id="antwort-form" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
+<label class="feld">Antwort an den Kunden</label><textarea name="text" id="antwort-text"></textarea>
+<label class="drop" id="anhang-drop" style="padding:22px 18px;margin-bottom:14px"><input type="file" name="datei" id="anhang-datei">
+<div id="anhang-text"><b>Neues File hierher ziehen</b><br>oder klicken – der Kunde lädt es direkt im Chat herunter</div></label>
 <button class="btn">Antwort senden</button></form>
 <form method="post" class="inline" style="display:block;margin-top:12px"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 {% if t.status == 'GESCHLOSSEN' %}<input type="hidden" name="aktion" value="oeffnen"><button class="btn grau">Wieder öffnen</button>
@@ -3155,7 +3209,9 @@ pruefen(); setInterval(pruefen,8000);})();
       t.nachrichten.slice(+v.dataset.anzahl).forEach(function(n){
         var d=document.createElement('div'); d.className='nachricht '+n.von+' neu';
         var k=document.createElement('span'); k.className='leise'; k.textContent=(n.von==='kunde'?'Kunde':'Du')+' · '+zeit(n.zeit);
-        var x=document.createElement('div'); x.textContent=n.text; d.appendChild(k); d.appendChild(x); v.appendChild(d);
+        var x=document.createElement('div'); x.textContent=n.text; d.appendChild(k); d.appendChild(x);
+        if(n.datei){var a=document.createElement('a'); a.className='anhang'; a.href=url.replace(/\/daten$/,'/datei/'+n.datei.id); a.textContent='📎 '+n.datei.name; d.appendChild(a);}
+        v.appendChild(d);
       });
       v.dataset.anzahl=t.nachrichten.length;
       var st=document.querySelector('.status'); if(st&&t.status==='OFFEN'){st.textContent='Offen';st.className='status s-WARTET';}
@@ -3165,7 +3221,20 @@ pruefen(); setInterval(pruefen,8000);})();
   setInterval(holen,5000);
 })();
 </script>
-<style>.nachricht.neu{animation:neu 1.4s ease-out}@keyframes neu{from{box-shadow:0 0 0 2px #2f7bff}}
+<script>
+// Datei hineinziehen: ganzes Antwort-Feld ist Ablage; Name wird angezeigt
+(function(){
+  var f=document.getElementById('antwort-form'), inp=document.getElementById('anhang-datei'), feld=document.getElementById('anhang-drop'), txt=document.getElementById('anhang-text');
+  function zeigen(){ if(inp.files.length){ var d=inp.files[0]; txt.innerHTML='<b></b><br>wird mit der Antwort gesendet · '+Math.round(d.size/1024)+' KB'; txt.querySelector('b').textContent='📎 '+d.name; feld.classList.add('aktiv'); } }
+  inp.addEventListener('change',zeigen);
+  ['dragenter','dragover'].forEach(function(e){f.addEventListener(e,function(ev){ev.preventDefault();feld.classList.add('aktiv');});});
+  f.addEventListener('dragleave',function(ev){if(!f.contains(ev.relatedTarget))feld.classList.remove('aktiv');});
+  f.addEventListener('drop',function(ev){ev.preventDefault(); if(ev.dataTransfer.files.length){inp.files=ev.dataTransfer.files; zeigen();}});
+  f.addEventListener('submit',function(ev){ if(!document.getElementById('antwort-text').value.trim()&&!inp.files.length){ev.preventDefault();alert('Bitte eine Antwort eintippen oder eine Datei anhängen.');}});
+})();
+</script>
+<style>.nachricht.neu{animation:neu 1.4s ease-out}
+.nachricht .anhang{display:inline-block;margin-top:8px;padding:6px 12px;border-radius:8px;background:rgba(47,123,255,.18);border:1px solid rgba(47,123,255,.45);text-decoration:none;font-weight:600}@keyframes neu{from{box-shadow:0 0 0 2px #2f7bff}}
 .verlauf{display:flex;flex-direction:column;gap:10px;margin-top:16px}.nachricht{max-width:78%;padding:10px 14px;border-radius:10px;background:var(--glas2);border:1px solid var(--rand)}
 .nachricht div{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}.nachricht.admin{align-self:flex-end;background:rgba(47,123,255,.14);border-color:rgba(47,123,255,.4)}</style>
 {% endblock %}""",

@@ -452,6 +452,41 @@ class WebTests(Basis):
         A.aufraeumen()
         self.assertIsNone(A.finde_ticket(t["id"]))
 
+    def test_ticket_datei_vom_admin(self):
+        k, a = self.kunde, self.admin()
+        t = k.post("/api/ticket", json={"thema": "file", "text": "Ruckelt im Teillastbereich"}).json
+        url = f"/admin/ticket/{t['id']}"
+        inhalt = b"\x01\x02neues-file" * 100
+        # File ohne Text in den Chat
+        a.post(url, data={"csrf": a.csrf, "aktion": "antworten", "text": "",
+                          "datei": (io.BytesIO(inhalt), "Golf_stage1_v2.bin")}, content_type="multipart/form-data")
+        n = k.get(f"/api/ticket/{t['id']}").json["nachrichten"][-1]
+        self.assertEqual((n["von"], n["datei"]["name"], n["datei"]["groesse"]), ("admin", "Golf_stage1_v2.bin", len(inhalt)))
+        r = k.get(f"/api/ticket/{t['id']}/datei/{n['datei']['id']}")
+        self.assertEqual((r.status_code, r.data), (200, inhalt))
+        self.assertIn("Golf_stage1_v2.bin", r.headers["Content-Disposition"])
+        self.assertEqual(a.get(f"{url}/datei/{n['datei']['id']}").data, inhalt)          # Admin sieht es auch
+        self.assertIn("Golf_stage1_v2.bin", a.get(url).text)
+        # falsche Kennung / fremder Browser / ohne Admin
+        self.assertEqual(k.get(f"/api/ticket/{t['id']}/datei/" + "0" * 12).status_code, 404)
+        self.assertEqual(k.get(f"/api/ticket/{t['id']}/datei/../../x").status_code, 404)
+        self.assertEqual(k.get(f"/api/ticket/{t['id']}/datei/{n['datei']['id']}",
+                               headers={"User-Agent": "Mozilla/5.0 Chrome"}).status_code, 403)
+        self.assertEqual(self.kunde.get(f"{url}/datei/{n['datei']['id']}", headers={"User-Agent": "x"}).status_code, 302)
+        # leeres File und gesperrter Name werden abgelehnt, ohne Text und File passiert nichts
+        anzahl = len(k.get(f"/api/ticket/{t['id']}").json["nachrichten"])
+        a.post(url, data={"csrf": a.csrf, "aktion": "antworten", "text": "",
+                          "datei": (io.BytesIO(b""), "leer.bin")}, content_type="multipart/form-data")
+        a.post(url, data={"csrf": a.csrf, "aktion": "antworten", "text": "",
+                          "datei": (io.BytesIO(b"x"), "golf_dpf_off.bin")}, content_type="multipart/form-data")
+        a.post(url, data={"csrf": a.csrf, "aktion": "antworten", "text": "  "})
+        self.assertEqual(len(k.get(f"/api/ticket/{t['id']}").json["nachrichten"]), anzahl)
+        # Aufraeumen loescht auch die Anhaenge
+        A.speichere_config({"aufbewahrung_tage": 1})
+        alt = A.finde_ticket(t["id"]); alt["nachrichten"][-1]["zeit"] = "2020-01-01T00:00:00"; A.speichere_ticket(alt)
+        A.aufraeumen()
+        self.assertFalse((A.TICKETS / "anhang" / t["id"]).exists())
+
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck

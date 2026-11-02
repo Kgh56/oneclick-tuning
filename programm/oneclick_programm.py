@@ -179,7 +179,7 @@ class Bruecke:
 
     def speichern(self, url: str):
         """File vom Server holen und ueber 'Speichern unter ...' ablegen. Nur Adressen unseres Servers."""
-        if not url.startswith(SERVER + "/api/auftrag/"):
+        if not url.startswith((SERVER + "/api/auftrag/", SERVER + "/api/ticket/")):
             return {"fehler": "Ungültige Adresse."}
         import webview
         try:
