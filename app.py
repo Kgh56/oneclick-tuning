@@ -483,10 +483,31 @@ def schrift(name):
     return antwort
 
 
+HANDY_UA = re.compile(r"iPhone|iPod|iPad|Android|Mobile|Windows Phone|BlackBerry|BB10|Opera Mini|IEMobile|webOS|Kindle|Silk|Tablet|PlayBook", re.I)
+
+
+def nur_pc() -> bool:
+    """Kundenseite nur am Laptop/PC (Admin -> Einstellungen). Standard: an. Der Admin kommt immer rein."""
+    return lade_config().get("nur_pc", True) is not False and not session.get("admin")
+
+
+@app.route("/nur-pc")
+def nur_pc_seite():
+    cfg = lade_config()
+    adresse = (cfg.get("basis_url") or request.host_url).rstrip("/")
+    return render_template("nur_pc.html", adresse=adresse,
+                           whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
+
+
 @app.route("/")
 def start():
     """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
+    if nur_pc() and HANDY_UA.search(request.headers.get("User-Agent", "")):
+        return redirect(url_for("nur_pc_seite"))
     seite = KUNDENSEITE.read_text(encoding="utf-8")
+    if nur_pc():   # zusaetzlich im Browser: reine Touch-Geraete ohne Maus/Touchpad (z. B. iPad, das sich als Mac ausgibt)
+        seite = seite.replace("<head>", '<head>\n<script>if(!matchMedia("(any-pointer: fine)").matches&&navigator.maxTouchPoints>0)'
+                                        'location.replace("/nur-pc")</script>', 1)
     name = html.escape(lade_config().get("firmenname") or "OneClick Tuning")
     seite = seite.replace("<title>OneClick Tuning</title>", f"<title>{name}</title>", 1)
     antwort = app.response_class(seite, mimetype="text/html")
@@ -2142,6 +2163,7 @@ def einstellungen():
                 "telegram_chat_id": request.form.get("telegram_chat_id", "").strip(),
                 "aufbewahrung_tage": tage,
                 "nur_identisch": request.form.get("nur_identisch") == "1",
+                "nur_pc": request.form.get("nur_pc") == "1",
                 "support_whatsapp": re.sub(r"[^0-9]", "", request.form.get("support_whatsapp", ""))[:20],
             })
             flash("Gespeichert.")
@@ -3064,6 +3086,24 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 </form>{% else %}<p>Für dieses File gibt es im Archiv noch keine passende Lösung.</p>{% endif %}
 </div>{% endif %}
 {% endblock %}""",
+"nur_pc.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte" style="max-width:560px;margin:4vh auto 0;text-align:center">
+<svg viewBox="0 0 64 48" style="width:84px;height:63px;margin:6px auto 14px;display:block;fill:none;stroke:#8fb4ff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 12px rgba(47,107,255,.8))">
+<rect x="10" y="4" width="44" height="30" rx="3"/><path d="M3 42h58l-4-6H7z"/><path d="M27 21l4 4 8-9" stroke="#2fd35a"/></svg>
+<h1>Bitte am Laptop oder PC öffnen</h1>
+<p class="leise" style="margin:6px 0 18px">OneClick Tuning ist für die Arbeit mit ECU-Files gemacht und funktioniert nur am Laptop oder PC.
+Öffne einfach diese Adresse dort im Browser:</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center">
+<code id="adresse" style="font-size:14px;padding:10px 14px;word-break:break-all">{{ adresse }}</code>
+<button class="btn" type="button" id="kopieren">Link kopieren</button></div>
+{% if whatsapp %}<p style="margin-top:22px"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Schreib uns per WhatsApp</a></p>{% endif %}
+</div>
+<script>
+document.getElementById('kopieren').addEventListener('click',function(){var b=this,t=document.getElementById('adresse').textContent;
+ (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Kopiert ✓'},function(){
+ var r=document.createRange();r.selectNodeContents(document.getElementById('adresse'));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Markiert – jetzt kopieren'});});
+</script>
+{% endblock %}""",
 "sortieren.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Sortieren</h1>
 <p class="leise" style="margin-top:-6px">Ähnliche Files (gleiche Größe, weitgehend gleicher Inhalt) sind schon zu Gruppen zusammengefasst –
@@ -3200,6 +3240,10 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
+<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 12px;cursor:pointer">
+<input type="checkbox" name="nur_pc" value="1" {{ 'checked' if cfg.get('nur_pc', True) }} style="margin-top:4px">
+<span><b>Kundenseite nur am Laptop / PC</b><br><span class="leise" style="font-size:13px">An: Kunden mit Handy oder Tablet sehen nur den Hinweis,
+die Seite am Laptop oder PC zu öffnen. Du als Admin kommst immer rein. Rechtstexte bleiben überall erreichbar.</span></span></label>
 <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;cursor:pointer">
 <input type="checkbox" name="nur_identisch" value="1" {{ 'checked' if cfg.nur_identisch }} style="margin-top:4px">
 <span><b>Nur komplett identische Originale</b><br><span class="leise" style="font-size:13px">Aus: Treffer auch, wenn das File an allen Stellen,

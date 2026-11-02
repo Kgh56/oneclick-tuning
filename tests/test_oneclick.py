@@ -362,6 +362,28 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.post("/admin/archiv/alles", data={"csrf": self.kunde.csrf, "aktion": "loeschen",
                                                                       "bestaetigung": "ALLES"}).status_code, 302)
 
+    def test_kundenseite_nur_am_pc(self):
+        handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"}
+        android = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
+        pc = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
+        for ua in (handy, android):
+            r = self.kunde.get("/", headers=ua)
+            self.assertEqual(r.status_code, 302)
+            self.assertTrue(r.headers["Location"].endswith("/nur-pc"))
+        r = self.kunde.get("/", headers=pc)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('location.replace("/nur-pc")', r.text)          # Schutz auch fuer iPad (gibt sich als Mac aus)
+        seite = self.kunde.get("/nur-pc", headers=handy).text
+        self.assertIn("Bitte am Laptop oder PC öffnen", seite)
+        self.assertIn("Impressum", seite)                              # Rechtstexte bleiben erreichbar
+        self.assertEqual(self.kunde.get("/impressum", headers=handy).status_code, 200)
+        a = self.admin()
+        self.assertEqual(a.get("/", headers=handy).status_code, 200)   # Admin kommt immer rein
+        self.assertNotIn('location.replace("/nur-pc")', a.get("/", headers=pc).text)
+        A.speichere_config({"nur_pc": False})
+        self.assertEqual(self.kunde.get("/", headers=handy).status_code, 200)
+        self.assertNotIn('location.replace("/nur-pc")', self.kunde.get("/", headers=pc).text)
+
     def test_rueckruesten_im_web(self):
         aid = self.hochladen(self.bmw_st1, "bmw_stage1.bin")
         self.assertEqual(self.angebot(aid), {"original": "Original (Rückrüsten)"})
