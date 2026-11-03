@@ -563,6 +563,41 @@ class WebTests(Basis):
         self.assertIn("/download/mac", seite)
         self.assertIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)
 
+    def test_rueckfrage_vom_admin_zum_auftrag(self):
+        A.speichere_config({"telegram_chat_id": "1"})
+        k, a = self.kunde, self.admin()
+        aid = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(zufall(GROESSE, 41))), "golf.bin")},
+                              content_type="multipart/form-data").json["id"]
+        self.anfrage(aid)
+        self.assertEqual(k.get(f"/api/auftrag/{aid}").json["ticket"], "")
+        self.assertIn("Chat mit dem Kunden", a.get(f"/auftrag/{aid}").text)
+        # leer -> nichts; ohne Login -> Login
+        a.post(f"/admin/auftrag/{aid}/rueckfrage", data={"csrf": a.csrf, "text": " "})
+        self.assertEqual(k.get(f"/api/auftrag/{aid}").json["ticket"], "")
+        self.assertEqual(self.kunde.post(f"/admin/auftrag/{aid}/rueckfrage", data={"text": "x"}, headers={"User-Agent": "x"}).status_code, 400)
+        # Admin fragt nach (mit Datei)
+        r = a.post(f"/admin/auftrag/{aid}/rueckfrage", data={"csrf": a.csrf, "text": "Ist eine Downpipe verbaut?",
+                                                              "datei": (io.BytesIO(b"bild"), "foto.png")}, content_type="multipart/form-data")
+        tid = k.get(f"/api/auftrag/{aid}").json["ticket"]
+        self.assertTrue(tid)
+        self.assertIn(f"/admin/ticket/{tid}", r.headers["Location"])
+        t = k.get(f"/api/ticket/{tid}").json
+        self.assertEqual((t["thema"], t["status"], t["auftrag"], t["nachrichten"][0]["von"]), ("rueckfrage", "BEANTWORTET", aid, "admin"))
+        self.assertEqual(t["nachrichten"][0]["datei"]["name"], "foto.png")
+        # zweite Frage landet im selben Chat
+        a.post(f"/admin/auftrag/{aid}/rueckfrage", data={"csrf": a.csrf, "text": "Und welches Getriebe?"})
+        self.assertEqual(k.get(f"/api/auftrag/{aid}").json["ticket"], tid)
+        self.assertEqual(len(k.get(f"/api/ticket/{tid}").json["nachrichten"]), 2)
+        # Kunde antwortet im Programm -> Admin sieht es, Telegram meldet es
+        anzahl = len(self.telegram)
+        self.assertEqual(k.post(f"/api/ticket/{tid}/nachricht", json={"text": "Ja, Downpipe ist verbaut, Getriebe DSG."}).json["status"], "OFFEN")
+        self.warte_telegram(anzahl + 1)
+        self.assertIn("Rückfrage zu deinem Auftrag", self.telegram[-1][1]["text"])
+        self.assertIn("Kunde hat geantwortet", a.get(f"/auftrag/{aid}").text)
+        self.assertIn("💬 Chat", a.get("/admin").text)
+        # Admin-Ticketseite verlinkt den Auftrag
+        self.assertIn(f"/auftrag/{aid}", a.get(f"/admin/ticket/{tid}").text)
+
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck

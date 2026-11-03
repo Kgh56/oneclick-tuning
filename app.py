@@ -884,6 +884,7 @@ def api_auftrag(a: dict) -> dict:
         "id": a["id"], "datei": a["datei"], "ecu": a["ecu"], "software": a["software"],
         "zeit": a["zeit"], "status": a["status"], "status_text": STATUS_TEXT[a["status"]],
         "option": a.get("option"), "option_name": namen[a["option"]] if a.get("option") else None,
+        "ticket": a.get("ticket", "") if a.get("ticket") and finde_ticket(a["ticket"]) else "",
         "angebot": [{"key": o, "name": namen[o], "sofort": a["angebot"][o].get("art") != "softwarenummer"}
                     for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
         "grund": a.get("grund", ""),
@@ -1054,7 +1055,9 @@ def api_bezahlen(aid):
 @app.route("/auftrag/<aid>")
 @admin_noetig
 def auftrag_ansicht(aid):
-    return render_template("auftrag.html", a=lade_auftrag(aid), hat_file=hat_file(aid),
+    a = lade_auftrag(aid)
+    chat = finde_ticket(a.get("ticket") or "") if session.get("admin") else None
+    return render_template("auftrag.html", a=a, hat_file=hat_file(aid), chat=api_ticket(chat) if chat else None,
                            fahrzeug_felder=FAHRZEUG_FELDER, zahlung=zahlung_aktiv(), euro=euro,
                            stripe_key=lade_config().get("stripe_key", ""))
 
@@ -1128,7 +1131,8 @@ def auftrag_suche():
 # ---------------------------------------------------------------------------
 
 TICKET_THEMEN = {"file": "Problem mit einem File", "auto": "Fehler am Auto nach dem Aufspielen",
-                 "bestellung": "Frage zu Bestellung / Zahlung", "sonstiges": "Sonstiges"}
+                 "bestellung": "Frage zu Bestellung / Zahlung", "sonstiges": "Sonstiges",
+                 "rueckfrage": "Rückfrage zu deinem Auftrag"}   # startet der Admin am Auftrag
 TICKET_STATUS = {"OFFEN": "Offen", "BEANTWORTET": "Beantwortet", "GESCHLOSSEN": "Geschlossen"}
 ticket_sperre = threading.Lock()
 
@@ -1395,6 +1399,42 @@ def admin_ticket(tid):
         return redirect(url_for("admin_ticket", tid=tid))
     return render_template("ticket.html", t=api_ticket(t) | {"kontakt": t.get("kontakt", "")},
                            auftrag=finde_auftrag(t.get("auftrag") or "") if t.get("auftrag") else None)
+
+
+@app.route("/admin/auftrag/<aid>/rueckfrage", methods=["POST"])
+@admin_noetig
+def admin_rueckfrage(aid):
+    """Admin schreibt dem Kunden zu einem Auftrag/einer Anfrage - der Chat erscheint im Programm des Kunden."""
+    text = request.form.get("text", "").strip()[:5000]
+    try:
+        gelesen = ticket_datei_lesen(request.files.get("datei"))
+    except Abgelehnt as e:
+        flash("Nicht gesendet – " + str(e))
+        return redirect(url_for("auftrag_ansicht", aid=aid))
+    if not text and not gelesen:
+        flash("Bitte eine Nachricht eintippen oder eine Datei anhängen.")
+        return redirect(url_for("auftrag_ansicht", aid=aid))
+    with sperre:
+        auftrag = finde_auftrag(aid)
+        if auftrag is None:
+            abort(404)
+        jetzt = datetime.now().isoformat(timespec="seconds")
+        with ticket_sperre:
+            t = finde_ticket(auftrag.get("ticket") or "")
+            if t is None:
+                t = {"id": uuid.uuid4().hex, "thema": "rueckfrage", "status": "BEANTWORTET", "zeit": jetzt, "auftrag": aid,
+                     "kontakt": auftrag.get("kunde", "") if auftrag.get("kunde") != "–" else "", "nachrichten": []}
+            n = {"von": "admin", "text": text, "zeit": jetzt}
+            if gelesen:
+                n["datei"] = ticket_datei_ablegen(t["id"], *gelesen)
+            t["nachrichten"].append(n)
+            t["status"] = "BEANTWORTET"
+            speichere_ticket(t)
+        if auftrag.get("ticket") != t["id"]:
+            auftrag["ticket"] = t["id"]
+            speichere_auftrag(auftrag)
+    flash("Nachricht gesendet – der Kunde sieht sie in wenigen Sekunden im Programm. Seine Antwort kommt hier im Chat an.")
+    return redirect(url_for("admin_ticket", tid=t["id"]))
 
 
 @app.route("/admin/wartend")
@@ -2935,6 +2975,22 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% endif %}
 </div>
 
+{% if session.admin and a.status != 'ENTWURF' %}
+<div class="karte" id="chat"><h2>💬 Chat mit dem Kunden</h2>
+{% if chat %}<p class="leise" style="margin-top:-6px">{{ chat.nachrichten|length }} Nachricht(en) ·
+{% set letzte = chat.nachrichten[-1] %}zuletzt {{ 'vom Kunden' if letzte.von == 'kunde' else 'von dir' }} am {{ letzte.zeit[8:10] }}.{{ letzte.zeit[5:7] }}. {{ letzte.zeit[11:16] }}
+{% if chat.status == 'OFFEN' %} · <span class="status s-WARTET">Kunde hat geantwortet</span>{% endif %}</p>
+<p><a class="btn" href="{{ url_for('admin_ticket', tid=chat.id) }}">Chat öffnen</a></p>
+{% else %}<p class="leise" style="margin-top:-6px">Noch Fragen vor der Freigabe? Schreib dem Kunden – die Nachricht erscheint sofort in seinem Programm,
+seine Antwort kommt hier an (und per Telegram).</p>
+<form method="post" action="{{ url_for('admin_rueckfrage', aid=a.id) }}" enctype="multipart/form-data">
+<input type="hidden" name="csrf" value="{{ session.csrf }}">
+<textarea name="text" rows="3" maxlength="5000" placeholder="z. B. Ist am Auto schon eine Downpipe verbaut? Welches Getriebe hat das Fahrzeug?"></textarea>
+<p class="leise" style="margin:8px 0">Datei anhängen (optional): <input type="file" name="datei"></p>
+<button class="btn">Rückfrage senden</button></form>{% endif %}
+</div>
+{% endif %}
+
 {% if session.admin and a.typ == 'anfrage' and a.status == 'WARTET' %}
 <div class="karte"><h2>Anfrage bearbeiten</h2>
 <p class="leise" style="margin-top:-6px">1. Original herunterladen und bearbeiten · 2. Fertiges File hier hochladen –
@@ -3025,7 +3081,8 @@ Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Bro
 <input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn gruen klein">✓ Bestätigen</button></form>
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="nein">
-<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form>{% endif %}</td></tr>
+<input type="hidden" name="zurueck" value="{{ url_for('admin') }}"><button class="btn klein">✕ Ablehnen</button></form>{% endif %}
+<a class="btn grau klein" href="{{ url_for('auftrag_ansicht', aid=a.id) }}#chat" title="Rückfrage an den Kunden">💬{{ ' Chat' if a.ticket else ' Frage' }}</a></td></tr>
 {% endfor %}</table></div>{% else %}<p class="leise">Nichts offen.</p>{% endif %}</div>
 <div class="karte"><h2>Alle Aufträge</h2>
 <form method="get" action="{{ url_for('auftrag_suche') }}" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">

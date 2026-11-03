@@ -1107,6 +1107,8 @@ button.hilfe svg{width:15px;height:15px}
 .nur-app{display:none!important}
 .app-modus .nur-app{display:flex!important}
 .app-modus.mac .nx-fenster{display:none!important}
+.chat-knopf{background:rgba(47,123,255,.14);border:1px solid rgba(47,123,255,.55);color:#cfe0ff}
+.chat-knopf.neu{background:linear-gradient(180deg,#3d86ff,#1d5fe6);color:#fff;box-shadow:0 0 0 3px rgba(47,123,255,.25)}
 #statistik-frage{position:fixed;left:24px;bottom:24px;z-index:900;max-width:380px;padding:16px 18px;border-radius:14px;background:#141a26;
   border:1px solid rgba(47,123,255,.55);box-shadow:0 18px 50px rgba(0,0,0,.55);font-size:14px;animation:einblenden .4s both}
 #statistik-frage p{margin:6px 0 12px;color:var(--nx-leise);line-height:1.45}
@@ -1427,7 +1429,7 @@ const lokal = {
   merken(a) {
     const d = this.lesen(), alt = d.auftraege.find(x => x.id === a.id) || {}, neu = {...alt};
     ["id", "datei", "zeit", "status", "status_text", "option", "option_name", "grund", "ecu", "software", "typ", "fahrzeug",
-     "preis", "preis_text", "zahlung"]
+     "preis", "preis_text", "zahlung", "ticket"]
       .forEach(k => { if (k in a) neu[k] = a[k]; });
     d.auftraege = [neu, ...d.auftraege.filter(x => x.id !== a.id)].slice(0, 200);
     this.schreiben(d); return d.auftraege;
@@ -1516,16 +1518,17 @@ const WEB = {
     } catch (e) { return {fehler: e.message}; }
   },
   async aktualisieren() {
-    const geaendert = [];
+    const geaendert = []; let rueckfrage = false;
     // wartende Auftraege und freigegebene, die noch bezahlt werden muessen
     for (const alt of lokal.lesen().auftraege.filter(a => a.status === "WARTET" || a.zahlung === "offen")) {
       try {
         const {daten: neu} = await server(`/api/auftrag/${encodeURIComponent(alt.id)}`);
         if (neu.status !== alt.status || neu.zahlung !== alt.zahlung) geaendert.push(neu);
+        if (neu.ticket && !lokal.lesen().tickets.some(t => t.id === neu.ticket)) { lokal.ticketGesehen(neu.ticket, 0); rueckfrage = true; }
         lokal.merken(neu);
       } catch (e) {}
     }
-    return {auftraege: lokal.lesen().auftraege, geaendert};
+    return {auftraege: lokal.lesen().auftraege, geaendert, rueckfrage};
   },
   herunterladen(aid) { return WEB.dateiHolen(`/api/auftrag/${encodeURIComponent(aid)}/download`); },
   ticketDatei(tid, fid) { return WEB.dateiHolen(`/api/ticket/${encodeURIComponent(tid)}/datei/${encodeURIComponent(fid)}`); },
@@ -1991,6 +1994,17 @@ function listeMalen(hervorheben) {
       const hilfe = supportLink(a);
       if (hilfe) aktionen.appendChild(hilfe);
     }
+    if (a.ticket) {
+      const t = tickets.find(x => x.id === a.ticket), neu = t && ungelesen(t);
+      const c = document.createElement("button"); c.type = "button"; c.className = "btn klein chat-knopf" + (neu ? " neu" : "");
+      c.textContent = neu ? "💬 Neue Nachricht" : "💬 Chat"; c.title = "Nachrichten zu diesem Auftrag";
+      c.addEventListener("click", async () => {
+        seite("support"); $("#sn-support").classList.add("an");
+        if (!tickets.some(x => x.id === a.ticket)) await ticketsLaden(false);
+        zeigeTicket(a.ticket);
+      });
+      aktionen.appendChild(c);
+    }
     const x = document.createElement("button"); x.className = "link"; x.textContent = "Entfernen"; x.title = "Aus der Liste entfernen";
     x.addEventListener("click", async () => {
       el.style.transition = "opacity .3s, transform .3s"; el.style.opacity = 0; el.style.transform = "translateX(30px)";
@@ -2035,6 +2049,7 @@ async function aktualisieren() {
   try {
     const erg = await rufe("aktualisieren");
     if (erg.fehler) return;
+    if (erg.rueckfrage) ticketsLaden(true);   // neue Rueckfrage vom Admin sofort melden
     if (!erg.geaendert.length) { if (JSON.stringify(erg.auftraege) !== JSON.stringify(zustand.auftraege)) { zustand.auftraege = erg.auftraege; listeMalen(); } return; }
     zustand.auftraege = erg.auftraege;
     listeMalen(erg.geaendert[0].id);
@@ -2235,7 +2250,7 @@ const ungelesen = t => t.nachrichten.length > (t.gesehen || 0) && t.nachrichten[
 function tkStatusKlasse(st) { return {OFFEN: "WARTET", BEANTWORTET: "FREIGEGEBEN", GESCHLOSSEN: "ABGELEHNT"}[st] || ""; }
 function zeitKurz(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " · " + d.toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"}); }
 function tkBereich(welcher) { ["#tk-leer", "#tk-form", "#tk-detail"].forEach(x => $(x).hidden = x !== welcher); }
-let tkListeStand = "", tkListeIds = new Set();
+let tkListeStand = "", tkListeIds = new Set(), tkChatStand = null;
 function tkListeMalen() {
   const l = $("#tk-liste");
   const n = tickets.filter(ungelesen).length, b = $("#sn-support-badge");
@@ -2316,12 +2331,18 @@ async function ticketsLaden(melden) {
     const sichtbar = t.id === tkAktiv && $("#seite-support").classList.contains("aktiv") && !$("#tk-detail").hidden;
     if (ungelesen(t) && t.nachrichten.length > (vorher.get(t.id) || 0) && !sichtbar) {
       const mitDatei = t.nachrichten.slice(vorher.get(t.id) || 0).some(n => n.datei);
-      toast("info", mitDatei ? "Neues File vom Support" : "Neue Antwort vom Support", "Ticket #" + t.kurz + " · " + t.thema_text, 10000, {text: mitDatei ? "File ansehen" : "Antwort lesen", klick: () => { seite("support"); $("#sn-support").classList.add("an"); zeigeTicket(t.id); }});
+      const frage = t.thema === "rueckfrage" && !vorher.has(t.id);
+      toast("info", frage ? "Rückfrage zu deinem Auftrag" : mitDatei ? "Neues File vom Support" : "Neue Antwort vom Support",
+            frage ? (t.datei ? t.datei + " – " : "") + "Bitte kurz antworten, dann geht's weiter." : "Ticket #" + t.kurz + " · " + t.thema_text,
+            frage ? 15000 : 10000, {text: frage ? "Jetzt antworten" : mitDatei ? "File ansehen" : "Antwort lesen", klick: () => { seite("support"); $("#sn-support").classList.add("an"); zeigeTicket(t.id); }});
       ton(true);
     }
   });
   tkErsterLauf = false;
   tkListeMalen();
+  // Chat-Knoepfe an den Auftraegen: nur neu zeichnen, wenn sich "neue Nachricht" geaendert hat
+  const chatStand = JSON.stringify(zustand.auftraege.filter(a => a.ticket).map(a => [a.ticket, !!tickets.find(t => t.id === a.ticket && ungelesen(t))]));
+  if (chatStand !== tkChatStand) { const egal = tkChatStand === null && !chatStand.includes("true"); tkChatStand = chatStand; if (!egal) listeMalen(); }
   const offen = tickets.find(t => t.id === tkAktiv);
   if (offen && $("#seite-support").classList.contains("aktiv") && !$("#tk-detail").hidden && (vorher.get(tkAktiv) || 0) !== offen.nachrichten.length) zeigeTicket(tkAktiv);
 }
