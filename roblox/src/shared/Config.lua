@@ -41,6 +41,31 @@ Config.Upgrades = {
 	{ Id = "Stage3", Name = "Stage-3-Software", Price = 15000, Requires = "Stage2", Desc = "Die großen Aufträge: Stage 3 mit Top-Bezahlung." },
 }
 
+------------------------------------------------------------------------
+-- ROBUX-SHOP
+-- Die Artikel im Creator Hub anlegen (Spiel → Monetization → Passes
+-- bzw. Developer Products) und hier die IDs eintragen.
+-- Id = 0 heißt: noch nicht eingerichtet, der Knopf zeigt "Bald verfügbar".
+-- Den Robux-Preis legst du im Creator Hub fest; das Spiel liest ihn
+-- automatisch aus. PriceHint wird nur angezeigt, solange das nicht klappt.
+------------------------------------------------------------------------
+Config.GamePasses = {
+	{ Key = "DoubleMoney", Id = 0, PriceHint = 199, Name = "💰 Doppeltes Geld", Desc = "Jeder Auftrag zahlt doppelt – für immer." },
+	{ Key = "VIP", Id = 0, PriceHint = 149, Name = "⭐ VIP-Werkstatt", Desc = "Goldenes Firmenschild, VIP-Titel über dem Kopf und +10 % Geld." },
+	{ Key = "Turbo", Id = 0, PriceHint = 99, Name = "🚀 Turbo-Kundschaft", Desc = "Kunden kommen doppelt so schnell (zusätzlich zur Werbung)." },
+}
+
+Config.Products = {
+	{ Key = "Cash5k", Id = 0, PriceHint = 49, Money = 5000, Name = "Geldpaket S", Desc = "+5.000 € sofort aufs Firmenkonto." },
+	{ Key = "Cash25k", Id = 0, PriceHint = 149, Money = 25000, Name = "Geldpaket L", Desc = "+25.000 € sofort aufs Firmenkonto." },
+}
+
+Config.DoubleMoneyMult = 2
+Config.VipMult = 1.1
+Config.TurboMult = 0.5 -- Kundenabstand wird halbiert
+
+------------------------------------------------------------------------
+
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung
 Config.ZoneWidth = 0.16 -- Breite der grünen Zone (Anteil des Balkens)
@@ -54,6 +79,15 @@ function Config.GetUpgrade(id)
 	for _, up in ipairs(Config.Upgrades) do
 		if up.Id == id then
 			return up
+		end
+	end
+	return nil
+end
+
+function Config.GetPassByKey(key)
+	for _, p in ipairs(Config.GamePasses) do
+		if p.Key == key then
+			return p
 		end
 	end
 	return nil

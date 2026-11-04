@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 
@@ -190,7 +191,7 @@ local usedPlots = {} -- [index] = player
 local jobCounter = 0
 
 local function defaultData()
-	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {} }
+	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {}, Receipts = {} }
 end
 
 local function loadData(player)
@@ -216,13 +217,21 @@ local function loadData(player)
 				end
 			end
 		end
+		if type(res.Receipts) == "table" then
+			for _, r in ipairs(res.Receipts) do
+				if type(r) == "string" then
+					table.insert(data.Receipts, r)
+				end
+			end
+		end
 	end
 	return data, true
 end
 
+-- Gibt true zurück, wenn gespeichert wurde
 local function saveData(player, st)
 	if not (store and st.CanSave) then
-		return
+		return false
 	end
 	local ok, err = pcall(function()
 		store:SetAsync("p_" .. player.UserId, {
@@ -230,15 +239,21 @@ local function saveData(player, st)
 			Rep = st.Data.Rep,
 			Tunes = st.Data.Tunes,
 			Upgrades = st.Data.Upgrades,
+			Receipts = st.Data.Receipts,
 		})
 	end)
 	if not ok then
 		warn("[Chiptuning] Speichern fehlgeschlagen: " .. tostring(err))
 	end
+	return ok
 end
 
 local function hasUpgrade(st, id)
 	return st.Data.Upgrades[id] == true
+end
+
+local function hasPass(st, key)
+	return st.Passes[key] == true
 end
 
 local function maxStage(st)
@@ -424,12 +439,12 @@ local function buildPlot(player, st, index)
 	part({ Name = "Rueckwand", Size = Vector3.new(78, 18, 1), CFrame = at(0, 9.4, -32.5), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
 	part({ Name = "WandLinks", Size = Vector3.new(1, 18, 66), CFrame = at(-38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
 	part({ Name = "WandRechts", Size = Vector3.new(1, 18, 66), CFrame = at(38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
-	part({ Name = "Streifen", Size = Vector3.new(76, 1, 0.2), CFrame = at(0, 7, -31.9), Color = accent, Material = Enum.Material.Neon, CanCollide = false, Parent = model })
+	plot.Strip = part({ Name = "Streifen", Size = Vector3.new(76, 1, 0.2), CFrame = at(0, 7, -31.9), Color = accent, Material = Enum.Material.Neon, CanCollide = false, Parent = model })
 	local backSign = part({ Name = "Wandschild", Size = Vector3.new(40, 4, 0.2), CFrame = at(0, 13, -31.9), Color = Color3.fromRGB(20, 20, 25), CanCollide = false, Parent = model })
 	textGui(backSign, Enum.NormalId.Back, "ECU · STAGE 1 · 2 · 3 · DYNO", accent, Color3.fromRGB(20, 20, 25))
 
 	local sign = part({ Name = "Firmenschild", Size = Vector3.new(78, 4, 1), CFrame = at(0, 20, 32.5), Color = Color3.fromRGB(20, 20, 25), Parent = model })
-	textGui(sign, Enum.NormalId.Back, player.DisplayName .. "s Chiptuning", accent, Color3.fromRGB(20, 20, 25))
+	plot.SignLabel = textGui(sign, Enum.NormalId.Back, player.DisplayName .. "s Chiptuning", accent, Color3.fromRGB(20, 20, 25))
 
 	-- Hebebühnen
 	for i, bx in ipairs(BAY_X) do
@@ -605,6 +620,12 @@ local function completeCar(player, st, bay, score, byAzubi)
 	if hasUpgrade(st, "Dyno") then
 		mult *= Config.DynoBonus
 	end
+	if hasPass(st, "DoubleMoney") then
+		mult *= Config.DoubleMoneyMult
+	end
+	if hasPass(st, "VIP") then
+		mult *= Config.VipMult
+	end
 	local pay = math.floor(stageDef.BasePay * mult)
 
 	local repDelta
@@ -751,6 +772,126 @@ BuyUpgrade.OnServerEvent:Connect(function(player, id)
 end)
 
 ------------------------------------------------------------------------
+-- Robux-Shop (Game Passes und Developer Products)
+------------------------------------------------------------------------
+local GOLD = Color3.fromRGB(255, 200, 40)
+
+local function vipTag(char)
+	local head = char:WaitForChild("Head", 5)
+	if not head or head:FindFirstChild("VipTag") then
+		return
+	end
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "VipTag"
+	bb.Size = UDim2.fromOffset(120, 30)
+	bb.StudsOffset = Vector3.new(0, 2.6, 0)
+	bb.MaxDistance = 80
+	bb.Adornee = head
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = 1
+	tl.Font = Enum.Font.GothamBlack
+	tl.TextScaled = true
+	tl.TextColor3 = GOLD
+	tl.TextStrokeTransparency = 0
+	tl.Text = "⭐ VIP"
+	tl.Parent = bb
+	bb.Parent = head
+end
+
+local function applyPass(player, st, key)
+	if st.Passes[key] then
+		return
+	end
+	st.Passes[key] = true
+	player:SetAttribute("Pass_" .. key, true)
+	if key == "VIP" then
+		local plot = st.Plot
+		if plot and plot.SignLabel then
+			plot.SignLabel.Text = "⭐ " .. player.DisplayName .. "s Chiptuning ⭐"
+			plot.SignLabel.TextColor3 = GOLD
+		end
+		if plot and plot.Strip then
+			plot.Strip.Color = GOLD
+		end
+		if player.Character then
+			task.spawn(vipTag, player.Character)
+		end
+	end
+end
+
+local function checkPasses(player, st)
+	for _, pass in ipairs(Config.GamePasses) do
+		if pass.Id ~= 0 then
+			local ok, owns = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, pass.Id)
+			end)
+			if ok and owns and player.Parent then
+				applyPass(player, st, pass.Key)
+			end
+		end
+	end
+end
+
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
+	local st = States[player]
+	if not purchased or not st then
+		return
+	end
+	for _, pass in ipairs(Config.GamePasses) do
+		if pass.Id ~= 0 and pass.Id == passId then
+			applyPass(player, st, pass.Key)
+			notify(player, "Danke! " .. pass.Name .. " ist jetzt aktiv.", "good")
+		end
+	end
+end)
+
+local function findProduct(id)
+	for _, prod in ipairs(Config.Products) do
+		if prod.Id ~= 0 and prod.Id == id then
+			return prod
+		end
+	end
+	return nil
+end
+
+-- Wird von Roblox für jeden Kauf eines Developer Products aufgerufen
+MarketplaceService.ProcessReceipt = function(info)
+	local player = Players:GetPlayerByUserId(info.PlayerId)
+	local st = player and States[player]
+	if not st then
+		-- Spieler noch nicht geladen: Roblox versucht es später erneut
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local receiptId = tostring(info.PurchaseId)
+	if table.find(st.Data.Receipts, receiptId) then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+	local prod = findProduct(info.ProductId)
+	if not prod then
+		warn("[Chiptuning] Unbekanntes Produkt: " .. tostring(info.ProductId))
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	setMoney(st, st.Data.Money + prod.Money)
+	table.insert(st.Data.Receipts, receiptId)
+	while #st.Data.Receipts > 50 do
+		table.remove(st.Data.Receipts, 1)
+	end
+	if st.CanSave and not saveData(player, st) then
+		-- Speichern fehlgeschlagen: zurücknehmen, Roblox versucht es später erneut
+		setMoney(st, st.Data.Money - prod.Money)
+		local i = table.find(st.Data.Receipts, receiptId)
+		if i then
+			table.remove(st.Data.Receipts, i)
+		end
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	notify(player, "Danke für deinen Kauf! +" .. Config.Format(prod.Money) .. " €", "good")
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
+------------------------------------------------------------------------
 -- Spieler betreten / verlassen
 ------------------------------------------------------------------------
 local function placeCharacter(player, char)
@@ -769,6 +910,9 @@ local function placeCharacter(player, char)
 	task.wait(0.1)
 	if char.Parent then
 		char:PivotTo(st.Plot.Origin * CFrame.new(0, 4, 28))
+		if st.Passes.VIP then
+			vipTag(char)
+		end
 	end
 end
 
@@ -818,11 +962,13 @@ local function onPlayerAdded(player)
 		MoneyValue = money,
 		RepValue = rep,
 		Job = nil,
+		Passes = {},
 		NextCustomer = os.clock() + 3,
 		NextAzubi = os.clock() + Config.AzubiInterval,
 	}
 	st.Plot = buildPlot(player, st, index)
 	States[player] = st
+	task.spawn(checkPasses, player, st)
 
 	if player.Character then
 		task.spawn(placeCharacter, player, player.Character)
@@ -877,6 +1023,9 @@ task.spawn(function()
 						end
 					end
 					local base = hasUpgrade(st, "Werbung") and Config.CustomerIntervalAds or Config.CustomerInterval
+					if hasPass(st, "Turbo") then
+						base *= Config.TurboMult
+					end
 					st.NextCustomer = now + base * (0.7 + math.random() * 0.6)
 				end
 				if hasUpgrade(st, "Azubi") and now >= st.NextAzubi then

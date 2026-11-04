@@ -44,6 +44,29 @@ Ohne Rojo baust du die Place-Datei neu mit:
 python3 build_place.py
 ```
 
+## Robux-Shop (Geld verdienen)
+Im Spiel gibt es einen Robux-Tab im Shop (Knopf „💎 Robux“ links):
+
+| Artikel | Art | Wirkung | Preisvorschlag |
+|---|---|---|---|
+| 💰 Doppeltes Geld | Game Pass | jeder Auftrag zahlt doppelt | 199 R$ |
+| ⭐ VIP-Werkstatt | Game Pass | goldenes Schild, VIP-Titel, +10 % Geld | 149 R$ |
+| 🚀 Turbo-Kundschaft | Game Pass | Kunden kommen doppelt so schnell | 99 R$ |
+| Geldpaket S | Developer Product | +5.000 € im Spiel | 49 R$ |
+| Geldpaket L | Developer Product | +25.000 € im Spiel | 149 R$ |
+
+### Einrichten
+1. Das Spiel veröffentlichen (siehe oben).
+2. Auf https://create.roblox.com/dashboard/creations dein Spiel öffnen und links **Monetization** wählen.
+3. Unter **Passes** die drei Game Passes anlegen: jeweils Bild, Name und Beschreibung, dann unter *Sales* „Item for Sale“ einschalten und einen Preis setzen.
+4. Unter **Developer Products** die zwei Geldpakete anlegen, ebenfalls mit Preis.
+5. Die Zahlen-**IDs** der Artikel kopieren (sie stehen in der Liste oder in der Adresszeile) und in `src/shared/Config.lua` bei `Config.GamePasses` bzw. `Config.Products` jeweils hinter `Id =` eintragen.
+6. In Studio den geänderten Code übernehmen und neu veröffentlichen. Den Preis liest das Spiel automatisch aus dem Creator Hub.
+
+Solange `Id = 0` steht, zeigt der Knopf „Bald verfügbar“. Käufe in Studio sind Testkäufe und kosten keine echten Robux.
+
+Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. Geldpakete werden sofort gutgeschrieben und gespeichert. Jeder Kauf wird nur einmal gutgeschrieben, auch wenn Roblox ihn erneut meldet.
+
 ## Dateien
 | Datei | Ort in Roblox | Inhalt |
 |---|---|---|

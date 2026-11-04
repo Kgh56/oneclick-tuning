@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ContextActionService = game:GetService("ContextActionService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
@@ -153,7 +154,7 @@ Notify.OnClientEvent:Connect(toast)
 ------------------------------------------------------------------------
 local shopWin = make("Frame", {
 	Name = "Shop",
-	Size = UDim2.fromOffset(540, 430),
+	Size = UDim2.fromOffset(540, 470),
 	Position = UDim2.fromScale(0.5, 0.5),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	BackgroundColor3 = C.Bg,
@@ -165,7 +166,7 @@ scaled(shopWin)
 label({
 	Size = UDim2.new(1, -70, 0, 50),
 	Position = UDim2.fromOffset(18, 4),
-	Text = "🛠️ Werkstatt-Upgrades",
+	Text = "🛠️ Shop",
 	TextSize = 24,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = shopWin,
@@ -181,31 +182,66 @@ shopClose.Activated:Connect(function()
 	shopWin.Visible = false
 end)
 
-local list = make("ScrollingFrame", {
-	Size = UDim2.new(1, -24, 1, -70),
-	Position = UDim2.fromOffset(12, 60),
-	BackgroundTransparency = 1,
-	BorderSizePixel = 0,
-	CanvasSize = UDim2.new(),
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,
-	ScrollBarThickness = 6,
+local function scrollList(visible)
+	return make("ScrollingFrame", {
+		Size = UDim2.new(1, -24, 1, -122),
+		Position = UDim2.fromOffset(12, 110),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Visible = visible,
+		Parent = shopWin,
+	}, {
+		make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+end
+
+local list = scrollList(true) -- Werkstatt-Upgrades (Spielgeld)
+local robuxList = scrollList(false) -- Robux-Artikel
+
+local tabUpgrades = button({
+	Size = UDim2.new(0.5, -18, 0, 40),
+	Position = UDim2.fromOffset(12, 58),
+	Text = "🔧 Werkstatt",
+	TextSize = 18,
 	Parent = shopWin,
-}, {
-	make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+})
+local tabRobux = button({
+	Size = UDim2.new(0.5, -18, 0, 40),
+	Position = UDim2.new(0.5, 6, 0, 58),
+	Text = "💎 Robux-Shop",
+	TextSize = 18,
+	Parent = shopWin,
 })
 
-local rows = {}
-for i, up in ipairs(Config.Upgrades) do
+local function showTab(name)
+	local robux = name == "robux"
+	list.Visible = not robux
+	robuxList.Visible = robux
+	tabUpgrades.BackgroundColor3 = robux and C.Gray or C.Accent
+	tabRobux.BackgroundColor3 = robux and C.Accent or C.Gray
+end
+tabUpgrades.Activated:Connect(function()
+	showTab("upgrades")
+end)
+tabRobux.Activated:Connect(function()
+	showTab("robux")
+end)
+showTab("upgrades")
+
+local function shopRow(parent, order, title, desc)
 	local row = make("Frame", {
 		Size = UDim2.new(1, -10, 0, 70),
 		BackgroundColor3 = C.Panel,
-		LayoutOrder = i,
-		Parent = list,
+		LayoutOrder = order,
+		Parent = parent,
 	}, { corner(10) })
 	label({
 		Size = UDim2.new(1, -160, 0, 26),
 		Position = UDim2.fromOffset(12, 6),
-		Text = up.Name,
+		Text = title,
 		TextSize = 18,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
@@ -213,7 +249,7 @@ for i, up in ipairs(Config.Upgrades) do
 	label({
 		Size = UDim2.new(1, -160, 0, 34),
 		Position = UDim2.fromOffset(12, 30),
-		Text = up.Desc,
+		Text = desc,
 		Font = Enum.Font.Gotham,
 		TextSize = 14,
 		TextColor3 = C.Muted,
@@ -222,14 +258,32 @@ for i, up in ipairs(Config.Upgrades) do
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Parent = row,
 	})
-	local btn = button({
+	return button({
 		Size = UDim2.fromOffset(130, 44),
 		Position = UDim2.new(1, -142, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
-		Text = Config.Format(up.Price) .. " €",
+		Text = "",
 		TextSize = 18,
 		Parent = row,
 	})
+end
+
+local function sectionTitle(parent, order, text)
+	label({
+		Size = UDim2.new(1, -10, 0, 28),
+		Text = text,
+		TextSize = 17,
+		TextColor3 = C.Yellow,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = order,
+		Parent = parent,
+	})
+end
+
+local rows = {}
+for i, up in ipairs(Config.Upgrades) do
+	local btn = shopRow(list, i, up.Name, up.Desc)
+	btn.Text = Config.Format(up.Price) .. " €"
 	btn.Activated:Connect(function()
 		if not player:GetAttribute("Upg_" .. up.Id) then
 			BuyUpgrade:FireServer(up.Id)
@@ -237,6 +291,80 @@ for i, up in ipairs(Config.Upgrades) do
 	end)
 	rows[up.Id] = btn
 end
+
+------------------------------------------------------------------------
+-- Robux-Artikel
+------------------------------------------------------------------------
+local robuxItems = {} -- { Kind, Def, Btn, Price }
+
+local function robuxPriceText(item)
+	return "R$ " .. tostring(item.Price or item.Def.PriceHint)
+end
+
+sectionTitle(robuxList, 0, "Game Passes – einmal kaufen, für immer behalten")
+for i, pass in ipairs(Config.GamePasses) do
+	local btn = shopRow(robuxList, i, pass.Name, pass.Desc)
+	table.insert(robuxItems, { Kind = "pass", Def = pass, Btn = btn })
+end
+sectionTitle(robuxList, 100, "Geldpakete – beliebig oft kaufbar")
+for i, prod in ipairs(Config.Products) do
+	local btn = shopRow(robuxList, 100 + i, prod.Name, prod.Desc)
+	table.insert(robuxItems, { Kind = "product", Def = prod, Btn = btn })
+end
+
+local function refreshRobux()
+	for _, item in ipairs(robuxItems) do
+		local btn = item.Btn
+		if item.Def.Id == 0 then
+			btn.Text = "Bald verfügbar"
+			btn.TextSize = 15
+			btn.BackgroundColor3 = C.Gray
+			btn.AutoButtonColor = false
+		elseif item.Kind == "pass" and player:GetAttribute("Pass_" .. item.Def.Key) then
+			btn.Text = "✔ Aktiv"
+			btn.TextSize = 18
+			btn.BackgroundColor3 = C.Gray
+			btn.AutoButtonColor = false
+		else
+			btn.Text = robuxPriceText(item)
+			btn.TextSize = 18
+			btn.BackgroundColor3 = C.Green
+			btn.AutoButtonColor = true
+		end
+	end
+end
+
+for _, item in ipairs(robuxItems) do
+	item.Btn.Activated:Connect(function()
+		local id = item.Def.Id
+		if id == 0 then
+			toast("Dieser Artikel ist noch nicht eingerichtet.", "info")
+			return
+		end
+		if item.Kind == "pass" then
+			if not player:GetAttribute("Pass_" .. item.Def.Key) then
+				MarketplaceService:PromptGamePassPurchase(player, id)
+			end
+		else
+			MarketplaceService:PromptProductPurchase(player, id)
+		end
+	end)
+	-- Echten Preis aus dem Creator Hub holen
+	if item.Def.Id ~= 0 then
+		task.spawn(function()
+			local infoType = item.Kind == "pass" and Enum.InfoType.GamePass or Enum.InfoType.Product
+			local ok, info = pcall(function()
+				return MarketplaceService:GetProductInfo(item.Def.Id, infoType)
+			end)
+			if ok and info and info.PriceInRobux then
+				item.Price = info.PriceInRobux
+				refreshRobux()
+			end
+		end)
+	end
+end
+refreshRobux()
+player.AttributeChanged:Connect(refreshRobux)
 
 local function currentMoney()
 	local ls = player:FindFirstChild("leaderstats")
@@ -271,14 +399,18 @@ player.AttributeChanged:Connect(refreshShop)
 
 local tuneWin -- vorwärts deklariert
 
-local function openShop()
+local function openShop(tab)
 	refreshShop()
+	refreshRobux()
 	if tuneWin and tuneWin.Visible then
 		return
 	end
+	showTab(tab or "upgrades")
 	shopWin.Visible = true
 end
-OpenShop.OnClientEvent:Connect(openShop)
+OpenShop.OnClientEvent:Connect(function()
+	openShop("upgrades")
+end)
 
 ------------------------------------------------------------------------
 -- HUD (Geld, Ruf, Shop-Knopf, Hinweis)
@@ -305,8 +437,20 @@ shopButton.Activated:Connect(function()
 	if shopWin.Visible then
 		shopWin.Visible = false
 	else
-		openShop()
+		openShop("upgrades")
 	end
+end)
+
+local robuxButton = button({
+	Size = UDim2.fromOffset(120, 46),
+	Position = UDim2.new(0, 12, 0.5, 56),
+	AnchorPoint = Vector2.new(0, 0.5),
+	Text = "💎 Robux",
+	BackgroundColor3 = Color3.fromRGB(0, 170, 90),
+	Parent = gui,
+})
+robuxButton.Activated:Connect(function()
+	openShop("robux")
 end)
 
 local hint = label({
