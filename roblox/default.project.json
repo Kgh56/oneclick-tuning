@@ -6,12 +6,15 @@
       "Config": { "$path": "src/shared/Config.lua" }
     },
     "ServerScriptService": {
-      "GameServer": { "$path": "src/server/GameServer.server.lua" }
+      "$path": "src/server"
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "ChiptuningClient": { "$path": "src/client/ChiptuningClient.client.lua" }
+        "$path": "src/client"
       }
+    },
+    "Lighting": {
+      "$properties": { "Technology": "Future" }
     }
   }
 }

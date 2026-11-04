@@ -3,16 +3,20 @@
 Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunden fahren mit ihren Autos vor, und du tunst sie per Minispiel am Laptop. Mit dem verdienten Geld baust du deine Firma aus.
 
 ## So spielt es sich
+- **Große Welt:** Werkstattstraße mit 6 Werkstätten, Läden, Bäumen und Laternen. Dazu eine **Teststrecke** (Oval mit Tribüne, Curbs und Flutlicht), eine Landstraße als großer Rundkurs, ein See und Berge am Rand. Tag und Nacht wechseln sich ab, ein Tag dauert 24 Minuten.
 - **Kunden** fahren von der Straße auf deine Hebebühne. Über dem Auto steht, welches Modell es ist und welche Stage der Kunde will.
 - **Tunen:** Zum Auto gehen und **[E]** drücken. Dann stimmst du drei Kennfelder ab (Zündzeitpunkt, Ladedruck, Einspritzmenge): Die Nadel läuft hin und her, und du stoppst sie mit der **Leertaste** oder dem Knopf.
   - Grün = perfekt, Gelb = okay, Rot = der Motor klopft
+- **Probefahrt:** Nach dem Tunen kannst du das Kundenauto mit der neuen Leistung auf der Teststrecke fahren. Es gibt eine Rundenzeit und Trinkgeld, wenn du mindestens 15 Sekunden fährst.
+- **Firmenwagen:** Mit dem Knopf „🚗 Auto“ steht dein Firmenwagen neben der Halle, und du fährst damit durch die ganze Welt. Mit Stage-2-/Stage-3-Software wird er stärker.
+- **Fahren:** W/S oder Pfeiltasten für Gas und Bremse, A/D zum Lenken, Leertaste oder „Aussteigen“ zum Aussteigen. Gamepad und Handy funktionieren auch. Mehr PS bedeuten mehr Beschleunigung und Höchstgeschwindigkeit.
 - **Bezahlung** hängt ab von der Stage, vom Auto, von deinem Ergebnis und von deinem **Ruf**. Saubere Arbeit bringt Ruf. Mit mehr Ruf kommen teurere Autos, bis hin zum V12-Supersportler.
 - **Upgrades** kaufst du am Laptop vorne links oder über den „Shop“-Knopf:
 
 | Upgrade | Wirkung |
 |---|---|
 | 2./3./4. Hebebühne | mehrere Kunden gleichzeitig |
-| Stage-2-/Stage-3-Software | größere Aufträge, mehr Geld |
+| Stage-2-/Stage-3-Software | größere Aufträge, mehr Geld, stärkerer Firmenwagen |
 | Profi-Laptop | breitere grüne Zone |
 | Werbung | Kunden kommen doppelt so oft |
 | Leistungsprüfstand | +25 % Bezahlung, die Autos fahren auf die Rolle |
@@ -70,8 +74,14 @@ Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. 
 ## Dateien
 | Datei | Ort in Roblox | Inhalt |
 |---|---|---|
-| `src/shared/Config.lua` | ReplicatedStorage › ModuleScript „Config“ | Preise, Autos, Upgrades, Balancing |
-| `src/server/GameServer.server.lua` | ServerScriptService › Script „GameServer“ | Welt, Werkstätten, Kunden, Geld, Speichern |
-| `src/client/ChiptuningClient.client.lua` | StarterPlayer › StarterPlayerScripts › LocalScript | Oberfläche, Tuning-Minispiel, Shop |
+| `src/shared/Config.lua` | ReplicatedStorage › ModuleScript „Config“ | Preise, Autos, Upgrades, Fahrwerte, Balancing |
+| `src/server/GameServer.server.lua` | ServerScriptService › Script | Werkstätten, Kunden, Geld, Fahren, Shop, Speichern |
+| `src/server/World.lua` | ServerScriptService › ModuleScript | Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude |
+| `src/server/Cars.lua` | ServerScriptService › ModuleScript | Automodelle (Ausstellung und fahrbar) |
+| `src/server/Util.lua` | ServerScriptService › ModuleScript | Bau-Helfer |
+| `src/client/ChiptuningClient.client.lua` | StarterPlayerScripts › LocalScript | Oberfläche, Tuning-Minispiel, Shop |
+| `src/client/DriveClient.client.lua` | StarterPlayerScripts › LocalScript | Fahrphysik, Tacho, Rundenzeit |
 
-Balancing wie Preise, Bezahlung oder Kundentempo änderst du in `Config.lua`.
+Balancing wie Preise, Bezahlung, Kundentempo oder Fahrwerte änderst du in `Config.lua`.
+
+Die Beleuchtung steht in der Place-Datei auf **Future**. Falls sie beim Öffnen anders ist: Explorer → Lighting → Technology → Future.

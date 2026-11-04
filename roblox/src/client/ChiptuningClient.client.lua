@@ -18,6 +18,8 @@ local TuneResult = Remotes:WaitForChild("TuneResult")
 local OpenShop = Remotes:WaitForChild("OpenShop")
 local BuyUpgrade = Remotes:WaitForChild("BuyUpgrade")
 local Notify = Remotes:WaitForChild("Notify")
+local RequestTestDrive = Remotes:WaitForChild("RequestTestDrive")
+local RequestCompanyCar = Remotes:WaitForChild("RequestCompanyCar")
 
 local C = {
 	Bg = Color3.fromRGB(22, 24, 30),
@@ -453,6 +455,18 @@ robuxButton.Activated:Connect(function()
 	openShop("robux")
 end)
 
+local carButton = button({
+	Size = UDim2.fromOffset(120, 46),
+	Position = UDim2.new(0, 12, 0.5, 112),
+	AnchorPoint = Vector2.new(0, 0.5),
+	Text = "🚗 Auto",
+	BackgroundColor3 = Color3.fromRGB(40, 110, 220),
+	Parent = gui,
+})
+carButton.Activated:Connect(function()
+	RequestCompanyCar:FireServer()
+end)
+
 local hint = label({
 	Size = UDim2.new(0, 560, 0, 34),
 	Position = UDim2.new(0.5, 0, 1, -70),
@@ -461,7 +475,7 @@ local hint = label({
 	BackgroundTransparency = 0.25,
 	Font = Enum.Font.Gotham,
 	TextSize = 16,
-	Text = "Kunden fahren an deine Hebebühnen – hingehen und [E] drücken zum Tunen!",
+	Text = "Kunden kommen zu deinen Hebebühnen: hingehen und [E] drücken. Mit „🚗 Auto“ fährst du los!",
 	Parent = gui,
 })
 corner(8).Parent = hint
@@ -594,10 +608,19 @@ local resTorque = label({ Size = UDim2.new(1, -40, 0, 30), Position = UDim2.from
 local resPay = label({ Size = UDim2.new(1, -40, 0, 40), Position = UDim2.fromOffset(20, 200), TextSize = 32, TextColor3 = C.Green, Text = "", Parent = resultFrame })
 local resRep = label({ Size = UDim2.new(1, -40, 0, 30), Position = UDim2.fromOffset(20, 242), TextSize = 20, Text = "", Parent = resultFrame })
 local doneBtn = button({
-	Size = UDim2.fromOffset(220, 56),
-	Position = UDim2.new(0.5, 0, 0, 300),
-	AnchorPoint = Vector2.new(0.5, 0),
+	Size = UDim2.fromOffset(200, 56),
+	Position = UDim2.new(0.5, -8, 0, 300),
+	AnchorPoint = Vector2.new(1, 0),
 	Text = "Weiter",
+	BackgroundColor3 = C.Gray,
+	Parent = resultFrame,
+})
+local testDriveBtn = button({
+	Size = UDim2.fromOffset(250, 56),
+	Position = UDim2.new(0.5, 8, 0, 300),
+	AnchorPoint = Vector2.new(0, 0),
+	Text = "🏁 Probefahrt",
+	TextSize = 18,
 	BackgroundColor3 = C.Green,
 	Parent = resultFrame,
 })
@@ -703,6 +726,10 @@ cancelBtn.Activated:Connect(function()
 end)
 
 doneBtn.Activated:Connect(closeTuning)
+testDriveBtn.Activated:Connect(function()
+	closeTuning()
+	RequestTestDrive:FireServer()
+end)
 
 RunService.RenderStepped:Connect(function(dt)
 	if current and current.Phase == "play" and not current.Stopped then
@@ -753,6 +780,9 @@ TuneResult.OnClientEvent:Connect(function(res)
 	resPower.Text = ("Leistung: %d PS → %d PS"):format(res.Hp, res.NewHp)
 	resTorque.Text = ("Drehmoment: %d Nm → %d Nm"):format(res.Nm, res.NewNm)
 	resPay.Text = "+" .. Config.Format(res.Pay) .. " €"
+	testDriveBtn.Visible = res.CanTestDrive == true
+	testDriveBtn.Text = ("🏁 Probefahrt (+%s € Trinkgeld)"):format(Config.Format(res.Tip or 0))
+	doneBtn.Position = res.CanTestDrive and UDim2.new(0.5, -8, 0, 300) or UDim2.new(0.5, 100, 0, 300)
 	if res.RepDelta >= 0 then
 		resRep.Text = "⭐ Ruf +" .. res.RepDelta
 		resRep.TextColor3 = C.Yellow

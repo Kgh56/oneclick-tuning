@@ -4,7 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
-local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
@@ -29,6 +29,9 @@ local TuneResult = newRemote("TuneResult") -- Server -> Client: Ergebnis
 local OpenShop = newRemote("OpenShop") -- Server -> Client
 local BuyUpgrade = newRemote("BuyUpgrade") -- Client -> Server
 local Notify = newRemote("Notify") -- Server -> Client: Meldung
+local RequestTestDrive = newRemote("RequestTestDrive") -- Client -> Server
+local RequestCompanyCar = newRemote("RequestCompanyCar") -- Client -> Server
+local EndDrive = newRemote("EndDrive") -- Client -> Server
 remotes.Parent = ReplicatedStorage
 
 local function notify(player, text, kind)
@@ -36,140 +39,22 @@ local function notify(player, text, kind)
 end
 
 ------------------------------------------------------------------------
--- Bau-Helfer
+-- Module
 ------------------------------------------------------------------------
-local function part(props)
-	local p = Instance.new("Part")
-	p.Anchored = true
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	if props.Shape then
-		p.Shape = props.Shape
-	end
-	for k, v in pairs(props) do
-		if k ~= "Parent" and k ~= "Shape" then
-			p[k] = v
-		end
-	end
-	p.Parent = props.Parent
-	return p
-end
+local Util = require(script.Parent:WaitForChild("Util"))
+local World = require(script.Parent:WaitForChild("World"))
+local Cars = require(script.Parent:WaitForChild("Cars"))
 
-local function textGui(parentPart, face, text, color, bg)
-	local sg = Instance.new("SurfaceGui")
-	sg.Face = face
-	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	sg.PixelsPerStud = 25
-	sg.Parent = parentPart
-	local tl = Instance.new("TextLabel")
-	tl.Size = UDim2.fromScale(1, 1)
-	tl.BackgroundTransparency = bg and 0 or 1
-	tl.BackgroundColor3 = bg or Color3.new(0, 0, 0)
-	tl.Font = Enum.Font.GothamBlack
-	tl.TextScaled = true
-	tl.TextColor3 = color
-	tl.Text = text
-	tl.Parent = sg
-	return tl
-end
+local part, textGui, billboard = Util.part, Util.textGui, Util.billboard
+local lookCF, moveModel = Util.lookCF, Util.moveModel
 
-local function billboard(adornee, text, offsetY)
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "Info"
-	bb.Size = UDim2.fromOffset(260, 64)
-	bb.StudsOffset = Vector3.new(0, offsetY or 5, 0)
-	bb.AlwaysOnTop = true
-	bb.MaxDistance = 90
-	bb.Adornee = adornee
-	local tl = Instance.new("TextLabel")
-	tl.Size = UDim2.fromScale(1, 1)
-	tl.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
-	tl.BackgroundTransparency = 0.25
-	tl.TextColor3 = Color3.new(1, 1, 1)
-	tl.Font = Enum.Font.GothamBold
-	tl.TextScaled = true
-	tl.Text = text
-	tl.Parent = bb
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 10)
-	c.Parent = tl
-	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 8)
-	pad.PaddingRight = UDim.new(0, 8)
-	pad.PaddingTop = UDim.new(0, 4)
-	pad.PaddingBottom = UDim.new(0, 4)
-	pad.Parent = tl
-	bb.Parent = adornee
-	return tl
-end
+World.Build()
 
-local function lookCF(pos, dir)
-	return CFrame.lookAt(pos, pos + dir)
-end
-
--- Bewegt ein Modell weich von A nach B (blockiert, bis fertig)
-local function moveModel(model, fromCF, toCF, duration)
-	local t0 = os.clock()
-	while model.Parent do
-		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
-		local e = a < 0.5 and 2 * a * a or 1 - ((-2 * a + 2) ^ 2) / 2
-		model:PivotTo(fromCF:Lerp(toCF, e))
-		if a >= 1 then
-			break
-		end
-		RunService.Heartbeat:Wait()
-	end
-end
-
-------------------------------------------------------------------------
--- Welt
-------------------------------------------------------------------------
-local ROAD_Z = 50
-local PLOT_SPACING = 100
+local ROAD_Z = World.ROAD_Z
+local PLOT_SPACING = World.PLOT_SPACING
 local BAY_X = { -27, -9, 9, 27 }
 local BAY_Z = -12
 local DYNO_POS = Vector3.new(26, 0, 18)
-
-local world = Instance.new("Folder")
-world.Name = "Welt"
-world.Parent = workspace
-
-part({
-	Name = "Boden",
-	Size = Vector3.new(800, 2, 320),
-	CFrame = CFrame.new(0, -1, 0),
-	Color = Color3.fromRGB(86, 125, 70),
-	Material = Enum.Material.Grass,
-	Parent = world,
-})
-part({
-	Name = "Strasse",
-	Size = Vector3.new(800, 0.2, 22),
-	CFrame = CFrame.new(0, 0.1, ROAD_Z),
-	Color = Color3.fromRGB(45, 45, 48),
-	Material = Enum.Material.Asphalt,
-	Parent = world,
-})
-for x = -390, 390, 20 do
-	part({
-		Name = "Markierung",
-		Size = Vector3.new(8, 0.05, 0.6),
-		CFrame = CFrame.new(x, 0.22, ROAD_Z),
-		Color = Color3.new(1, 1, 1),
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
-		Parent = world,
-	})
-end
-
-local spawnLoc = Instance.new("SpawnLocation")
-spawnLoc.Name = "Spawn"
-spawnLoc.Anchored = true
-spawnLoc.Size = Vector3.new(12, 1, 12)
-spawnLoc.CFrame = CFrame.new(0, 0.5, ROAD_Z + 25)
-spawnLoc.Neutral = true
-spawnLoc.Duration = 0
-spawnLoc.Parent = world
 
 ------------------------------------------------------------------------
 -- Spielerdaten
@@ -279,77 +164,8 @@ local function setRep(st, value)
 	st.RepValue.Value = value
 end
 
-------------------------------------------------------------------------
--- Autos
-------------------------------------------------------------------------
--- Pivot = Mitte der Karosserie, 1.7 Studs über dem Boden. Front zeigt nach -Z.
-local CAR_HEIGHT = 1.7
-
-local function makeCar(def)
-	local m = Instance.new("Model")
-	m.Name = def.Name
-	local body = part({
-		Name = "Karosserie",
-		Size = Vector3.new(6, 1.6, 12),
-		CFrame = CFrame.new(),
-		Color = def.Color,
-		Material = Enum.Material.SmoothPlastic,
-		Parent = m,
-	})
-	part({
-		Name = "Dach",
-		Size = Vector3.new(5.2, 1.5, 6),
-		CFrame = CFrame.new(0, 1.55, 0.6),
-		Color = Color3.fromRGB(25, 30, 40),
-		Material = Enum.Material.Glass,
-		Transparency = 0.15,
-		CanCollide = false,
-		Parent = m,
-	})
-	for _, w in ipairs({ { -3.1, -3.8 }, { 3.1, -3.8 }, { -3.1, 3.8 }, { 3.1, 3.8 } }) do
-		part({
-			Name = "Rad",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(1, 2.2, 2.2),
-			CFrame = CFrame.new(w[1], -0.6, w[2]),
-			Color = Color3.fromRGB(20, 20, 20),
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-	for _, x in ipairs({ -2.2, 2.2 }) do
-		part({
-			Name = "Scheinwerfer",
-			Size = Vector3.new(1.2, 0.4, 0.2),
-			CFrame = CFrame.new(x, 0.3, -6.05),
-			Color = Color3.fromRGB(255, 250, 220),
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Parent = m,
-		})
-		part({
-			Name = "Ruecklicht",
-			Size = Vector3.new(1.2, 0.4, 0.2),
-			CFrame = CFrame.new(x, 0.3, 6.05),
-			Color = Color3.fromRGB(220, 20, 20),
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-	if def.Hp >= 400 then
-		part({
-			Name = "Spoiler",
-			Size = Vector3.new(6.2, 0.2, 1.2),
-			CFrame = CFrame.new(0, 1.4, 5.4),
-			Color = Color3.fromRGB(20, 20, 20),
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-	m.PrimaryPart = body
-	return m
-end
+-- Karosseriemitte über dem Boden (Ausstellungsautos)
+local CAR_HEIGHT = Cars.BODY_HEIGHT
 
 ------------------------------------------------------------------------
 -- Werkstatt (Grundstück)
@@ -430,28 +246,68 @@ local function buildPlot(player, st, index)
 	local function at(x, y, z)
 		return origin * CFrame.new(x, y, z)
 	end
+	local function p(props)
+		props.Parent = props.Parent or model
+		return part(props)
+	end
 
-	local wall = Color3.fromRGB(235, 235, 240)
+	local wall = Color3.fromRGB(232, 232, 236)
+	local dark = Color3.fromRGB(32, 33, 38)
+	local steel = Color3.fromRGB(70, 72, 78)
 	local accent = Color3.fromRGB(255, 140, 0)
 
-	part({ Name = "Hallenboden", Size = Vector3.new(76, 0.4, 64), CFrame = at(0, 0.2, 0), Color = Color3.fromRGB(165, 165, 170), Material = Enum.Material.Concrete, Parent = model })
-	part({ Name = "Einfahrt", Size = Vector3.new(76, 0.3, 6), CFrame = at(0, 0.15, 35), Color = Color3.fromRGB(70, 70, 74), Material = Enum.Material.Asphalt, Parent = model })
-	part({ Name = "Rueckwand", Size = Vector3.new(78, 18, 1), CFrame = at(0, 9.4, -32.5), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
-	part({ Name = "WandLinks", Size = Vector3.new(1, 18, 66), CFrame = at(-38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
-	part({ Name = "WandRechts", Size = Vector3.new(1, 18, 66), CFrame = at(38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
-	plot.Strip = part({ Name = "Streifen", Size = Vector3.new(76, 1, 0.2), CFrame = at(0, 7, -31.9), Color = accent, Material = Enum.Material.Neon, CanCollide = false, Parent = model })
-	local backSign = part({ Name = "Wandschild", Size = Vector3.new(40, 4, 0.2), CFrame = at(0, 13, -31.9), Color = Color3.fromRGB(20, 20, 25), CanCollide = false, Parent = model })
+	-- Boden: dunkles Epoxid mit leichtem Glanz
+	p({ Name = "Hallenboden", Size = Vector3.new(76, 1, 64), CFrame = at(0, -0.3, 0), Color = Color3.fromRGB(62, 64, 70), Material = Enum.Material.SmoothPlastic, Reflectance = 0.06 })
+	p({ Name = "Einfahrt", Size = Vector3.new(76, 1, 8), CFrame = at(0, -0.45, 36), Color = Color3.fromRGB(75, 76, 80), Material = Enum.Material.Concrete })
+	p({ Name = "Gehweglinie", Size = Vector3.new(76, 0.05, 0.6), CFrame = at(0, 0.23, 4), Color = Color3.fromRGB(255, 200, 0), CanCollide = false })
+
+	-- Wände (außen Ziegel, innen hell) mit dunklem Sockel und LED-Band
+	p({ Name = "Rueckwand", Size = Vector3.new(78, 20, 1.2), CFrame = at(0, 10, -32.6), Color = wall, Material = Enum.Material.SmoothPlastic })
+	p({ Name = "WandLinks", Size = Vector3.new(1.2, 20, 66), CFrame = at(-38.6, 10, 0), Color = wall, Material = Enum.Material.SmoothPlastic })
+	p({ Name = "WandRechts", Size = Vector3.new(1.2, 20, 66), CFrame = at(38.6, 10, 0), Color = wall, Material = Enum.Material.SmoothPlastic })
+	p({ Name = "AussenLinks", Size = Vector3.new(0.4, 20, 66.4), CFrame = at(-39.4, 10, 0), Color = Color3.fromRGB(120, 60, 45), Material = Enum.Material.Brick })
+	p({ Name = "AussenRechts", Size = Vector3.new(0.4, 20, 66.4), CFrame = at(39.4, 10, 0), Color = Color3.fromRGB(120, 60, 45), Material = Enum.Material.Brick })
+	p({ Name = "AussenHinten", Size = Vector3.new(79.2, 20, 0.4), CFrame = at(0, 10, -33.4), Color = Color3.fromRGB(120, 60, 45), Material = Enum.Material.Brick })
+	p({ Name = "SockelHinten", Size = Vector3.new(76, 3, 0.3), CFrame = at(0, 1.7, -31.9), Color = dark, CanCollide = false })
+	p({ Name = "SockelLinks", Size = Vector3.new(0.3, 3, 64), CFrame = at(-37.9, 1.7, 0), Color = dark, CanCollide = false })
+	p({ Name = "SockelRechts", Size = Vector3.new(0.3, 3, 64), CFrame = at(37.9, 1.7, 0), Color = dark, CanCollide = false })
+	plot.Strip = p({ Name = "Streifen", Size = Vector3.new(76, 0.5, 0.2), CFrame = at(0, 7, -31.85), Color = accent, Material = Enum.Material.Neon, CanCollide = false })
+	p({ Name = "StreifenL", Size = Vector3.new(0.2, 0.5, 64), CFrame = at(-37.85, 7, 0), Color = accent, Material = Enum.Material.Neon, CanCollide = false })
+	p({ Name = "StreifenR", Size = Vector3.new(0.2, 0.5, 64), CFrame = at(37.85, 7, 0), Color = accent, Material = Enum.Material.Neon, CanCollide = false })
+
+	local backSign = p({ Name = "Wandschild", Size = Vector3.new(40, 4, 0.2), CFrame = at(0, 13, -31.85), Color = Color3.fromRGB(20, 20, 25), CanCollide = false })
 	textGui(backSign, Enum.NormalId.Back, "ECU · STAGE 1 · 2 · 3 · DYNO", accent, Color3.fromRGB(20, 20, 25))
 
-	local sign = part({ Name = "Firmenschild", Size = Vector3.new(78, 4, 1), CFrame = at(0, 20, 32.5), Color = Color3.fromRGB(20, 20, 25), Parent = model })
-	plot.SignLabel = textGui(sign, Enum.NormalId.Back, player.DisplayName .. "s Chiptuning", accent, Color3.fromRGB(20, 20, 25))
+	-- Front: Pfeiler und beleuchtetes Firmenschild
+	for _, x in ipairs({ -38.6, 38.6 }) do
+		p({ Name = "Pfeiler", Size = Vector3.new(2.4, 24, 2.4), CFrame = at(x, 12, 33), Color = dark, Material = Enum.Material.Metal })
+	end
+	local sign = p({ Name = "Firmenschild", Size = Vector3.new(79, 4.5, 1.2), CFrame = at(0, 21.5, 33), Color = Color3.fromRGB(18, 18, 22) })
+	plot.SignLabel = textGui(sign, Enum.NormalId.Back, player.DisplayName .. "s Chiptuning", accent, Color3.fromRGB(18, 18, 22))
+	p({ Name = "SchildLicht", Size = Vector3.new(79, 0.3, 0.3), CFrame = at(0, 19.1, 33.7), Color = accent, Material = Enum.Material.Neon, CanCollide = false })
 
-	-- Hebebühnen
+	-- Stahlträger und Hallenlicht (kein Dach, damit die Kamera frei bleibt)
+	for _, z in ipairs({ -24, -8, 8, 24 }) do
+		p({ Name = "Traeger", Size = Vector3.new(78, 1.2, 0.8), CFrame = at(0, 19.4, z), Color = steel, Material = Enum.Material.Metal })
+	end
+	for _, x in ipairs({ -20, 0, 20 }) do
+		p({ Name = "Laengstraeger", Size = Vector3.new(0.8, 0.8, 66), CFrame = at(x, 20.2, 0), Color = steel, Material = Enum.Material.Metal })
+	end
+	for _, bx in ipairs(BAY_X) do
+		local panel = p({ Name = "Hallenlicht", Size = Vector3.new(10, 0.3, 1.6), CFrame = at(bx, 18.6, BAY_Z), Color = Color3.fromRGB(240, 245, 255), Material = Enum.Material.Neon, CanCollide = false })
+		Util.light(panel, "SurfaceLight", { Face = Enum.NormalId.Bottom, Range = 22, Brightness = 1.6, Angle = 110, Color = Color3.fromRGB(235, 242, 255) })
+		p({ Name = "Seil", Size = Vector3.new(0.1, 0.8, 0.1), CFrame = at(bx, 19.1, BAY_Z), Color = steel, CanCollide = false })
+	end
+
+	-- Hebebühnen mit Säulen
 	for i, bx in ipairs(BAY_X) do
-		part({ Name = "Hebebuehne" .. i, Size = Vector3.new(14, 0.6, 22), CFrame = at(bx, 0.7, BAY_Z), Color = Color3.fromRGB(45, 45, 50), Material = Enum.Material.DiamondPlate, Parent = model })
-		for _, side in ipairs({ -7.3, 7.3 }) do
-			part({ Name = "Linie", Size = Vector3.new(0.4, 0.05, 22), CFrame = at(bx + side, 0.43, BAY_Z), Color = Color3.fromRGB(255, 200, 0), CanCollide = false, Parent = model })
+		p({ Name = "Hebebuehne" .. i, Size = Vector3.new(14, 0.8, 22), CFrame = at(bx, 0.6, BAY_Z), Color = Color3.fromRGB(45, 45, 50), Material = Enum.Material.DiamondPlate })
+		for _, side in ipairs({ -1, 1 }) do
+			p({ Name = "Linie", Size = Vector3.new(0.4, 0.05, 24), CFrame = at(bx + side * 7.6, 0.23, BAY_Z), Color = Color3.fromRGB(255, 200, 0), CanCollide = false })
+			p({ Name = "Saeule", Size = Vector3.new(1.2, 11, 1.2), CFrame = at(bx + side * 7.9, 5.7, BAY_Z - 4), Color = Color3.fromRGB(200, 30, 35), Material = Enum.Material.Metal })
+			p({ Name = "SaeulenFuss", Size = Vector3.new(2, 0.4, 2), CFrame = at(bx + side * 7.9, 0.4, BAY_Z - 4), Color = dark, Material = Enum.Material.Metal })
 		end
+		p({ Name = "Querholm", Size = Vector3.new(17, 0.8, 0.8), CFrame = at(bx, 11.6, BAY_Z - 4), Color = Color3.fromRGB(200, 30, 35), Material = Enum.Material.Metal })
 		local bay = { Index = i, X = bx, CF = at(bx, 1.0 + CAR_HEIGHT, BAY_Z), Car = nil, Lock = nil }
 		plot.Bays[i] = bay
 		if not isBayUnlocked(st, i) then
@@ -459,11 +315,47 @@ local function buildPlot(player, st, index)
 		end
 	end
 
-	-- Schreibtisch mit Laptop = Shop
-	part({ Name = "Tisch", Size = Vector3.new(6, 3, 3), CFrame = at(-31, 1.9, 24), Color = Color3.fromRGB(90, 60, 40), Material = Enum.Material.Wood, Parent = model })
-	local laptop = part({ Name = "Laptop", Size = Vector3.new(2.4, 0.2, 1.6), CFrame = at(-31, 3.5, 24), Color = Color3.fromRGB(30, 30, 35), Parent = model })
-	local lid = part({ Name = "Bildschirm", Size = Vector3.new(2.4, 1.6, 0.1), CFrame = at(-31, 4.3, 23.2), Color = Color3.fromRGB(30, 30, 35), Parent = model })
+	-- Werkzeugwagen an der linken Wand
+	for k, z in ipairs({ -26, 8, 16 }) do
+		p({ Name = "Werkzeugwagen", Size = Vector3.new(3, 4.4, 6), CFrame = at(-36, 2.4, z), Color = Color3.fromRGB(190, 25, 30), Material = Enum.Material.SmoothPlastic, Reflectance = 0.08 })
+		for d = 0, 3 do
+			p({ Name = "Schublade", Size = Vector3.new(0.1, 0.12, 5.4), CFrame = at(-34.45, 1.2 + d * 1.0, z), Color = Color3.fromRGB(20, 20, 22), CanCollide = false })
+		end
+		if k == 1 then
+			p({ Name = "Werkbank", Size = Vector3.new(3, 0.3, 6), CFrame = at(-36, 4.75, z), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal })
+		end
+	end
+
+	-- Reifenstapel an der rechten Wand
+	for _, z in ipairs({ -26, -21, 2 }) do
+		for h = 0, 3 do
+			p({ Name = "Reifen", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.9, 3, 3), CFrame = at(35.6, 0.65 + h * 0.92, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(25, 25, 27) })
+		end
+	end
+
+	-- Plakate an den Seitenwänden
+	local posters = {
+		{ -37.8, -14, Enum.NormalId.Right, "STAGE 1\n+20 % Leistung" },
+		{ -37.8, 0, Enum.NormalId.Right, "STAGE 2\n+35 % Leistung" },
+		{ 37.8, -12, Enum.NormalId.Left, "STAGE 3\n+55 % Leistung" },
+		{ 37.8, 8, Enum.NormalId.Left, "DYNO\nGEPRÜFT ✔" },
+	}
+	for _, ps in ipairs(posters) do
+		local poster = p({ Name = "Plakat", Size = Vector3.new(0.1, 5, 7), CFrame = at(ps[1], 11, ps[2]), Color = Color3.fromRGB(20, 20, 25), CanCollide = false })
+		textGui(poster, ps[3], ps[4], accent, Color3.fromRGB(20, 20, 25))
+	end
+
+	-- Büro-Ecke: Schreibtisch mit Laptop = Upgrade-Shop
+	p({ Name = "Tisch", Size = Vector3.new(7, 0.4, 3.5), CFrame = at(-31, 3.2, 24), Color = Color3.fromRGB(110, 75, 50), Material = Enum.Material.Wood })
+	for _, dx in ipairs({ -3.2, 3.2 }) do
+		p({ Name = "Tischbein", Size = Vector3.new(0.3, 3, 3.2), CFrame = at(-31 + dx, 1.6, 24), Color = dark, Material = Enum.Material.Metal })
+	end
+	p({ Name = "Stuhl", Size = Vector3.new(2, 0.5, 2), CFrame = at(-31, 2, 27), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
+	p({ Name = "Lehne", Size = Vector3.new(2, 2.4, 0.4), CFrame = at(-31, 3.4, 28), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
+	local laptop = p({ Name = "Laptop", Size = Vector3.new(2.4, 0.15, 1.6), CFrame = at(-31, 3.48, 24.3), Color = Color3.fromRGB(30, 30, 35), Material = Enum.Material.Metal })
+	local lid = p({ Name = "Bildschirm", Size = Vector3.new(2.4, 1.6, 0.1), CFrame = at(-31, 4.3, 23.5) * CFrame.Angles(math.rad(-12), 0, 0), Color = Color3.fromRGB(30, 30, 35) })
 	textGui(lid, Enum.NormalId.Back, "ECU", Color3.fromRGB(80, 200, 255), Color3.fromRGB(10, 20, 30))
+	Util.light(lid, "SurfaceLight", { Face = Enum.NormalId.Back, Range = 6, Brightness = 1, Color = Color3.fromRGB(80, 200, 255) })
 	billboard(laptop, "🛠️ Upgrade-Shop", 3)
 
 	local shopPrompt = Instance.new("ProximityPrompt")
@@ -481,7 +373,18 @@ local function buildPlot(player, st, index)
 		end
 	end)
 
-	model.Parent = world
+	-- Parkplatz für den Firmenwagen neben der Halle (in der Lücke zum Nachbarn)
+	local spotX = index <= Config.MaxPlots / 2 and -50 or 50
+	p({ Name = "Parkplatz", Size = Vector3.new(14, 1, 30), CFrame = at(spotX, -0.45, 18), Color = Color3.fromRGB(70, 72, 78), Material = Enum.Material.Asphalt })
+	for _, dx in ipairs({ -5, 5 }) do
+		p({ Name = "Parklinie", Size = Vector3.new(0.4, 0.05, 16), CFrame = at(spotX + dx, 0.08, 18), Color = Color3.new(1, 1, 1), CanCollide = false })
+	end
+	local pSign = p({ Name = "Parkschild", Size = Vector3.new(6, 2, 0.3), CFrame = at(spotX, 5, 5), Color = Color3.fromRGB(30, 90, 200) })
+	textGui(pSign, Enum.NormalId.Back, "P  Firmenwagen", Color3.new(1, 1, 1), Color3.fromRGB(30, 90, 200))
+	p({ Name = "Schildpfosten", Size = Vector3.new(0.3, 4, 0.3), CFrame = at(spotX, 2, 5), Color = Color3.fromRGB(120, 120, 125) })
+	plot.CarSpot = at(spotX, 0.05 + Cars.CHASSIS_HEIGHT + 0.3, 20) * CFrame.Angles(0, math.pi, 0)
+
+	model.Parent = World.Folder
 	buildDyno(plot, hasUpgrade(st, "Dyno"))
 	return plot
 end
@@ -500,12 +403,12 @@ local function spawnCustomer(player, st, bay)
 	end
 	local def = candidates[math.random(#candidates)]
 	local stage = math.random(1, maxStage(st))
-	local car = makeCar(def)
+	local car = Cars.MakeShowCar(def)
 	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false }
 	bay.Car = carInfo
 
 	local plot = st.Plot
-	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + 0.2, 0)
+	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local startCF = lookCF(roadPos - Vector3.new(140, 0, 0), Vector3.xAxis)
 	local turnCF = lookCF(roadPos, Vector3.xAxis)
 	local facingIn = lookCF(roadPos, -Vector3.zAxis)
@@ -538,6 +441,7 @@ local function spawnCustomer(player, st, bay)
 			end
 			startJob(player, st, bay, carInfo)
 		end)
+		car.Kollision.CanCollide = true
 		carInfo.Ready = true
 	end)
 end
@@ -555,7 +459,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 	end
 
 	local function floorPos(x, z)
-		return (plot.Origin * CFrame.new(x, 0.4 + CAR_HEIGHT, z)).Position
+		return (plot.Origin * CFrame.new(x, 0.2 + CAR_HEIGHT, z)).Position
 	end
 
 	local front = lookCF(floorPos(bay.X, 12), -Vector3.zAxis)
@@ -587,7 +491,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		plot.DynoBusy = false
 	end
 
-	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + 0.2, 0)
+	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local onRoad = lookCF(roadPos, -Vector3.zAxis)
 	moveModel(car, front, onRoad, 2.2)
 	local turned = lookCF(roadPos, Vector3.xAxis)
@@ -605,6 +509,10 @@ local function completeCar(player, st, bay, score, byAzubi)
 	carInfo.Done = true
 	carInfo.Ready = false
 	carInfo.Busy = true
+	local block = carInfo.Model:FindFirstChild("Kollision")
+	if block then
+		block.CanCollide = false
+	end
 	if carInfo.Prompt then
 		carInfo.Prompt:Destroy()
 		carInfo.Prompt = nil
@@ -647,7 +555,11 @@ local function completeCar(player, st, bay, score, byAzubi)
 	if byAzubi then
 		notify(player, ("🧑‍🔧 Azubi hat den %s getunt: +%s €"):format(def.Name, Config.Format(pay)), "good")
 	else
+		local tip = math.floor(pay * Config.TestDriveTip)
+		st.LastTuned = { Def = def, Hp = newHp, Tip = tip, Expires = os.clock() + 120, Used = false }
 		TuneResult:FireClient(player, {
+			CanTestDrive = true,
+			Tip = tip,
 			CarName = def.Name,
 			StageName = stageDef.Name,
 			Hp = def.Hp,
@@ -769,6 +681,160 @@ BuyUpgrade.OnServerEvent:Connect(function(player, id)
 	end
 	notify(player, "✔ Gekauft: " .. up.Name, "good")
 	saveData(player, st)
+end)
+
+------------------------------------------------------------------------
+-- Fahren: Probefahrt und Firmenwagen
+------------------------------------------------------------------------
+local function getHumanoid(player)
+	local char = player.Character
+	return char and char:FindFirstChildOfClass("Humanoid"), char
+end
+
+local function teleportHome(player, st)
+	local hum, char = getHumanoid(player)
+	if hum and char and st.Plot then
+		hum.Sit = false
+		char:PivotTo(st.Plot.Origin * CFrame.new(0, 4, 28))
+	end
+end
+
+local function endDrive(player, st, reason)
+	local drive = st.Drive
+	if not drive then
+		return
+	end
+	st.Drive = nil
+	local hum = getHumanoid(player)
+	if hum and hum.SeatPart and hum.SeatPart:IsDescendantOf(drive.Car) then
+		hum.Sit = false
+	end
+	drive.Car:Destroy()
+	if drive.Mode == "test" then
+		local driven = os.clock() - drive.Started
+		if drive.Tip and drive.Tip > 0 and driven >= Config.TestDriveMinSeconds then
+			setMoney(st, st.Data.Money + drive.Tip)
+			notify(player, ("🏁 Der Kunde ist begeistert! Trinkgeld: +%s €"):format(Config.Format(drive.Tip)), "good")
+		elseif reason == "time" then
+			notify(player, "Die Zeit ist um – Probefahrt beendet.", "info")
+		elseif reason ~= "silent" then
+			notify(player, ("Probefahrt beendet. (Für Trinkgeld mindestens %d Sekunden fahren.)"):format(Config.TestDriveMinSeconds), "info")
+		end
+		task.delay(0.2, teleportHome, player, st)
+	end
+end
+
+local function spawnDrivable(player, st, def, hp, cf, mode)
+	endDrive(player, st, "silent")
+	local car, seat = Cars.MakeDrivable(def)
+	car:PivotTo(cf)
+	seat:SetAttribute("Drivable", true)
+	seat:SetAttribute("Hp", hp)
+	seat:SetAttribute("Owner", player.UserId)
+	seat:SetAttribute("Mode", mode)
+	seat:SetAttribute("CarName", def.Name)
+	local drive = { Car = car, Seat = seat, Mode = mode, Started = os.clock() }
+	if mode == "test" then
+		drive.Ends = os.clock() + Config.TestDriveSeconds
+		seat:SetAttribute("EndsAt", workspace:GetServerTimeNow() + Config.TestDriveSeconds)
+	end
+	car.Parent = World.Vehicles
+	st.Drive = drive
+	pcall(function()
+		car.PrimaryPart:SetNetworkOwner(player)
+	end)
+
+	seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+		local occ = seat.Occupant
+		if occ then
+			local who = Players:GetPlayerFromCharacter(occ.Parent)
+			if who ~= player then
+				-- Nur der Besitzer darf fahren
+				local weld = seat:FindFirstChild("SeatWeld")
+				if weld then
+					weld:Destroy()
+				end
+				if who then
+					notify(who, "Das ist nicht dein Auto!", "bad")
+				end
+				return
+			end
+			pcall(function()
+				car.PrimaryPart:SetNetworkOwner(player)
+			end)
+		elseif mode == "test" and st.Drive == drive then
+			task.delay(0.3, function()
+				if st.Drive == drive and not seat.Occupant then
+					endDrive(player, st)
+				end
+			end)
+		end
+	end)
+
+	-- Spieler hineinsetzen
+	local hum, char = getHumanoid(player)
+	if hum and char and hum.Health > 0 then
+		hum.Sit = false
+		char:PivotTo(seat.CFrame + Vector3.new(0, 3, 0))
+		task.wait(0.15)
+		if seat.Parent and st.Drive == drive then
+			seat:Sit(hum)
+		end
+	end
+	return drive
+end
+
+RequestTestDrive.OnServerEvent:Connect(function(player)
+	local st = States[player]
+	if not st or not st.Plot then
+		return
+	end
+	local lt = st.LastTuned
+	if not lt or lt.Used or os.clock() > lt.Expires then
+		notify(player, "Gerade ist keine Probefahrt möglich.", "bad")
+		return
+	end
+	if st.Job then
+		notify(player, "Erst das Tuning beenden.", "bad")
+		return
+	end
+	lt.Used = true
+	notify(player, "🏁 Probefahrt! Fahr eine Runde auf der Teststrecke (W/A/S/D).", "good")
+	local drive = spawnDrivable(player, st, lt.Def, lt.Hp, World.TrackStart(st.Plot.Index), "test")
+	drive.Tip = lt.Tip
+end)
+
+RequestCompanyCar.OnServerEvent:Connect(function(player)
+	local st = States[player]
+	if not st or not st.Plot then
+		return
+	end
+	if st.Drive and st.Drive.Mode == "test" then
+		notify(player, "Erst die Probefahrt beenden.", "bad")
+		return
+	end
+	local now = os.clock()
+	if st.LastCarRequest and now - st.LastCarRequest < 3 then
+		return
+	end
+	st.LastCarRequest = now
+	local hp = Config.CompanyCar.Hp + 120 * (maxStage(st) - 1)
+	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company")
+end)
+
+EndDrive.OnServerEvent:Connect(function(player)
+	local st = States[player]
+	if not st or not st.Drive then
+		return
+	end
+	if st.Drive.Mode == "test" then
+		endDrive(player, st)
+	else
+		local hum = getHumanoid(player)
+		if hum then
+			hum.Sit = false
+		end
+	end
 end)
 
 ------------------------------------------------------------------------
@@ -991,6 +1057,10 @@ Players.PlayerRemoving:Connect(function(player)
 		return
 	end
 	States[player] = nil
+	if st.Drive then
+		st.Drive.Car:Destroy()
+		st.Drive = nil
+	end
 	saveData(player, st)
 	if st.Plot then
 		usedPlots[st.Plot.Index] = nil
@@ -1028,6 +1098,9 @@ task.spawn(function()
 					end
 					st.NextCustomer = now + base * (0.7 + math.random() * 0.6)
 				end
+				if st.Drive and st.Drive.Ends and now >= st.Drive.Ends then
+					endDrive(player, st, "time")
+				end
 				if hasUpgrade(st, "Azubi") and now >= st.NextAzubi then
 					st.NextAzubi = now + Config.AzubiInterval
 					for _, bay in ipairs(st.Plot.Bays) do
@@ -1046,5 +1119,18 @@ task.spawn(function()
 				task.spawn(saveData, player, st)
 			end
 		end
+	end
+end)
+
+------------------------------------------------------------------------
+-- Tag und Nacht
+------------------------------------------------------------------------
+task.spawn(function()
+	local perSecond = 24 / (Config.DayLengthMinutes * 60)
+	while true do
+		local dt = task.wait(0.1)
+		local t = Lighting.ClockTime
+		local rate = (t < 6 or t > 19.5) and perSecond * 2 or perSecond -- Nächte gehen schneller vorbei
+		Lighting.ClockTime = (t + rate * dt) % 24
 	end
 end)

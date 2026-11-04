@@ -66,6 +66,27 @@ Config.TurboMult = 0.5 -- Kundenabstand wird halbiert
 
 ------------------------------------------------------------------------
 
+-- Teststrecke (Oval): zwei Geraden + zwei Halbkreise
+Config.Track = { CenterZ = -450, HalfLength = 250, Radius = 150, Width = 30 }
+
+-- Fahren
+Config.TestDriveSeconds = 75 -- Dauer einer Probefahrt
+Config.TestDriveTip = 0.15 -- Trinkgeld-Anteil nach der Probefahrt
+Config.TestDriveMinSeconds = 15 -- so lange muss man fahren für Trinkgeld
+Config.CompanyCar = { Name = "Firmenwagen", Hp = 220, Nm = 350, Color = Color3.fromRGB(255, 140, 0) }
+Config.DayLengthMinutes = 24 -- ein Tag-Nacht-Zyklus
+
+-- Fahrwerte aus der Leistung (Studs pro Sekunde)
+function Config.DriveStats(hp)
+	return {
+		TopSpeed = 60 + hp * 0.13,
+		Accel = 18 + hp * 0.06,
+	}
+end
+
+-- Studs/s -> km/h (gefühlt passend zur Roblox-Größe)
+Config.KmhFactor = 1.25
+
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung
 Config.ZoneWidth = 0.16 -- Breite der grünen Zone (Anteil des Balkens)
