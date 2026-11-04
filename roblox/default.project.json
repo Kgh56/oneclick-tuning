@@ -1,0 +1,17 @@
+{
+  "name": "ChiptuningFirma",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Config": { "$path": "src/shared/Config.lua" }
+    },
+    "ServerScriptService": {
+      "GameServer": { "$path": "src/server/GameServer.server.lua" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "ChiptuningClient": { "$path": "src/client/ChiptuningClient.client.lua" }
+      }
+    }
+  }
+}

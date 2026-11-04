@@ -1,0 +1,901 @@
+-- Chiptuning-Firma: Server
+-- Script "GameServer" in ServerScriptService
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+
+------------------------------------------------------------------------
+-- Remotes
+------------------------------------------------------------------------
+local remotes = Instance.new("Folder")
+remotes.Name = "Remotes"
+
+local function newRemote(name)
+	local r = Instance.new("RemoteEvent")
+	r.Name = name
+	r.Parent = remotes
+	return r
+end
+
+local OpenTuning = newRemote("OpenTuning") -- Server -> Client: Tuning-Fenster öffnen
+local FinishTuning = newRemote("FinishTuning") -- Client -> Server: Nadel-Positionen
+local CancelTuning = newRemote("CancelTuning") -- Client -> Server
+local TuneResult = newRemote("TuneResult") -- Server -> Client: Ergebnis
+local OpenShop = newRemote("OpenShop") -- Server -> Client
+local BuyUpgrade = newRemote("BuyUpgrade") -- Client -> Server
+local Notify = newRemote("Notify") -- Server -> Client: Meldung
+remotes.Parent = ReplicatedStorage
+
+local function notify(player, text, kind)
+	Notify:FireClient(player, text, kind or "info")
+end
+
+------------------------------------------------------------------------
+-- Bau-Helfer
+------------------------------------------------------------------------
+local function part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props.Shape then
+		p.Shape = props.Shape
+	end
+	for k, v in pairs(props) do
+		if k ~= "Parent" and k ~= "Shape" then
+			p[k] = v
+		end
+	end
+	p.Parent = props.Parent
+	return p
+end
+
+local function textGui(parentPart, face, text, color, bg)
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = face
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 25
+	sg.Parent = parentPart
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = bg and 0 or 1
+	tl.BackgroundColor3 = bg or Color3.new(0, 0, 0)
+	tl.Font = Enum.Font.GothamBlack
+	tl.TextScaled = true
+	tl.TextColor3 = color
+	tl.Text = text
+	tl.Parent = sg
+	return tl
+end
+
+local function billboard(adornee, text, offsetY)
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "Info"
+	bb.Size = UDim2.fromOffset(260, 64)
+	bb.StudsOffset = Vector3.new(0, offsetY or 5, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 90
+	bb.Adornee = adornee
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+	tl.BackgroundTransparency = 0.25
+	tl.TextColor3 = Color3.new(1, 1, 1)
+	tl.Font = Enum.Font.GothamBold
+	tl.TextScaled = true
+	tl.Text = text
+	tl.Parent = bb
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 10)
+	c.Parent = tl
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 4)
+	pad.Parent = tl
+	bb.Parent = adornee
+	return tl
+end
+
+local function lookCF(pos, dir)
+	return CFrame.lookAt(pos, pos + dir)
+end
+
+-- Bewegt ein Modell weich von A nach B (blockiert, bis fertig)
+local function moveModel(model, fromCF, toCF, duration)
+	local t0 = os.clock()
+	while model.Parent do
+		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
+		local e = a < 0.5 and 2 * a * a or 1 - ((-2 * a + 2) ^ 2) / 2
+		model:PivotTo(fromCF:Lerp(toCF, e))
+		if a >= 1 then
+			break
+		end
+		RunService.Heartbeat:Wait()
+	end
+end
+
+------------------------------------------------------------------------
+-- Welt
+------------------------------------------------------------------------
+local ROAD_Z = 50
+local PLOT_SPACING = 100
+local BAY_X = { -27, -9, 9, 27 }
+local BAY_Z = -12
+local DYNO_POS = Vector3.new(26, 0, 18)
+
+local world = Instance.new("Folder")
+world.Name = "Welt"
+world.Parent = workspace
+
+part({
+	Name = "Boden",
+	Size = Vector3.new(800, 2, 320),
+	CFrame = CFrame.new(0, -1, 0),
+	Color = Color3.fromRGB(86, 125, 70),
+	Material = Enum.Material.Grass,
+	Parent = world,
+})
+part({
+	Name = "Strasse",
+	Size = Vector3.new(800, 0.2, 22),
+	CFrame = CFrame.new(0, 0.1, ROAD_Z),
+	Color = Color3.fromRGB(45, 45, 48),
+	Material = Enum.Material.Asphalt,
+	Parent = world,
+})
+for x = -390, 390, 20 do
+	part({
+		Name = "Markierung",
+		Size = Vector3.new(8, 0.05, 0.6),
+		CFrame = CFrame.new(x, 0.22, ROAD_Z),
+		Color = Color3.new(1, 1, 1),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		Parent = world,
+	})
+end
+
+local spawnLoc = Instance.new("SpawnLocation")
+spawnLoc.Name = "Spawn"
+spawnLoc.Anchored = true
+spawnLoc.Size = Vector3.new(12, 1, 12)
+spawnLoc.CFrame = CFrame.new(0, 0.5, ROAD_Z + 25)
+spawnLoc.Neutral = true
+spawnLoc.Duration = 0
+spawnLoc.Parent = world
+
+------------------------------------------------------------------------
+-- Spielerdaten
+------------------------------------------------------------------------
+local store = nil
+do
+	local ok, result = pcall(function()
+		return DataStoreService:GetDataStore(Config.DataStoreName)
+	end)
+	if ok then
+		store = result
+	else
+		warn("[Chiptuning] DataStore nicht verfügbar: " .. tostring(result))
+	end
+end
+
+local States = {} -- [player] = Zustand
+local usedPlots = {} -- [index] = player
+local jobCounter = 0
+
+local function defaultData()
+	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {} }
+end
+
+local function loadData(player)
+	if not store then
+		return defaultData(), false
+	end
+	local ok, res = pcall(function()
+		return store:GetAsync("p_" .. player.UserId)
+	end)
+	if not ok then
+		warn("[Chiptuning] Laden fehlgeschlagen: " .. tostring(res))
+		return defaultData(), false
+	end
+	local data = defaultData()
+	if type(res) == "table" then
+		data.Money = tonumber(res.Money) or data.Money
+		data.Rep = tonumber(res.Rep) or 0
+		data.Tunes = tonumber(res.Tunes) or 0
+		if type(res.Upgrades) == "table" then
+			for id, owned in pairs(res.Upgrades) do
+				if owned == true and Config.GetUpgrade(id) then
+					data.Upgrades[id] = true
+				end
+			end
+		end
+	end
+	return data, true
+end
+
+local function saveData(player, st)
+	if not (store and st.CanSave) then
+		return
+	end
+	local ok, err = pcall(function()
+		store:SetAsync("p_" .. player.UserId, {
+			Money = st.Data.Money,
+			Rep = st.Data.Rep,
+			Tunes = st.Data.Tunes,
+			Upgrades = st.Data.Upgrades,
+		})
+	end)
+	if not ok then
+		warn("[Chiptuning] Speichern fehlgeschlagen: " .. tostring(err))
+	end
+end
+
+local function hasUpgrade(st, id)
+	return st.Data.Upgrades[id] == true
+end
+
+local function maxStage(st)
+	if hasUpgrade(st, "Stage3") then
+		return 3
+	elseif hasUpgrade(st, "Stage2") then
+		return 2
+	end
+	return 1
+end
+
+local function isBayUnlocked(st, index)
+	return index == 1 or hasUpgrade(st, "Bay" .. index)
+end
+
+local function setMoney(st, value)
+	st.Data.Money = value
+	st.MoneyValue.Value = value
+end
+
+local function setRep(st, value)
+	st.Data.Rep = value
+	st.RepValue.Value = value
+end
+
+------------------------------------------------------------------------
+-- Autos
+------------------------------------------------------------------------
+-- Pivot = Mitte der Karosserie, 1.7 Studs über dem Boden. Front zeigt nach -Z.
+local CAR_HEIGHT = 1.7
+
+local function makeCar(def)
+	local m = Instance.new("Model")
+	m.Name = def.Name
+	local body = part({
+		Name = "Karosserie",
+		Size = Vector3.new(6, 1.6, 12),
+		CFrame = CFrame.new(),
+		Color = def.Color,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = m,
+	})
+	part({
+		Name = "Dach",
+		Size = Vector3.new(5.2, 1.5, 6),
+		CFrame = CFrame.new(0, 1.55, 0.6),
+		Color = Color3.fromRGB(25, 30, 40),
+		Material = Enum.Material.Glass,
+		Transparency = 0.15,
+		CanCollide = false,
+		Parent = m,
+	})
+	for _, w in ipairs({ { -3.1, -3.8 }, { 3.1, -3.8 }, { -3.1, 3.8 }, { 3.1, 3.8 } }) do
+		part({
+			Name = "Rad",
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(1, 2.2, 2.2),
+			CFrame = CFrame.new(w[1], -0.6, w[2]),
+			Color = Color3.fromRGB(20, 20, 20),
+			CanCollide = false,
+			Parent = m,
+		})
+	end
+	for _, x in ipairs({ -2.2, 2.2 }) do
+		part({
+			Name = "Scheinwerfer",
+			Size = Vector3.new(1.2, 0.4, 0.2),
+			CFrame = CFrame.new(x, 0.3, -6.05),
+			Color = Color3.fromRGB(255, 250, 220),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			Parent = m,
+		})
+		part({
+			Name = "Ruecklicht",
+			Size = Vector3.new(1.2, 0.4, 0.2),
+			CFrame = CFrame.new(x, 0.3, 6.05),
+			Color = Color3.fromRGB(220, 20, 20),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+			Parent = m,
+		})
+	end
+	if def.Hp >= 400 then
+		part({
+			Name = "Spoiler",
+			Size = Vector3.new(6.2, 0.2, 1.2),
+			CFrame = CFrame.new(0, 1.4, 5.4),
+			Color = Color3.fromRGB(20, 20, 20),
+			CanCollide = false,
+			Parent = m,
+		})
+	end
+	m.PrimaryPart = body
+	return m
+end
+
+------------------------------------------------------------------------
+-- Werkstatt (Grundstück)
+------------------------------------------------------------------------
+local function buildLock(plot, bay)
+	local lock = part({
+		Name = "Gesperrt",
+		Size = Vector3.new(14, 6, 22),
+		CFrame = plot.Origin * CFrame.new(bay.X, 4, BAY_Z),
+		Color = Color3.fromRGB(200, 40, 40),
+		Material = Enum.Material.ForceField,
+		Transparency = 0.3,
+		CanCollide = false,
+		Parent = plot.Model,
+	})
+	billboard(lock, "🔒 Hebebühne " .. bay.Index .. "\nim Shop freischalten", 1)
+	bay.Lock = lock
+end
+
+local function buildDyno(plot, owned)
+	if plot.Dyno then
+		plot.Dyno:Destroy()
+	end
+	local dyno = Instance.new("Model")
+	dyno.Name = "Pruefstand"
+	local base = plot.Origin * CFrame.new(DYNO_POS)
+	local pad = part({
+		Name = "Platte",
+		Size = Vector3.new(10, 0.4, 16),
+		CFrame = base * CFrame.new(0, 0.6, 0),
+		Color = owned and Color3.fromRGB(40, 40, 45) or Color3.fromRGB(120, 120, 125),
+		Material = Enum.Material.DiamondPlate,
+		Transparency = owned and 0 or 0.6,
+		Parent = dyno,
+	})
+	if owned then
+		for _, z in ipairs({ -3.8, 3.8 }) do
+			part({
+				Name = "Rolle",
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(8, 1, 1),
+				CFrame = base * CFrame.new(0, 0.85, z),
+				Color = Color3.fromRGB(180, 180, 190),
+				Material = Enum.Material.Metal,
+				CanCollide = false,
+				Parent = dyno,
+			})
+		end
+		local screen = part({
+			Name = "Monitor",
+			Size = Vector3.new(6, 4, 0.4),
+			CFrame = base * CFrame.new(7, 5, -4) * CFrame.Angles(0, math.rad(-35), 0),
+			Color = Color3.fromRGB(10, 10, 12),
+			Parent = dyno,
+		})
+		part({
+			Name = "Staender",
+			Size = Vector3.new(0.4, 3, 0.4),
+			CFrame = base * CFrame.new(7, 1.9, -4),
+			Color = Color3.fromRGB(60, 60, 60),
+			Parent = dyno,
+		})
+		plot.DynoScreen = textGui(screen, Enum.NormalId.Back, "PRÜFSTAND\nbereit", Color3.fromRGB(80, 255, 120), Color3.fromRGB(10, 14, 12))
+	else
+		billboard(pad, "Leistungsprüfstand\n(im Shop kaufen)", 3)
+		plot.DynoScreen = nil
+	end
+	dyno.Parent = plot.Model
+	plot.Dyno = dyno
+end
+
+local function buildPlot(player, st, index)
+	local origin = CFrame.new((index - (Config.MaxPlots + 1) / 2) * PLOT_SPACING, 0, 0)
+	local model = Instance.new("Model")
+	model.Name = "Werkstatt_" .. player.Name
+	local plot = { Index = index, Origin = origin, Model = model, Bays = {} }
+
+	local function at(x, y, z)
+		return origin * CFrame.new(x, y, z)
+	end
+
+	local wall = Color3.fromRGB(235, 235, 240)
+	local accent = Color3.fromRGB(255, 140, 0)
+
+	part({ Name = "Hallenboden", Size = Vector3.new(76, 0.4, 64), CFrame = at(0, 0.2, 0), Color = Color3.fromRGB(165, 165, 170), Material = Enum.Material.Concrete, Parent = model })
+	part({ Name = "Einfahrt", Size = Vector3.new(76, 0.3, 6), CFrame = at(0, 0.15, 35), Color = Color3.fromRGB(70, 70, 74), Material = Enum.Material.Asphalt, Parent = model })
+	part({ Name = "Rueckwand", Size = Vector3.new(78, 18, 1), CFrame = at(0, 9.4, -32.5), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
+	part({ Name = "WandLinks", Size = Vector3.new(1, 18, 66), CFrame = at(-38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
+	part({ Name = "WandRechts", Size = Vector3.new(1, 18, 66), CFrame = at(38.5, 9.4, 0), Color = wall, Material = Enum.Material.SmoothPlastic, Parent = model })
+	part({ Name = "Streifen", Size = Vector3.new(76, 1, 0.2), CFrame = at(0, 7, -31.9), Color = accent, Material = Enum.Material.Neon, CanCollide = false, Parent = model })
+	local backSign = part({ Name = "Wandschild", Size = Vector3.new(40, 4, 0.2), CFrame = at(0, 13, -31.9), Color = Color3.fromRGB(20, 20, 25), CanCollide = false, Parent = model })
+	textGui(backSign, Enum.NormalId.Back, "ECU · STAGE 1 · 2 · 3 · DYNO", accent, Color3.fromRGB(20, 20, 25))
+
+	local sign = part({ Name = "Firmenschild", Size = Vector3.new(78, 4, 1), CFrame = at(0, 20, 32.5), Color = Color3.fromRGB(20, 20, 25), Parent = model })
+	textGui(sign, Enum.NormalId.Back, player.DisplayName .. "s Chiptuning", accent, Color3.fromRGB(20, 20, 25))
+
+	-- Hebebühnen
+	for i, bx in ipairs(BAY_X) do
+		part({ Name = "Hebebuehne" .. i, Size = Vector3.new(14, 0.6, 22), CFrame = at(bx, 0.7, BAY_Z), Color = Color3.fromRGB(45, 45, 50), Material = Enum.Material.DiamondPlate, Parent = model })
+		for _, side in ipairs({ -7.3, 7.3 }) do
+			part({ Name = "Linie", Size = Vector3.new(0.4, 0.05, 22), CFrame = at(bx + side, 0.43, BAY_Z), Color = Color3.fromRGB(255, 200, 0), CanCollide = false, Parent = model })
+		end
+		local bay = { Index = i, X = bx, CF = at(bx, 1.0 + CAR_HEIGHT, BAY_Z), Car = nil, Lock = nil }
+		plot.Bays[i] = bay
+		if not isBayUnlocked(st, i) then
+			buildLock(plot, bay)
+		end
+	end
+
+	-- Schreibtisch mit Laptop = Shop
+	part({ Name = "Tisch", Size = Vector3.new(6, 3, 3), CFrame = at(-31, 1.9, 24), Color = Color3.fromRGB(90, 60, 40), Material = Enum.Material.Wood, Parent = model })
+	local laptop = part({ Name = "Laptop", Size = Vector3.new(2.4, 0.2, 1.6), CFrame = at(-31, 3.5, 24), Color = Color3.fromRGB(30, 30, 35), Parent = model })
+	local lid = part({ Name = "Bildschirm", Size = Vector3.new(2.4, 1.6, 0.1), CFrame = at(-31, 4.3, 23.2), Color = Color3.fromRGB(30, 30, 35), Parent = model })
+	textGui(lid, Enum.NormalId.Back, "ECU", Color3.fromRGB(80, 200, 255), Color3.fromRGB(10, 20, 30))
+	billboard(laptop, "🛠️ Upgrade-Shop", 3)
+
+	local shopPrompt = Instance.new("ProximityPrompt")
+	shopPrompt.ActionText = "Upgrade-Shop öffnen"
+	shopPrompt.ObjectText = "Laptop"
+	shopPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	shopPrompt.MaxActivationDistance = 12
+	shopPrompt.RequiresLineOfSight = false
+	shopPrompt.Parent = laptop
+	shopPrompt.Triggered:Connect(function(who)
+		if who == player then
+			OpenShop:FireClient(player)
+		else
+			notify(who, "Das ist nicht deine Werkstatt!", "bad")
+		end
+	end)
+
+	model.Parent = world
+	buildDyno(plot, hasUpgrade(st, "Dyno"))
+	return plot
+end
+
+------------------------------------------------------------------------
+-- Kunden und Aufträge
+------------------------------------------------------------------------
+local startJob -- wird weiter unten definiert
+
+local function spawnCustomer(player, st, bay)
+	local candidates = {}
+	for _, c in ipairs(Config.Cars) do
+		if st.Data.Rep >= c.MinRep then
+			table.insert(candidates, c)
+		end
+	end
+	local def = candidates[math.random(#candidates)]
+	local stage = math.random(1, maxStage(st))
+	local car = makeCar(def)
+	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false }
+	bay.Car = carInfo
+
+	local plot = st.Plot
+	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + 0.2, 0)
+	local startCF = lookCF(roadPos - Vector3.new(140, 0, 0), Vector3.xAxis)
+	local turnCF = lookCF(roadPos, Vector3.xAxis)
+	local facingIn = lookCF(roadPos, -Vector3.zAxis)
+	car:PivotTo(startCF)
+	car.Parent = plot.Model
+
+	task.spawn(function()
+		moveModel(car, startCF, turnCF, 3)
+		moveModel(car, turnCF, facingIn, 0.6)
+		moveModel(car, facingIn, bay.CF, 3)
+		if not car.Parent then
+			return
+		end
+		local stageDef = Config.Stages[stage]
+		carInfo.Label = billboard(car.PrimaryPart, ("🚗 %s\nWunsch: %s · %d PS"):format(def.Name, stageDef.Name, def.Hp), 5)
+
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Chiptuning starten"
+		prompt.ObjectText = def.Name .. " (" .. stageDef.Name .. ")"
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.HoldDuration = 0.3
+		prompt.MaxActivationDistance = 14
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = car.PrimaryPart
+		carInfo.Prompt = prompt
+		prompt.Triggered:Connect(function(who)
+			if who ~= player then
+				notify(who, "Das ist nicht deine Werkstatt!", "bad")
+				return
+			end
+			startJob(player, st, bay, carInfo)
+		end)
+		carInfo.Ready = true
+	end)
+end
+
+local function carLeave(st, bay, carInfo, oldHp, newHp)
+	local car = carInfo.Model
+	local plot = st.Plot
+	if carInfo.Label then
+		carInfo.Label.Text = ("✅ Getunt!\n%d → %d PS"):format(oldHp, newHp)
+	end
+	task.wait(1.2)
+	if not car.Parent then
+		bay.Car = nil
+		return
+	end
+
+	local function floorPos(x, z)
+		return (plot.Origin * CFrame.new(x, 0.4 + CAR_HEIGHT, z)).Position
+	end
+
+	local front = lookCF(floorPos(bay.X, 12), -Vector3.zAxis)
+	moveModel(car, bay.CF, front, 2.2)
+	local exitX = bay.X
+
+	if hasUpgrade(st, "Dyno") and not plot.DynoBusy then
+		plot.DynoBusy = true
+		local dynoCF = lookCF((plot.Origin * CFrame.new(DYNO_POS)).Position + Vector3.new(0, 0.8 + CAR_HEIGHT, 0), -Vector3.zAxis)
+		moveModel(car, front, dynoCF, 2)
+		local screen = plot.DynoScreen
+		local t0 = os.clock()
+		while car.Parent and os.clock() - t0 < 2.5 do
+			local a = math.clamp((os.clock() - t0) / 2.2, 0, 1)
+			local hp = math.floor(oldHp + (newHp - oldHp) * a)
+			if screen and screen.Parent then
+				screen.Text = ("PRÜFSTAND\n%d PS"):format(hp)
+			end
+			if carInfo.Label then
+				carInfo.Label.Text = ("🔥 Prüfstand\n%d PS"):format(hp)
+			end
+			task.wait(0.05)
+		end
+		if screen and screen.Parent then
+			screen.Text = ("PRÜFSTAND\n%d PS ✔"):format(newHp)
+		end
+		front = dynoCF
+		exitX = DYNO_POS.X
+		plot.DynoBusy = false
+	end
+
+	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + 0.2, 0)
+	local onRoad = lookCF(roadPos, -Vector3.zAxis)
+	moveModel(car, front, onRoad, 2.2)
+	local turned = lookCF(roadPos, Vector3.xAxis)
+	moveModel(car, onRoad, turned, 0.6)
+	moveModel(car, turned, lookCF(roadPos + Vector3.new(160, 0, 0), Vector3.xAxis), 3)
+	car:Destroy()
+	bay.Car = nil
+end
+
+local function completeCar(player, st, bay, score, byAzubi)
+	local carInfo = bay.Car
+	if not carInfo or carInfo.Done then
+		return
+	end
+	carInfo.Done = true
+	carInfo.Ready = false
+	carInfo.Busy = true
+	if carInfo.Prompt then
+		carInfo.Prompt:Destroy()
+		carInfo.Prompt = nil
+	end
+
+	local def = carInfo.Def
+	local stageDef = Config.Stages[carInfo.Stage]
+	local quality = 0.5 + 0.5 * score
+	local newHp = math.floor(def.Hp * (1 + stageDef.PowerGain * quality) + 0.5)
+	local newNm = math.floor(def.Nm * (1 + stageDef.TorqueGain * quality) + 0.5)
+
+	local mult = (0.4 + 0.6 * score) * def.PayMult * (1 + math.min(st.Data.Rep, 500) / 500)
+	if hasUpgrade(st, "Dyno") then
+		mult *= Config.DynoBonus
+	end
+	local pay = math.floor(stageDef.BasePay * mult)
+
+	local repDelta
+	if score >= 0.95 then
+		repDelta = 3
+	elseif score >= 0.55 then
+		repDelta = 1
+	else
+		repDelta = -2
+	end
+	if byAzubi then
+		repDelta = math.min(repDelta, 1)
+	end
+
+	setMoney(st, st.Data.Money + pay)
+	setRep(st, math.max(0, st.Data.Rep + repDelta))
+	st.Data.Tunes += 1
+
+	if byAzubi then
+		notify(player, ("🧑‍🔧 Azubi hat den %s getunt: +%s €"):format(def.Name, Config.Format(pay)), "good")
+	else
+		TuneResult:FireClient(player, {
+			CarName = def.Name,
+			StageName = stageDef.Name,
+			Hp = def.Hp,
+			Nm = def.Nm,
+			NewHp = newHp,
+			NewNm = newNm,
+			Pay = pay,
+			RepDelta = repDelta,
+			Score = score,
+		})
+	end
+
+	task.spawn(carLeave, st, bay, carInfo, def.Hp, newHp)
+end
+
+startJob = function(player, st, bay, carInfo)
+	if not carInfo.Ready or carInfo.Busy or carInfo.Done then
+		return
+	end
+	if st.Job then
+		notify(player, "Du tunst gerade schon ein Auto.", "bad")
+		return
+	end
+	local stageDef = Config.Stages[carInfo.Stage]
+	local width = hasUpgrade(st, "Laptop") and Config.ZoneWidthLaptop or Config.ZoneWidth
+	local zones, speeds = {}, {}
+	for r = 1, #Config.MapNames do
+		zones[r] = 0.15 + math.random() * 0.7
+		speeds[r] = (0.55 + 0.15 * (r - 1)) * stageDef.SpeedMult
+	end
+	jobCounter += 1
+	st.Job = { Id = jobCounter, Bay = bay, Car = carInfo, Zones = zones, Width = width, Started = os.clock() }
+	carInfo.Busy = true
+
+	local def = carInfo.Def
+	OpenTuning:FireClient(player, {
+		Id = jobCounter,
+		CarName = def.Name,
+		StageName = stageDef.Name,
+		Hp = def.Hp,
+		Nm = def.Nm,
+		TargetHp = math.floor(def.Hp * (1 + stageDef.PowerGain) + 0.5),
+		TargetNm = math.floor(def.Nm * (1 + stageDef.TorqueGain) + 0.5),
+		Zones = zones,
+		Width = width,
+		Speeds = speeds,
+		MapNames = Config.MapNames,
+	})
+end
+
+FinishTuning.OnServerEvent:Connect(function(player, jobId, positions)
+	local st = States[player]
+	if not st or not st.Job or st.Job.Id ~= jobId or type(positions) ~= "table" then
+		return
+	end
+	local job = st.Job
+	st.Job = nil
+	if os.clock() - job.Started < 1.5 or job.Bay.Car ~= job.Car then
+		job.Car.Busy = false
+		return
+	end
+	local total = 0
+	for r = 1, #job.Zones do
+		local p = tonumber(positions[r])
+		if p == nil or p ~= p then
+			p = -1
+		end
+		p = math.clamp(p, -1, 2)
+		total += Config.Score[Config.Rate(p, job.Zones[r], job.Width)]
+	end
+	completeCar(player, st, job.Bay, total / #job.Zones, false)
+end)
+
+CancelTuning.OnServerEvent:Connect(function(player, jobId)
+	local st = States[player]
+	if st and st.Job and st.Job.Id == jobId then
+		st.Job.Car.Busy = false
+		st.Job = nil
+	end
+end)
+
+------------------------------------------------------------------------
+-- Shop
+------------------------------------------------------------------------
+BuyUpgrade.OnServerEvent:Connect(function(player, id)
+	local st = States[player]
+	if not st or not st.Plot or type(id) ~= "string" then
+		return
+	end
+	local up = Config.GetUpgrade(id)
+	if not up then
+		return
+	end
+	if hasUpgrade(st, id) then
+		notify(player, "Hast du schon.", "info")
+		return
+	end
+	if up.Requires and not hasUpgrade(st, up.Requires) then
+		notify(player, "Zuerst brauchst du: " .. Config.GetUpgrade(up.Requires).Name, "bad")
+		return
+	end
+	if st.Data.Money < up.Price then
+		notify(player, "Nicht genug Geld!", "bad")
+		return
+	end
+	setMoney(st, st.Data.Money - up.Price)
+	st.Data.Upgrades[id] = true
+	player:SetAttribute("Upg_" .. id, true)
+
+	local bayIndex = tonumber(id:match("^Bay(%d)$"))
+	if bayIndex then
+		local bay = st.Plot.Bays[bayIndex]
+		if bay and bay.Lock then
+			bay.Lock:Destroy()
+			bay.Lock = nil
+		end
+	elseif id == "Dyno" then
+		buildDyno(st.Plot, true)
+	end
+	notify(player, "✔ Gekauft: " .. up.Name, "good")
+	saveData(player, st)
+end)
+
+------------------------------------------------------------------------
+-- Spieler betreten / verlassen
+------------------------------------------------------------------------
+local function placeCharacter(player, char)
+	local st = States[player]
+	for _ = 1, 60 do
+		if st and st.Plot then
+			break
+		end
+		task.wait(0.25)
+		st = States[player]
+	end
+	if not (st and st.Plot) then
+		return
+	end
+	char:WaitForChild("HumanoidRootPart", 5)
+	task.wait(0.1)
+	if char.Parent then
+		char:PivotTo(st.Plot.Origin * CFrame.new(0, 4, 28))
+	end
+end
+
+local function onPlayerAdded(player)
+	player.CharacterAdded:Connect(function(char)
+		placeCharacter(player, char)
+	end)
+
+	local index = nil
+	for i = 1, Config.MaxPlots do
+		if not usedPlots[i] then
+			index = i
+			break
+		end
+	end
+	if not index then
+		player:Kick("Alle Werkstätten auf diesem Server sind belegt. Bitte einen anderen Server wählen.")
+		return
+	end
+	usedPlots[index] = player
+
+	local data, canSave = loadData(player)
+	if not player.Parent then
+		usedPlots[index] = nil
+		return
+	end
+
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	local money = Instance.new("IntValue")
+	money.Name = "Geld"
+	money.Value = data.Money
+	money.Parent = leaderstats
+	local rep = Instance.new("IntValue")
+	rep.Name = "Ruf"
+	rep.Value = data.Rep
+	rep.Parent = leaderstats
+	leaderstats.Parent = player
+
+	for id in pairs(data.Upgrades) do
+		player:SetAttribute("Upg_" .. id, true)
+	end
+
+	local st = {
+		Data = data,
+		CanSave = canSave,
+		MoneyValue = money,
+		RepValue = rep,
+		Job = nil,
+		NextCustomer = os.clock() + 3,
+		NextAzubi = os.clock() + Config.AzubiInterval,
+	}
+	st.Plot = buildPlot(player, st, index)
+	States[player] = st
+
+	if player.Character then
+		task.spawn(placeCharacter, player, player.Character)
+	end
+
+	if not canSave then
+		notify(player, "Hinweis: Speichern ist aus (in Studio: API-Zugriff erlauben).", "bad")
+	end
+	notify(player, "Willkommen in deiner Chiptuning-Werkstatt! 🔧", "good")
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+for _, p in ipairs(Players:GetPlayers()) do
+	task.spawn(onPlayerAdded, p)
+end
+
+Players.PlayerRemoving:Connect(function(player)
+	local st = States[player]
+	if not st then
+		return
+	end
+	States[player] = nil
+	saveData(player, st)
+	if st.Plot then
+		usedPlots[st.Plot.Index] = nil
+		st.Plot.Model:Destroy()
+	end
+end)
+
+game:BindToClose(function()
+	for player, st in pairs(States) do
+		task.spawn(saveData, player, st)
+	end
+	task.wait(3)
+end)
+
+------------------------------------------------------------------------
+-- Hauptschleife: Kunden, Azubi, Autosave
+------------------------------------------------------------------------
+task.spawn(function()
+	local lastSave = os.clock()
+	while true do
+		task.wait(1)
+		local now = os.clock()
+		for player, st in pairs(States) do
+			if st.Plot then
+				if now >= st.NextCustomer then
+					for _, bay in ipairs(st.Plot.Bays) do
+						if isBayUnlocked(st, bay.Index) and not bay.Car then
+							spawnCustomer(player, st, bay)
+							break
+						end
+					end
+					local base = hasUpgrade(st, "Werbung") and Config.CustomerIntervalAds or Config.CustomerInterval
+					st.NextCustomer = now + base * (0.7 + math.random() * 0.6)
+				end
+				if hasUpgrade(st, "Azubi") and now >= st.NextAzubi then
+					st.NextAzubi = now + Config.AzubiInterval
+					for _, bay in ipairs(st.Plot.Bays) do
+						local c = bay.Car
+						if c and c.Ready and not c.Busy and not c.Done then
+							completeCar(player, st, bay, Config.Score.Good, true)
+							break
+						end
+					end
+				end
+			end
+		end
+		if now - lastSave > 120 then
+			lastSave = now
+			for player, st in pairs(States) do
+				task.spawn(saveData, player, st)
+			end
+		end
+	end
+end)
