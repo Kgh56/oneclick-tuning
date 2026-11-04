@@ -1,0 +1,69 @@
+# Baut "OneClick Admin" - die Mac-App fuer den Admin-Bereich (nur fuer den Betreiber, nicht fuer Kunden).
+# Eine App fuer Intel-Macs und Macs mit Apple-Chip; Download unter Releases -> "programm" -> OneClick-Admin-Mac.zip
+name: Mac-Admin-App bauen
+
+on:
+  push:
+    branches: [main]
+    paths: ["admin_app/**", ".github/workflows/mac-admin.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bauen:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python (universal2) installieren
+        run: |
+          curl -sSLo python.pkg https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg
+          sudo installer -pkg python.pkg -target /
+          /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 -m venv venv
+
+      - name: Pakete installieren
+        run: venv/bin/pip install pyinstaller==6.11.1 "pywebview>=5.4,<6"
+
+      - name: Versionsnummer festlegen (fortlaufend)
+        run: echo "${{ github.run_number }}" > admin_app/version.txt
+
+      - name: App-Symbol (.icns) erzeugen
+        run: |
+          mkdir icon.iconset
+          for g in 16 32 128 256 512; do
+            sips -z $g $g programm/icon.png --out icon.iconset/icon_${g}x${g}.png >/dev/null
+            sips -z $((g*2)) $((g*2)) programm/icon.png --out icon.iconset/icon_${g}x${g}@2x.png >/dev/null
+          done
+          iconutil -c icns icon.iconset -o icon.icns
+
+      - name: App bauen
+        run: |
+          venv/bin/pyinstaller --noconfirm --windowed --name "OneClick Admin" --icon icon.icns \
+            --osx-bundle-identifier de.gh-mapping.oneclick.admin --target-arch universal2 \
+            --add-data "admin_app/version.txt:." admin_app/oneclick_admin.py
+          lipo -archs "dist/OneClick Admin.app/Contents/MacOS/OneClick Admin" | grep -q x86_64
+          lipo -archs "dist/OneClick Admin.app/Contents/MacOS/OneClick Admin" | grep -q arm64
+
+      - name: Selbsttest (fertige App starten)
+        run: |
+          export ONECLICK_SELBSTTEST="$PWD/selbsttest.json"
+          "dist/OneClick Admin.app/Contents/MacOS/OneClick Admin" &
+          pid=$!
+          for i in $(seq 1 240); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          kill $pid 2>/dev/null || true
+          echo "Ergebnis:"; cat selbsttest.json; echo
+          grep -q '"ui": true' selbsttest.json
+          grep -q '"api": true' selbsttest.json
+          grep -q '"kennung": true' selbsttest.json
+
+      - name: ZIP erzeugen und bereitstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ditto -c -k --keepParent "dist/OneClick Admin.app" dist/OneClick-Admin-Mac.zip
+          ls -la dist
+          gh release view programm >/dev/null 2>&1 || \
+            gh release create programm --title "OneClick Solutions – Programm" --notes "Programm für Kunden."
+          gh release upload programm dist/OneClick-Admin-Mac.zip --clobber

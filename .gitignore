@@ -14,6 +14,7 @@ eingang/
 eigene/
 sicherungen/
 programm/version.txt
+admin_app/version.txt
 tickets/
 installationen.json
 downloads.json

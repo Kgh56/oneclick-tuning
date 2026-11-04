@@ -663,6 +663,20 @@ class WebTests(Basis):
         self.assertEqual(A.totp_pruefen(g, "287 082", 0, jetzt=59), 1)
         self.assertIsNone(A.totp_pruefen(g, "287082", 1, jetzt=59))      # schon benutzt
 
+    def test_admin_app_design(self):
+        app_ua = {"User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15 OneClickAdmin/1.3"}
+        c = A.app.test_client()
+        self.assertIn("/admin", c.get("/", headers=app_ua).headers["Location"])        # App startet im Admin
+        self.assertIn("OneClick Admin", c.get("/login", headers=app_ua).text)          # Login im App-Design
+        a = self.admin()
+        seite = a.get("/admin", headers=app_ua).text
+        self.assertIn('class="aa-leiste"', seite)
+        self.assertIn('class="admin-app"', seite)
+        self.assertNotIn('class="aa-leiste"', a.get("/admin", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)   # Browser: schlicht wie bisher
+        self.assertEqual(c.get("/favicon.svg").mimetype, "image/svg+xml")
+        # Anmeldung bleibt gleich streng: ohne Login kein Admin, auch nicht mit App-Kennung
+        self.assertEqual(c.get("/admin", headers=app_ua).status_code, 302)
+
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck

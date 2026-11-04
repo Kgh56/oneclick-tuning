@@ -580,12 +580,28 @@ def ist_programm() -> bool:
     return PROGRAMM_UA in request.headers.get("User-Agent", "")
 
 
+ADMIN_APP_UA = "OneClickAdmin/"   # Mac-App "OneClick Admin" (nur fuer den Betreiber): eigenes Design
+
+
+def ist_admin_app() -> bool:
+    return ADMIN_APP_UA in request.headers.get("User-Agent", "")
+
+
 @app.before_request
 def nur_ueber_programm():
     """Die Kunden-Schnittstelle (/api/...) beantwortet nur das Programm. Im Browser gibt es nur die
     Werbeseite und den Admin-Bereich."""
     if request.path.startswith("/api/") and not ist_programm() and not session.get("admin"):
         return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
+
+
+@app.route("/favicon.svg")
+def favicon_svg():
+    """Logo als SVG (fuer die Admin-App) - dasselbe wie im Tab-Symbol."""
+    m = re.search(r"data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)", TEMPLATES["basis.html"])
+    antwort = app.response_class(base64.b64decode(m.group(1)), mimetype="image/svg+xml")
+    antwort.headers["Cache-Control"] = "public, max-age=86400"
+    return antwort
 
 
 @app.route("/favicon.ico")
@@ -614,6 +630,8 @@ def programm_seite():
 @app.route("/")
 def start():
     """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
+    if ist_admin_app():
+        return redirect(url_for("admin"))   # Admin-App startet direkt im Admin (bzw. Login)
     if not ist_programm():
         return programm_seite()   # Browser: nur die Werbeseite - das Portal gibt es nur im Programm
     seite = KUNDENSEITE.read_text(encoding="utf-8")
@@ -3019,11 +3037,81 @@ main>*{animation:none}
 background:#101217;border-bottom:1px solid var(--rand)}
 .programm-leiste .leise{font-size:13px}
 .programm-leiste~header{display:none}
-</style></head><body>
+
+/* ===== OneClick Admin (Mac-App): Design wie das Kundenprogramm ===== */
+@font-face{font-family:Mont;src:url(/fonts/montserrat-latin-500-normal.woff2)format("woff2");font-weight:500}
+@font-face{font-family:Mont;src:url(/fonts/montserrat-latin-600-normal.woff2)format("woff2");font-weight:600}
+@font-face{font-family:Mont;src:url(/fonts/montserrat-latin-700-normal.woff2)format("woff2");font-weight:700}
+@font-face{font-family:Mont;src:url(/fonts/montserrat-latin-800-normal.woff2)format("woff2");font-weight:800}
+@font-face{font-family:Orb;src:url(/fonts/orbitron-latin-900-normal.woff2)format("woff2");font-weight:900}
+@font-face{font-family:MonoX;src:url(/fonts/jetbrains-mono-latin-400-normal.woff2)format("woff2");font-weight:400}
+body.admin-app{--aa-bg:#060b18;--aa-karte:#111827;--aa-karte2:#161f33;--aa-rand:rgba(110,150,255,.16);--aa-blau:#2f7bff;--aa-blau2:#5b9bff;
+  --aa-text:#e8eefc;--aa-leise:#8d9bb8;margin:0;min-height:100vh;display:grid;grid-template-columns:268px minmax(0,1fr);grid-template-rows:1fr auto;
+  font-family:Mont,system-ui,sans-serif;color:var(--aa-text);
+  background:radial-gradient(900px 600px at 85% -10%,rgba(47,123,255,.18),transparent 60%),radial-gradient(700px 500px at -10% 110%,rgba(47,123,255,.12),transparent 60%),var(--aa-bg)}
+body.admin-app>header{display:none}
+body.admin-app.ohne-leiste{display:block}
+.aa-leiste{grid-row:1/3;position:sticky;top:0;height:100vh;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:22px 16px;
+  background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(10,15,28,.96));border-right:1px solid var(--aa-rand)}
+.aa-marke{display:flex;align-items:center;gap:12px;padding:6px 10px 22px;margin-bottom:8px;border-bottom:1px solid var(--aa-rand)}
+.aa-marke img{width:40px;height:40px;filter:drop-shadow(0 0 14px rgba(80,150,255,.55))}
+.aa-marke b{font-family:Orb;font-weight:900;font-size:16px;letter-spacing:.4px;line-height:1.15;background:linear-gradient(90deg,#fff,#9fc4ff);-webkit-background-clip:text;color:transparent}
+.aa-marke span{display:block;font-size:11px;letter-spacing:3px;color:var(--aa-blau2);font-weight:700}
+body.admin-app .aa-leiste a{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;color:#c9d5ee;text-decoration:none;font-weight:600;font-size:15px;
+  border:1px solid transparent;transition:background .15s,border-color .15s,color .15s}
+.aa-leiste a svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+body.admin-app .aa-leiste a:hover{background:rgba(47,123,255,.1);color:#fff}
+body.admin-app .aa-leiste a.an{background:linear-gradient(90deg,rgba(47,123,255,.28),rgba(47,123,255,.08));border-color:rgba(91,155,255,.55);color:#fff;box-shadow:0 0 22px rgba(47,123,255,.18) inset}
+.aa-leiste a i{margin-left:auto;font-style:normal;font-size:12px;font-weight:800;min-width:22px;height:22px;display:grid;place-items:center;border-radius:11px;background:var(--aa-blau);color:#fff;padding:0 6px}
+.aa-leiste .aa-unten{margin-top:auto;border-top:1px solid var(--aa-rand);padding-top:12px}
+body.admin-app main{max-width:1240px;width:100%;box-sizing:border-box;margin:0 auto;padding:30px 34px 10px}
+body.admin-app footer{grid-column:2;max-width:1240px;margin:0 auto;padding:10px 34px 24px;width:100%;box-sizing:border-box;border:0}
+body.admin-app footer a{color:#5f6f90}
+body.admin-app .karte{background:linear-gradient(180deg,var(--aa-karte2),var(--aa-karte));border:1px solid var(--aa-rand);border-radius:18px;
+  box-shadow:0 18px 40px rgba(0,0,0,.28)}
+body.admin-app h1,body.admin-app h2{color:#fff;letter-spacing:.2px}
+body.admin-app h2{font-weight:800}
+body.admin-app .leise,body.admin-app .hinweis{color:var(--aa-leise)}
+body.admin-app .hinweis{background:rgba(47,123,255,.06);border:1px solid var(--aa-rand);border-radius:12px;padding:10px 14px}
+body.admin-app #benachrichtigung{display:none}
+body.admin-app a{color:var(--aa-blau2)}
+body.admin-app .zahl{font-family:Mont;font-weight:800;color:#fff}
+body.admin-app .raster>.karte{position:relative;overflow:hidden}
+body.admin-app .raster>.karte::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--aa-blau),#8fc0ff)}
+body.admin-app input:not([type=checkbox]):not([type=radio]):not([type=file]),body.admin-app textarea,body.admin-app select{
+  background:#0b1222;border:1px solid rgba(110,150,255,.22);color:var(--aa-text);border-radius:12px;font-family:inherit}
+body.admin-app input:focus,body.admin-app textarea:focus,body.admin-app select:focus{outline:none;border-color:var(--aa-blau2);box-shadow:0 0 0 3px rgba(47,123,255,.22)}
+body.admin-app .btn{background:linear-gradient(180deg,#3d86ff,#1d5fe6);border:1px solid #6ea2ff;color:#fff;border-radius:12px;font-family:inherit;font-weight:700;
+  box-shadow:0 8px 22px rgba(29,95,230,.35)}
+body.admin-app .btn:hover{filter:brightness(1.08)}
+body.admin-app .btn.grau{background:#18213a;border-color:rgba(110,150,255,.25);color:#dce6fb;box-shadow:none}
+body.admin-app .btn.gruen{background:linear-gradient(180deg,#2fd35a,#1f9c43);border-color:#5fe38a;box-shadow:0 8px 22px rgba(47,211,90,.25)}
+body.admin-app table th{color:var(--aa-leise);font-weight:700;border-color:var(--aa-rand)}
+body.admin-app table td{border-color:rgba(110,150,255,.1)}
+body.admin-app table tr:hover td{background:rgba(47,123,255,.05)}
+body.admin-app .meldung{background:rgba(47,123,255,.14);border:1px solid rgba(91,155,255,.5);border-radius:12px;color:#fff}
+body.admin-app code{font-family:MonoX,ui-monospace,monospace;background:rgba(47,123,255,.12);border-radius:6px}
+body.admin-app label.datei,body.admin-app .drop{border-color:rgba(110,150,255,.3);border-radius:14px;background:rgba(11,18,34,.6)}
+.aa-login{min-height:100vh;display:grid;place-items:center}
+.aa-login-logo{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:22px}
+.aa-login-logo img{width:72px;height:72px;filter:drop-shadow(0 0 26px rgba(80,150,255,.65))}
+.aa-login-logo b{font-family:Orb;font-weight:900;font-size:22px;background:linear-gradient(90deg,#fff,#9fc4ff);-webkit-background-clip:text;color:transparent}
+</style></head><body{% if admin_app %} class="admin-app{{ '' if session.admin else ' ohne-leiste' }}"{% endif %}>
 {% if im_programm and not session.admin %}<div class="programm-leiste pywebview-drag-region"><a class="btn klein" href="/" id="zurueck-programm">← Zurück zum Programm</a>
 <span class="leise">{{ programm_name }}</span></div>
 <script>document.addEventListener('keydown',function(e){if(e.key==='Escape')location.href='/';});
 document.getElementById('zurueck-programm').addEventListener('mousedown',function(e){e.stopPropagation();});</script>{% endif %}
+{% if admin_app and session.admin %}{% set ep = request.endpoint or '' %}
+<aside class="aa-leiste">
+<div class="aa-marke"><img src="/favicon.svg" alt=""><div><b>OneClick</b><span>ADMIN</span></div></div>
+<a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht','auftrag_suche') }}><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Aufträge</a>
+<a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg>Tickets{% if tickets_offen %}<i>{{ tickets_offen }}</i>{% endif %}</a>
+<a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archiv</a>
+{% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<i>{{ zu_sortieren }}</i></a>{% endif %}
+<a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>Eigenes File</a>
+<a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</a>
+<div class="aa-unten"><a href="{{ url_for('logout') }}"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</a></div>
+</aside>{% endif %}
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
@@ -3070,6 +3158,7 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% endblock %}""",
 
 "login.html": """{% extends "basis.html" %}{% block inhalt %}
+{% if admin_app %}<div class="aa-login-logo" style="margin-top:70px"><img src="/favicon.svg" alt=""><b>OneClick Admin</b></div>{% endif %}
 <div class="karte" style="max-width:380px;margin:40px auto">
 <h1>Admin-Anmeldung</h1>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}">
@@ -3079,6 +3168,7 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% endblock %}""",
 
 "login_code.html": """{% extends "basis.html" %}{% block inhalt %}
+{% if admin_app %}<div class="aa-login-logo" style="margin-top:70px"><img src="/favicon.svg" alt=""><b>OneClick Admin</b></div>{% endif %}
 <div class="karte" style="max-width:380px;margin:40px auto">
 <h1>Bestätigungscode</h1>
 <p class="leise">Öffne deine Authenticator-App und gib den 6-stelligen Code für OneClick Solutions ein.</p>
@@ -3247,7 +3337,8 @@ function ton(){try{const c=new AudioContext(),o=c.createOscillator(),g=c.createG
 o.frequency.value=880;g.gain.value=.2;o.start();setTimeout(()=>{o.frequency.value=1175},150);setTimeout(()=>o.stop(),350)}catch(e){}}
 setInterval(()=>fetch('{{ url_for('admin_wartend') }}').then(r=>r.json()).then(j=>{
   const neu=j.ids.filter(i=>!bekannt.has(i));
-  if(neu.length){ton();if(window.Notification&&Notification.permission==='granted')new Notification('Neuer Tuning-Auftrag',{body:neu.length+' Auftrag/Aufträge warten auf Freigabe'});
+  if(neu.length){ton();if(window.pywebview&&pywebview.api&&pywebview.api.melden)pywebview.api.melden('Neuer Tuning-Auftrag',neu.length+' Auftrag/Aufträge warten auf Freigabe');
+    else if(window.Notification&&Notification.permission==='granted')new Notification('Neuer Tuning-Auftrag',{body:neu.length+' Auftrag/Aufträge warten auf Freigabe'});
     setTimeout(()=>location.reload(),600)}
   else if(j.ids.length!==bekannt.size)location.reload();
 }).catch(()=>{}),8000);
@@ -3638,7 +3729,8 @@ pruefen(); setInterval(pruefen,8000);})();
       });
       v.dataset.anzahl=t.nachrichten.length;
       var st=document.querySelector('.status'); if(st&&t.status==='OFFEN'){st.textContent='Offen';st.className='status s-WARTET';}
-      if(Notification&&Notification.permission==='granted'&&document.visibilityState!=='visible') new Notification('Neue Nachricht im Ticket #'+t.kurz);
+      if(window.pywebview&&pywebview.api&&pywebview.api.melden) pywebview.api.melden('Neue Nachricht im Ticket #'+t.kurz,'Der Kunde hat geantwortet.');
+      else if(window.Notification&&Notification.permission==='granted'&&document.visibilityState!=='visible') new Notification('Neue Nachricht im Ticket #'+t.kurz);
     }).catch(function(){});
   }
   setInterval(holen,5000);
@@ -3919,7 +4011,7 @@ app.jinja_loader = DictLoader(TEMPLATES)
 def globale():
     return {"optionen": option_namen(), "status_text": STATUS_TEXT, "art_text": ART_TEXT, "original": oneclick.ORIGINAL,
             "firma": lade_config().get("firmenname") or PROGRAMM_NAME,
-            "im_programm": ist_programm(), "programm_name": PROGRAMM_NAME, "ecu_text": ecu_text,
+            "im_programm": ist_programm(), "programm_name": PROGRAMM_NAME, "ecu_text": ecu_text, "admin_app": ist_admin_app(),
             "zu_sortieren": eingang_anzahl() if session.get("admin") else 0,
             "tickets_offen": sum(1 for t in alle_tickets() if t["status"] == "OFFEN") if session.get("admin") else 0}
 
