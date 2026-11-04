@@ -190,7 +190,17 @@ local function startDriving(seat)
 	end
 	local hp = seat:GetAttribute("Hp") or 150
 	local stats = Config.DriveStats(hp)
+	local wheelMotors = {}
+	for _, m in ipairs(chassis:GetChildren()) do
+		if m:IsA("Motor6D") and m.Name:sub(1, 3) == "Rad" then
+			table.insert(wheelMotors, m)
+		end
+	end
 	active = {
+		WheelMotors = wheelMotors,
+		SteeringWheel = chassis:FindFirstChild("LenkradMotor"),
+		Spin = 0,
+		SteerVis = 0,
 		Seat = seat,
 		Chassis = chassis,
 		LV = lv,
@@ -290,6 +300,18 @@ RunService.Heartbeat:Connect(function(dt)
 	local maxYaw = 2.1 - 1.0 * math.clamp(math.abs(speed) / a.Top, 0, 1)
 	local yaw = -steer * maxYaw * grip * (speed >= 0 and 1 or -1)
 	a.AV.AngularVelocity = Vector3.new(0, yaw, 0)
+
+	-- Räder drehen und Vorderräder lenken (Radius 1.2 Studs)
+	a.Spin = (a.Spin - actual / 1.2 * dt) % (math.pi * 2)
+	a.SteerVis += (steer - a.SteerVis) * math.min(1, dt * 10)
+	local steerAngle = -a.SteerVis * 0.55
+	for _, motor in ipairs(a.WheelMotors) do
+		local wheelYaw = motor:GetAttribute("Front") and steerAngle or 0
+		motor.Transform = CFrame.Angles(0, wheelYaw, 0) * CFrame.Angles(a.Spin, 0, 0)
+	end
+	if a.SteeringWheel then
+		a.SteeringWheel.Transform = CFrame.Angles(a.SteerVis * 2.2, 0, 0)
+	end
 
 	-- Anzeige
 	local kmh = math.floor(math.abs(actual) * Config.KmhFactor + 0.5)

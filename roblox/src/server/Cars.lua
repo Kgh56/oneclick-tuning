@@ -130,11 +130,26 @@ local function buildVisual(def, m, convertible)
 		})
 	end
 
-	-- Räder mit Felgen
-	for _, w in ipairs({ { -3.05, -3.8 }, { 3.05, -3.8 }, { -3.05, 3.8 }, { 3.05, 3.8 } }) do
+	-- Räder mit Felgen (VL, VR, HL, HR – vorne ist -Z)
+	local wheels = {}
+	for i, w in ipairs({ { -3.05, -3.8 }, { 3.05, -3.8 }, { -3.05, 3.8 }, { 3.05, 3.8 } }) do
 		local cf = CFrame.new(w[1], -0.5, w[2])
-		part({ Name = "Reifen", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.0, 2.4, 2.4), CFrame = cf, Color = TIRE, CanCollide = false, Parent = m })
-		part({
+		local wheel = { Index = i, CFrame = cf, Front = w[2] < 0, Parts = {} }
+		wheels[i] = wheel
+		table.insert(wheel.Parts, part({ Name = "Reifen", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.0, 2.4, 2.4), CFrame = cf, Color = TIRE, Material = Enum.Material.Rubber, CanCollide = false, Parent = m }))
+		-- Speichen, damit man das Drehen sieht
+		for k = 0, 2 do
+			table.insert(wheel.Parts, part({
+				Name = "Speiche",
+				Size = Vector3.new(1.08, 1.5, 0.22),
+				CFrame = cf * CFrame.Angles(k * math.pi / 3, 0, 0),
+				Color = Color3.fromRGB(60, 60, 66),
+				Material = Enum.Material.Metal,
+				CanCollide = false,
+				Parent = m,
+			}))
+		end
+		table.insert(wheel.Parts, part({
 			Name = "Felge",
 			Shape = Enum.PartType.Cylinder,
 			Size = Vector3.new(1.06, 1.6, 1.6),
@@ -144,8 +159,8 @@ local function buildVisual(def, m, convertible)
 			Reflectance = 0.25,
 			CanCollide = false,
 			Parent = m,
-		})
-		part({ Name = "Nabe", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.1, 0.5, 0.5), CFrame = cf, Color = Color3.fromRGB(70, 70, 75), CanCollide = false, Parent = m })
+		}))
+		table.insert(wheel.Parts, part({ Name = "Nabe", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.12, 0.5, 0.5), CFrame = cf, Color = Color3.fromRGB(70, 70, 75), CanCollide = false, Parent = m }))
 	end
 
 	-- Auspuff
@@ -170,7 +185,7 @@ local function buildVisual(def, m, convertible)
 		end
 	end
 
-	return lights
+	return lights, wheels
 end
 
 -- Verankertes Auto für die Werkstatt. Pivot = Karosseriemitte.
@@ -205,7 +220,7 @@ end
 function Cars.MakeDrivable(def)
 	local m = Instance.new("Model")
 	m.Name = def.Name
-	local lights = buildVisual(def, m, true)
+	local lights, wheels = buildVisual(def, m, true)
 
 	local slippery = PhysicalProperties.new(0.7, 0, 0, 100, 1)
 	local chassis = part({
@@ -248,9 +263,57 @@ function Cars.MakeDrivable(def)
 		Util.light(hl, "SpotLight", { Face = Enum.NormalId.Front, Range = 60, Brightness = 2, Angle = 70, Color = Color3.fromRGB(255, 245, 225) })
 	end
 
-	-- Alles ans Fahrgestell schweißen
+	-- Räder: jedes Rad hängt an einer unsichtbaren Nabe, die über ein Motor6D
+	-- am Fahrgestell sitzt. Der Fahrer-Client dreht und lenkt sie (DriveClient).
+	local skip = {}
+	for _, wheel in ipairs(wheels) do
+		local hub = part({
+			Name = "Radnabe",
+			Size = Vector3.new(0.4, 0.4, 0.4),
+			CFrame = wheel.CFrame,
+			Transparency = 1,
+			CanCollide = false,
+			Parent = m,
+		})
+		for _, wp in ipairs(wheel.Parts) do
+			wp.Anchored = false
+			wp.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = hub
+			w.Part1 = wp
+			w.Parent = wp
+			skip[wp] = true
+		end
+		hub.Anchored = false
+		hub.Massless = true
+		local motor = Instance.new("Motor6D")
+		motor.Name = (wheel.Front and "RadVorne" or "RadHinten") .. wheel.Index
+		motor.Part0 = chassis
+		motor.Part1 = hub
+		motor.C0 = chassis.CFrame:Inverse() * hub.CFrame
+		motor.C1 = CFrame.new()
+		motor:SetAttribute("Front", wheel.Front)
+		motor.Parent = chassis
+		skip[hub] = true
+	end
+	-- Lenkrad dreht sich mit
+	local wheelPart = m:FindFirstChild("Lenkrad")
+	if wheelPart then
+		wheelPart.Anchored = false
+		wheelPart.Massless = true
+		local motor = Instance.new("Motor6D")
+		motor.Name = "LenkradMotor"
+		motor.Part0 = chassis
+		motor.Part1 = wheelPart
+		motor.C0 = chassis.CFrame:Inverse() * wheelPart.CFrame
+		motor.C1 = CFrame.new()
+		motor.Parent = chassis
+		skip[wheelPart] = true
+	end
+
+	-- Alles andere ans Fahrgestell schweißen
 	for _, d in ipairs(m:GetDescendants()) do
-		if d:IsA("BasePart") and d ~= chassis then
+		if d:IsA("BasePart") and d ~= chassis and not skip[d] then
 			d.Anchored = false
 			d.Massless = true
 			local w = Instance.new("WeldConstraint")

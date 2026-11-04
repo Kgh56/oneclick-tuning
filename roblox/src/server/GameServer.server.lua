@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
@@ -55,6 +56,8 @@ local PLOT_SPACING = World.PLOT_SPACING
 local BAY_X = { -27, -9, 9, 27 }
 local BAY_Z = -12
 local DYNO_POS = Vector3.new(26, 0, 18)
+local LIFT_TOP = 1.0 -- Oberkante der Fahrschienen (unten)
+local LIFT_UP = 5.5 -- so weit fährt die Bühne hoch
 
 ------------------------------------------------------------------------
 -- Spielerdaten
@@ -256,10 +259,14 @@ local function buildPlot(player, st, index)
 	local steel = Color3.fromRGB(70, 72, 78)
 	local accent = Color3.fromRGB(255, 140, 0)
 
-	-- Boden: dunkles Epoxid mit leichtem Glanz
-	p({ Name = "Hallenboden", Size = Vector3.new(76, 1, 64), CFrame = at(0, -0.3, 0), Color = Color3.fromRGB(62, 64, 70), Material = Enum.Material.SmoothPlastic, Reflectance = 0.06 })
-	p({ Name = "Einfahrt", Size = Vector3.new(76, 1, 8), CFrame = at(0, -0.45, 36), Color = Color3.fromRGB(75, 76, 80), Material = Enum.Material.Concrete })
-	p({ Name = "Gehweglinie", Size = Vector3.new(76, 0.05, 0.6), CFrame = at(0, 0.23, 4), Color = Color3.fromRGB(255, 200, 0), CanCollide = false })
+	-- Fundament: Gelände entfernen, Betonplatte rund um die Halle
+	World.Slab(at(0, 0, 3), 84, 76, 0.1, Color3.fromRGB(150, 150, 154), Enum.Material.Concrete, "Fundament", model)
+	-- Hallenboden: dunkle Fliesen mit leichtem Glanz
+	p({ Name = "Hallenboden", Size = Vector3.new(76, 0.2, 64), CFrame = at(0, 0.1, 0), Color = Color3.fromRGB(78, 80, 88), Material = Enum.Material.CeramicTiles, Reflectance = 0.05 })
+	p({ Name = "Einfahrt", Size = Vector3.new(76, 0.1, 7), CFrame = at(0, 0.15, 36.5), Color = Color3.fromRGB(70, 71, 76), Material = Enum.Material.Asphalt })
+	p({ Name = "Gehweglinie", Size = Vector3.new(76, 0.04, 0.6), CFrame = at(0, 0.22, 4), Color = Color3.fromRGB(255, 200, 0), CanCollide = false })
+	-- Bodenablauf-Rinne
+	p({ Name = "Rinne", Size = Vector3.new(60, 0.04, 0.8), CFrame = at(0, 0.22, 2), Color = Color3.fromRGB(40, 40, 44), Material = Enum.Material.DiamondPlate, CanCollide = false })
 
 	-- Wände (außen Ziegel, innen hell) mit dunklem Sockel und LED-Band
 	p({ Name = "Rueckwand", Size = Vector3.new(78, 20, 1.2), CFrame = at(0, 10, -32.6), Color = wall, Material = Enum.Material.SmoothPlastic })
@@ -299,17 +306,73 @@ local function buildPlot(player, st, index)
 		p({ Name = "Seil", Size = Vector3.new(0.1, 0.8, 0.1), CFrame = at(bx, 19.1, BAY_Z), Color = steel, CanCollide = false })
 	end
 
-	-- Hebebühnen mit Säulen
+	-- 4-Säulen-Hebebühnen
+	local liftRed = Color3.fromRGB(200, 30, 35)
+	local metal = Color3.fromRGB(105, 108, 116)
 	for i, bx in ipairs(BAY_X) do
-		p({ Name = "Hebebuehne" .. i, Size = Vector3.new(14, 0.8, 22), CFrame = at(bx, 0.6, BAY_Z), Color = Color3.fromRGB(45, 45, 50), Material = Enum.Material.DiamondPlate })
-		for _, side in ipairs({ -1, 1 }) do
-			p({ Name = "Linie", Size = Vector3.new(0.4, 0.05, 24), CFrame = at(bx + side * 7.6, 0.23, BAY_Z), Color = Color3.fromRGB(255, 200, 0), CanCollide = false })
-			p({ Name = "Saeule", Size = Vector3.new(1.2, 11, 1.2), CFrame = at(bx + side * 7.9, 5.7, BAY_Z - 4), Color = Color3.fromRGB(200, 30, 35), Material = Enum.Material.Metal })
-			p({ Name = "SaeulenFuss", Size = Vector3.new(2, 0.4, 2), CFrame = at(bx + side * 7.9, 0.4, BAY_Z - 4), Color = dark, Material = Enum.Material.Metal })
-		end
-		p({ Name = "Querholm", Size = Vector3.new(17, 0.8, 0.8), CFrame = at(bx, 11.6, BAY_Z - 4), Color = Color3.fromRGB(200, 30, 35), Material = Enum.Material.Metal })
-		local bay = { Index = i, X = bx, CF = at(bx, 1.0 + CAR_HEIGHT, BAY_Z), Car = nil, Lock = nil }
+		local bay = { Index = i, X = bx, CF = at(bx, LIFT_TOP + CAR_HEIGHT, BAY_Z), Car = nil, Lock = nil, LiftH = 0, LiftParts = {} }
 		plot.Bays[i] = bay
+		local function moving(props)
+			local mp = p(props)
+			table.insert(bay.LiftParts, { Part = mp, Base = mp.CFrame })
+			return mp
+		end
+		-- Fahrschienen (bewegen sich)
+		for _, side in ipairs({ -1, 1 }) do
+			moving({ Name = "Fahrschiene", Size = Vector3.new(2.8, 0.6, 20), CFrame = at(bx + side * 3.05, LIFT_TOP - 0.3, BAY_Z), Color = metal, Material = Enum.Material.DiamondPlate })
+			moving({ Name = "Schienenkante", Size = Vector3.new(0.25, 0.35, 20), CFrame = at(bx + side * 4.55, LIFT_TOP + 0.1, BAY_Z), Color = Color3.fromRGB(255, 200, 0), Material = Enum.Material.SmoothPlastic })
+			-- Auffahrrampe (fest)
+			local ramp = Util.wedge({
+				Name = "Rampe",
+				Size = Vector3.new(2.8, LIFT_TOP - 0.2, 2.6),
+				CFrame = at(bx + side * 3.05, 0.2 + (LIFT_TOP - 0.2) / 2, BAY_Z + 11.3) * CFrame.Angles(0, math.pi, 0),
+				Color = metal,
+				Material = Enum.Material.DiamondPlate,
+				Parent = model,
+			})
+			ramp.Name = "Rampe"
+		end
+		-- Querträger vorne/hinten (bewegen sich)
+		for _, dz in ipairs({ -10.4, 10.4 }) do
+			moving({ Name = "Quertraeger", Size = Vector3.new(10.6, 0.7, 1.2), CFrame = at(bx, LIFT_TOP - 0.45, BAY_Z + dz), Color = liftRed, Material = Enum.Material.Metal })
+		end
+		-- Säulen und obere Träger (fest)
+		for _, dx in ipairs({ -5.6, 5.6 }) do
+			for _, dz in ipairs({ -10.4, 10.4 }) do
+				p({ Name = "Saeule", Size = Vector3.new(1.1, 10, 1.1), CFrame = at(bx + dx, 5.2, BAY_Z + dz), Color = liftRed, Material = Enum.Material.Metal })
+				p({ Name = "SaeulenFuss", Size = Vector3.new(1.8, 0.3, 1.8), CFrame = at(bx + dx, 0.35, BAY_Z + dz), Color = Color3.fromRGB(35, 35, 38), Material = Enum.Material.Metal })
+			end
+		end
+		for _, dz in ipairs({ -10.4, 10.4 }) do
+			p({ Name = "Obertraeger", Size = Vector3.new(12.3, 0.8, 1.1), CFrame = at(bx, 10.6, BAY_Z + dz), Color = liftRed, Material = Enum.Material.Metal })
+		end
+		-- Warnleuchte
+		local beacon = p({ Name = "Warnleuchte", Shape = Enum.PartType.Ball, Size = Vector3.new(0.9, 0.9, 0.9), CFrame = at(bx + 5.6, 11.4, BAY_Z + 10.4), Color = Color3.fromRGB(255, 150, 0), Material = Enum.Material.SmoothPlastic })
+		bay.Beacon = beacon
+		bay.BeaconLight = Util.light(beacon, "PointLight", { Range = 16, Brightness = 0, Color = Color3.fromRGB(255, 150, 0), Enabled = false })
+		-- Warnstreifen am Boden rund um die Bühne
+		for k = 0, 9 do
+			for _, side in ipairs({ -1, 1 }) do
+				p({
+					Name = "Warnstreifen",
+					Size = Vector3.new(0.6, 0.04, 2.2),
+					CFrame = at(bx + side * 6.6, 0.22, BAY_Z - 10 + k * 2.2),
+					Color = (k % 2 == 0) and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(25, 25, 25),
+					CanCollide = false,
+				})
+			end
+		end
+		-- Diagnose-Wagen mit Laptop zwischen den Bühnen
+		local cartPos = at(bx + 9, 0, BAY_Z + 7)
+		p({ Name = "Diagnosewagen", Size = Vector3.new(1.8, 3, 1.4), CFrame = cartPos * CFrame.new(0, 1.7, 0), Color = Color3.fromRGB(30, 32, 38), Material = Enum.Material.Metal })
+		local screen = p({ Name = "Diagnosebildschirm", Size = Vector3.new(1.8, 1.2, 0.1), CFrame = cartPos * CFrame.new(0, 3.9, 0) * CFrame.Angles(math.rad(-15), 0, 0), Color = Color3.fromRGB(15, 25, 35), Material = Enum.Material.Neon, Transparency = 0.2 })
+		bay.CartScreen = textGui(screen, Enum.NormalId.Back, "OBD", Color3.fromRGB(80, 200, 255), Color3.fromRGB(10, 20, 30))
+		local att = Instance.new("Attachment")
+		att.Name = "Kabel"
+		att.Position = Vector3.new(0, -0.6, 0)
+		att.Parent = screen
+		bay.CartAttachment = att
+
 		if not isBayUnlocked(st, i) then
 			buildLock(plot, bay)
 		end
@@ -375,7 +438,7 @@ local function buildPlot(player, st, index)
 
 	-- Parkplatz für den Firmenwagen neben der Halle (in der Lücke zum Nachbarn)
 	local spotX = index <= Config.MaxPlots / 2 and -50 or 50
-	p({ Name = "Parkplatz", Size = Vector3.new(14, 1, 30), CFrame = at(spotX, -0.45, 18), Color = Color3.fromRGB(70, 72, 78), Material = Enum.Material.Asphalt })
+	World.Slab(at(spotX, 0, 21.5), 15, 37, 0.05, Color3.fromRGB(70, 72, 78), Enum.Material.Asphalt, "Parkplatz", model)
 	for _, dx in ipairs({ -5, 5 }) do
 		p({ Name = "Parklinie", Size = Vector3.new(0.4, 0.05, 16), CFrame = at(spotX + dx, 0.08, 18), Color = Color3.new(1, 1, 1), CanCollide = false })
 	end
@@ -387,6 +450,155 @@ local function buildPlot(player, st, index)
 	model.Parent = World.Folder
 	buildDyno(plot, hasUpgrade(st, "Dyno"))
 	return plot
+end
+
+------------------------------------------------------------------------
+-- Hebebühnen-Animation und Effekte
+------------------------------------------------------------------------
+local ORANGE = Color3.fromRGB(255, 140, 0)
+
+local function setLift(bay, h)
+	bay.LiftH = h
+	for _, lp in ipairs(bay.LiftParts) do
+		if lp.Part.Parent then
+			lp.Part.CFrame = lp.Base + Vector3.new(0, h, 0)
+		end
+	end
+	local c = bay.Car
+	if c and c.OnLift and c.Model.Parent then
+		c.Model:PivotTo(bay.CF + Vector3.new(0, h, 0))
+	end
+end
+
+-- Fährt die Bühne weich auf die Zielhöhe (blockiert, bis fertig)
+local function animateLift(bay, target, duration)
+	bay.LiftToken = (bay.LiftToken or 0) + 1
+	local token = bay.LiftToken
+	local from = bay.LiftH or 0
+	if math.abs(from - target) < 0.01 then
+		return
+	end
+	if bay.BeaconLight then
+		bay.BeaconLight.Enabled = true
+		bay.Beacon.Material = Enum.Material.Neon
+	end
+	local t0 = os.clock()
+	while bay.LiftToken == token do
+		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
+		local e = a * a * (3 - 2 * a)
+		setLift(bay, from + (target - from) * e)
+		if bay.BeaconLight then
+			bay.BeaconLight.Brightness = (math.floor(os.clock() * 5) % 2 == 0) and 4 or 0.3
+		end
+		if a >= 1 then
+			break
+		end
+		RunService.Heartbeat:Wait()
+	end
+	if bay.LiftToken == token and bay.BeaconLight then
+		bay.BeaconLight.Enabled = false
+		bay.Beacon.Material = Enum.Material.SmoothPlastic
+	end
+end
+
+-- Funkenregen (z. B. wenn die Software fertig ist)
+local function sparkle(target)
+	local pe = Instance.new("ParticleEmitter")
+	pe.Rate = 0
+	pe.Lifetime = NumberRange.new(0.6, 1.3)
+	pe.Speed = NumberRange.new(8, 18)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.LightEmission = 1
+	pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0) })
+	pe.Color = ColorSequence.new(Color3.fromRGB(255, 220, 80), Color3.fromRGB(80, 255, 140))
+	pe.Acceleration = Vector3.new(0, -35, 0)
+	pe.Parent = target
+	pe:Emit(70)
+	task.delay(2.5, function()
+		pe:Destroy()
+	end)
+end
+
+-- Flammen und Licht aus dem Auspuff
+local function backfire(carModel, duration)
+	for _, d in ipairs(carModel:GetDescendants()) do
+		if d.Name == "Auspuff" and d:IsA("BasePart") then
+			local f = Instance.new("Fire")
+			f.Size = 3
+			f.Heat = 4
+			f.Color = Color3.fromRGB(255, 110, 20)
+			f.SecondaryColor = Color3.fromRGB(255, 230, 90)
+			f.Parent = d
+			local l = Util.light(d, "PointLight", { Range = 12, Brightness = 3, Color = ORANGE })
+			task.delay(duration, function()
+				f.Enabled = false
+				l:Destroy()
+				task.delay(1.5, function()
+					f:Destroy()
+				end)
+			end)
+		end
+	end
+end
+
+-- Abgasrauch
+local function exhaustSmoke(carModel, duration)
+	for _, d in ipairs(carModel:GetDescendants()) do
+		if d.Name == "Auspuff" and d:IsA("BasePart") then
+			local sm = Instance.new("Smoke")
+			sm.Color = Color3.fromRGB(150, 150, 155)
+			sm.Opacity = 0.12
+			sm.RiseVelocity = 3
+			sm.Size = 2
+			sm.Parent = d
+			task.delay(duration, function()
+				sm.Enabled = false
+				task.delay(3, function()
+					sm:Destroy()
+				end)
+			end)
+		end
+	end
+end
+
+-- Leuchtendes Diagnosekabel vom Wagen zum Auto
+local function connectCable(bay, carInfo)
+	local root = carInfo.Model.PrimaryPart
+	if not (root and bay.CartAttachment) then
+		return
+	end
+	local a1 = Instance.new("Attachment")
+	a1.Name = "OBD"
+	a1.Position = Vector3.new(3.1, 0.2, -1.6)
+	a1.Parent = root
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = bay.CartAttachment
+	beam.Attachment1 = a1
+	beam.Width0 = 0.18
+	beam.Width1 = 0.18
+	beam.CurveSize0 = -3
+	beam.CurveSize1 = 2
+	beam.Segments = 16
+	beam.FaceCamera = true
+	beam.LightEmission = 1
+	beam.Color = ColorSequence.new(Color3.fromRGB(80, 200, 255))
+	beam.Transparency = NumberSequence.new(0.05)
+	beam.Parent = root
+	local glow = Util.light(root, "PointLight", { Range = 10, Brightness = 1.5, Color = Color3.fromRGB(80, 200, 255) })
+	carInfo.Cable = { beam, a1, glow }
+end
+
+local function removeCable(carInfo)
+	for _, inst in ipairs(carInfo.Cable or {}) do
+		inst:Destroy()
+	end
+	carInfo.Cable = nil
+end
+
+local function setCartText(bay, text)
+	if bay.CartScreen and bay.CartScreen.Parent then
+		bay.CartScreen.Text = text
+	end
 end
 
 ------------------------------------------------------------------------
@@ -442,6 +654,7 @@ local function spawnCustomer(player, st, bay)
 			startJob(player, st, bay, carInfo)
 		end)
 		car.Kollision.CanCollide = true
+		carInfo.OnLift = true
 		carInfo.Ready = true
 	end)
 end
@@ -452,11 +665,14 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 	if carInfo.Label then
 		carInfo.Label.Text = ("✅ Getunt!\n%d → %d PS"):format(oldHp, newHp)
 	end
-	task.wait(1.2)
+	task.wait(1.5)
 	if not car.Parent then
 		bay.Car = nil
 		return
 	end
+	animateLift(bay, 0, 2.2)
+	carInfo.OnLift = false
+	setCartText(bay, "OBD")
 
 	local function floorPos(x, z)
 		return (plot.Origin * CFrame.new(x, 0.2 + CAR_HEIGHT, z)).Position
@@ -471,17 +687,44 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		local dynoCF = lookCF((plot.Origin * CFrame.new(DYNO_POS)).Position + Vector3.new(0, 0.8 + CAR_HEIGHT, 0), -Vector3.zAxis)
 		moveModel(car, front, dynoCF, 2)
 		local screen = plot.DynoScreen
+		local spinning = {}
+		for _, d in ipairs(car:GetDescendants()) do
+			if d:IsA("BasePart") and (d.Name == "Reifen" or d.Name == "Felge" or d.Name == "Nabe" or d.Name == "Speiche") then
+				table.insert(spinning, d)
+			end
+		end
+		if plot.Dyno then
+			for _, d in ipairs(plot.Dyno:GetChildren()) do
+				if d.Name == "Rolle" then
+					table.insert(spinning, d)
+				end
+			end
+		end
+		exhaustSmoke(car, 3)
 		local t0 = os.clock()
-		while car.Parent and os.clock() - t0 < 2.5 do
-			local a = math.clamp((os.clock() - t0) / 2.2, 0, 1)
+		local last = os.clock()
+		local backfired = false
+		while car.Parent and os.clock() - t0 < 3.2 do
+			local now = os.clock()
+			local dt = now - last
+			last = now
+			local a = math.clamp((now - t0) / 2.6, 0, 1)
 			local hp = math.floor(oldHp + (newHp - oldHp) * a)
+			local spin = (6 + 30 * a) * dt
+			for _, sp in ipairs(spinning) do
+				sp.CFrame = sp.CFrame * CFrame.Angles(-spin, 0, 0)
+			end
 			if screen and screen.Parent then
 				screen.Text = ("PRÜFSTAND\n%d PS"):format(hp)
 			end
 			if carInfo.Label then
 				carInfo.Label.Text = ("🔥 Prüfstand\n%d PS"):format(hp)
 			end
-			task.wait(0.05)
+			if a >= 1 and not backfired then
+				backfired = true
+				backfire(car, 0.8)
+			end
+			RunService.Heartbeat:Wait()
 		end
 		if screen and screen.Parent then
 			screen.Text = ("PRÜFSTAND\n%d PS ✔"):format(newHp)
@@ -513,6 +756,12 @@ local function completeCar(player, st, bay, score, byAzubi)
 	if block then
 		block.CanCollide = false
 	end
+	removeCable(carInfo)
+	setCartText(bay, "✔ " .. Config.Stages[carInfo.Stage].Name)
+	if carInfo.Model.PrimaryPart then
+		sparkle(carInfo.Model.PrimaryPart)
+	end
+	backfire(carInfo.Model, 1.2)
 	if carInfo.Prompt then
 		carInfo.Prompt:Destroy()
 		carInfo.Prompt = nil
@@ -593,6 +842,10 @@ startJob = function(player, st, bay, carInfo)
 	jobCounter += 1
 	st.Job = { Id = jobCounter, Bay = bay, Car = carInfo, Zones = zones, Width = width, Started = os.clock() }
 	carInfo.Busy = true
+	-- Bühne hoch, Diagnosekabel anschließen
+	connectCable(bay, carInfo)
+	setCartText(bay, "ECU lesen …")
+	task.spawn(animateLift, bay, LIFT_UP, 2.5)
 
 	local def = carInfo.Def
 	OpenTuning:FireClient(player, {
@@ -619,6 +872,8 @@ FinishTuning.OnServerEvent:Connect(function(player, jobId, positions)
 	st.Job = nil
 	if os.clock() - job.Started < 1.5 or job.Bay.Car ~= job.Car then
 		job.Car.Busy = false
+		removeCable(job.Car)
+		task.spawn(animateLift, job.Bay, 0, 2)
 		return
 	end
 	local total = 0
@@ -636,8 +891,12 @@ end)
 CancelTuning.OnServerEvent:Connect(function(player, jobId)
 	local st = States[player]
 	if st and st.Job and st.Job.Id == jobId then
-		st.Job.Car.Busy = false
+		local job = st.Job
+		job.Car.Busy = false
 		st.Job = nil
+		removeCable(job.Car)
+		setCartText(job.Bay, "OBD")
+		task.spawn(animateLift, job.Bay, 0, 2)
 	end
 end)
 

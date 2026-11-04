@@ -100,7 +100,7 @@ end
 local function buildTerrain()
 	local terrain = workspace.Terrain
 	pcall(function()
-		terrain.Decoration = true -- Grashalme
+		terrain.Decoration = false -- keine Grashalme, die durch Böden wachsen
 	end)
 	-- Grundfläche, Oberkante y = 0
 	terrain:FillBlock(CFrame.new(0, -6, 0), Vector3.new(2800, 12, 2800), Enum.Material.Grass)
@@ -127,6 +127,23 @@ local function buildTerrain()
 end
 
 ------------------------------------------------------------------------
+-- Befestigte Flächen
+------------------------------------------------------------------------
+-- Entfernt das Gelände unter einer Fläche und setzt eine 4 Studs dicke Platte
+-- ein. cf liegt auf Bodenhöhe (y = 0), top ist die Oberkante der Platte.
+function World.Slab(cf, sizeX, sizeZ, top, color, material, name, parent)
+	workspace.Terrain:FillBlock(cf * CFrame.new(0, 2, 0), Vector3.new(sizeX, 12, sizeZ), Enum.Material.Air)
+	return part({
+		Name = name or "Platte",
+		Size = Vector3.new(sizeX, 4, sizeZ),
+		CFrame = cf * CFrame.new(0, top - 2, 0),
+		Color = color,
+		Material = material,
+		Parent = parent or folder,
+	})
+end
+
+------------------------------------------------------------------------
 -- Straßen
 ------------------------------------------------------------------------
 local roadCount = 0
@@ -140,14 +157,19 @@ local function road(a, b, width, dashes, color)
 	local len = (pb - pa).Magnitude
 	local mid = (pa + pb) / 2
 	local cf = CFrame.lookAt(mid, pb)
-	part({
-		Name = "Strasse",
-		Size = Vector3.new(width, 1, len),
-		CFrame = cf * CFrame.new(0, top - 0.5, 0),
-		Color = color or ASPHALT,
-		Material = Enum.Material.Asphalt,
-		Parent = folder,
-	})
+	World.Slab(cf, width, len, top, color or ASPHALT, Enum.Material.Asphalt, "Strasse")
+	-- Bordsteine
+	for _, side in ipairs({ -1, 1 }) do
+		part({
+			Name = "Bordstein",
+			Size = Vector3.new(0.8, 0.3, len),
+			CFrame = cf * CFrame.new(side * (width / 2 + 0.4), top - 0.05, 0),
+			Color = Color3.fromRGB(165, 165, 168),
+			Material = Enum.Material.Concrete,
+			CanCollide = false,
+			Parent = folder,
+		})
+	end
 	if dashes then
 		local n = math.floor(len / 20)
 		for i = 0, n - 1 do
@@ -200,14 +222,7 @@ local function buildTrack()
 
 	-- Geraden
 	for _, zz in ipairs({ SOUTH_Z, NORTH_Z }) do
-		part({
-			Name = "Gerade",
-			Size = Vector3.new(hl * 2, 1, w),
-			CFrame = CFrame.new(0, top - 0.5, zz),
-			Color = trackColor,
-			Material = Enum.Material.Asphalt,
-			Parent = folder,
-		})
+		World.Slab(CFrame.new(0, 0, zz), hl * 2, w, top, trackColor, Enum.Material.Asphalt, "Gerade")
 		for _, side in ipairs({ -1, 1 }) do
 			part({
 				Name = "Randlinie",
@@ -236,14 +251,20 @@ local function buildTrack()
 			local len = (p1 - p0).Magnitude
 			-- Außen ist das Segment länger als innen: Länge an Außenkante anpassen
 			local outerLen = len * (r + w / 2) / r + 0.4
-			part({
-				Name = "Kurve",
-				Size = Vector3.new(w, 1, outerLen),
-				CFrame = cf * CFrame.new(0, top - 0.5 - 0.001 * (k % 2), 0),
-				Color = trackColor,
-				Material = Enum.Material.Asphalt,
-				Parent = folder,
-			})
+			World.Slab(cf, w, outerLen, top - 0.001 * (k % 2), trackColor, Enum.Material.Asphalt, "Kurve")
+			-- Kiesbett außen bis zur Mauer
+			local radialMid = (mid - Vector3.new(cx, 0, cz)).Unit
+			local gravelR = r + w / 2 + 7.5
+			local gpos = Vector3.new(cx, 0, cz) + radialMid * gravelR
+			World.Slab(
+				CFrame.lookAt(gpos, gpos + cf.LookVector),
+				12,
+				len * gravelR / r + 0.6,
+				0.06 - 0.001 * (k % 2),
+				Color3.fromRGB(196, 180, 150),
+				Enum.Material.Pebble,
+				"Kiesbett"
+			)
 			-- Curbs innen und außen
 			local radial = (mid - Vector3.new(cx, 0, cz)).Unit
 			for _, off in ipairs({ r - w / 2 - 0.8, r + w / 2 + 0.8 }) do
@@ -348,6 +369,61 @@ local function buildTrack()
 end
 
 ------------------------------------------------------------------------
+-- Fahrerlager an der Start-Ziel-Geraden
+------------------------------------------------------------------------
+local function buildPaddock()
+	local z0 = SOUTH_Z + T.Width / 2 - 1 -- direkt an der Strecke
+	local depth = 70
+	local cz = z0 + depth / 2
+	World.Slab(CFrame.new(0, 0, cz), 380, depth, 0.07, Color3.fromRGB(60, 61, 66), Enum.Material.Asphalt, "Fahrerlager")
+	-- Boxenmauer mit Lücke für die Zufahrt
+	for _, side in ipairs({ -1, 1 }) do
+		part({
+			Name = "Boxenmauer",
+			Size = Vector3.new(170, 1.6, 1),
+			CFrame = CFrame.new(side * 105, 0.85, z0 + 2),
+			Color = Color3.fromRGB(235, 235, 235),
+			Material = Enum.Material.Concrete,
+			Parent = folder,
+		})
+	end
+	-- Parkbuchten
+	for x = -176, 176, 10 do
+		if math.abs(x) > 24 then
+			part({
+				Name = "Parklinie",
+				Size = Vector3.new(0.4, 0.05, 14),
+				CFrame = CFrame.new(x, 0.1, z0 + depth - 9),
+				Color = Color3.new(1, 1, 1),
+				Material = Enum.Material.SmoothPlastic,
+				CanCollide = false,
+				Parent = folder,
+			})
+		end
+	end
+	-- Boxengebäude
+	local box = part({
+		Name = "Boxengebaeude",
+		Size = Vector3.new(120, 12, 16),
+		CFrame = CFrame.new(-120, 6, z0 + depth + 8),
+		Color = Color3.fromRGB(230, 232, 236),
+		Material = Enum.Material.SmoothPlastic,
+		Parent = folder,
+	})
+	Util.textGui(box, Enum.NormalId.Front, "BOXEN · PIT LANE", Color3.fromRGB(255, 140, 0), Color3.fromRGB(25, 25, 30))
+	for i = 0, 4 do
+		part({
+			Name = "Boxentor",
+			Size = Vector3.new(18, 8, 0.3),
+			CFrame = CFrame.new(-168 + i * 24, 4.2, z0 + depth - 0.1),
+			Color = Color3.fromRGB(40, 42, 48),
+			Material = Enum.Material.Metal,
+			Parent = folder,
+		})
+	end
+end
+
+------------------------------------------------------------------------
 -- Straßenlaternen
 ------------------------------------------------------------------------
 local function lamp(pos, facing)
@@ -420,7 +496,7 @@ local function building(x, width, depth, height, name, wallColor, signColor, rng
 	local sign = part({ Name = "Ladenschild", Size = Vector3.new(math.min(width - 4, 40), 4, 0.6), CFrame = CFrame.new(x, 8.5, zFront - 0.4), Color = Color3.fromRGB(15, 15, 18), Parent = folder })
 	Util.textGui(sign, Enum.NormalId.Front, name, signColor, Color3.fromRGB(15, 15, 18))
 	-- Gehweg
-	part({ Name = "Gehweg", Size = Vector3.new(width + 10, 0.6, 10), CFrame = CFrame.new(x, 0.3, zFront - 5), Color = Color3.fromRGB(175, 175, 178), Material = Enum.Material.Concrete, Parent = folder })
+	World.Slab(CFrame.new(x, 0, zFront - 5), width + 10, 10, 0.4, Color3.fromRGB(175, 175, 178), Enum.Material.Pavement, "Gehweg")
 end
 
 local function buildTown()
@@ -447,7 +523,7 @@ local BLOCKED = {
 	{ -960, 960, 20, 80 }, -- Werkstattstraße + Laternen
 	{ -330, 330, -50, 45 }, -- Werkstätten
 	{ -25, 25, SOUTH_Z, 60 }, -- Zufahrt
-	{ -T.HalfLength - T.Radius - 40, T.HalfLength + T.Radius + 40, NORTH_Z - 50, SOUTH_Z + 45 }, -- Teststrecke
+	{ -T.HalfLength - T.Radius - 40, T.HalfLength + T.Radius + 40, NORTH_Z - 50, SOUTH_Z + 95 }, -- Teststrecke + Fahrerlager
 	{ -600, 600, 75, 200 }, -- Gebäude
 	{ -720, 720, 245, 275 }, -- Landstraße Süd
 	{ -720, 720, -795, -765 },
@@ -523,7 +599,7 @@ local function buildTrees()
 		end
 	end
 	-- Allee entlang der Zufahrt zur Teststrecke
-	for z = SOUTH_Z + 60, -60, 40 do
+	for z = SOUTH_Z + 110, -60, 40 do
 		tree(Vector3.new(-22, 0, z), rng)
 		tree(Vector3.new(26, 0, z + 20), rng)
 	end
@@ -541,6 +617,7 @@ function World.Build()
 	buildTerrain()
 	buildRoads()
 	buildTrack()
+	buildPaddock()
 	buildLamps()
 	buildTown()
 	buildTrees()
@@ -549,6 +626,7 @@ function World.Build()
 	spawnLoc.Name = "Spawn"
 	spawnLoc.Anchored = true
 	spawnLoc.Size = Vector3.new(12, 1, 12)
+	World.Slab(CFrame.new(0, 0, World.ROAD_Z + 30), 24, 22, 0.4, Color3.fromRGB(175, 175, 178), Enum.Material.Pavement, "SpawnPlatz")
 	spawnLoc.CFrame = CFrame.new(0, 0.5, World.ROAD_Z + 30)
 	spawnLoc.Neutral = true
 	spawnLoc.Duration = 0
