@@ -75,7 +75,6 @@ local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
 
 local part, textGui, billboard = Util.part, Util.textGui, Util.billboard
-local lookCF, moveModel = Util.lookCF, Util.moveModel
 
 World.Build()
 Npc.BuildTemplates(12)
@@ -663,6 +662,59 @@ end
 ------------------------------------------------------------------------
 local startJob -- wird weiter unten definiert
 
+-- Punkt im Grundstück (lokal) -> Welt, y = Höhe der Karosseriemitte
+local ROAD_Y = World.ROAD_TOP + CAR_HEIGHT
+local FLOOR_Y = 0.2 + CAR_HEIGHT
+local LIFT_Y = LIFT_TOP + CAR_HEIGHT
+local DYNO_Y = 0.8 + CAR_HEIGHT
+local LANE_Z = ROAD_Z + 5 -- rechte Fahrspur (ostwärts)
+
+local function pts(plot, list)
+	local out = {}
+	for i, p in ipairs(list) do
+		out[i] = (plot.Origin * CFrame.new(p[1], p[2], p[3])).Position
+	end
+	return out
+end
+
+-- In der Halle langsam, auf der Straße zügig
+local function hallLimit(plot)
+	return function(pos)
+		local loc = plot.Origin:PointToObjectSpace(pos)
+		if loc.Z < 2 then
+			return 3.5 -- Rampe und Bühne
+		elseif loc.Z < 34 then
+			return 7 -- in der Halle
+		end
+		return nil
+	end
+end
+
+-- Kunde steigt aus und geht zu seinem Warteplatz
+local function customerGetsOut(plot, bay, customer)
+	local door = plot.Origin * CFrame.new(bay.X - 4.6, 0.2, BAY_Z + 13.5)
+	local spot = plot.Origin * CFrame.new(bay.X - 7.4, 0.2, BAY_Z + 18)
+	Npc.StandAt(customer, CFrame.lookAt(door.Position, spot.Position), plot.Model)
+	task.wait(0.4)
+	Npc.WalkTo(customer, spot.Position, 5.5)
+	local hrp = customer.PrimaryPart
+	if hrp then
+		local carPos = (plot.Origin * CFrame.new(bay.X, 0, BAY_Z)).Position
+		hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(carPos.X, hrp.Position.Y, carPos.Z))
+	end
+end
+
+-- Kunde geht zur Fahrertür und steigt ein
+local function customerGetsIn(plot, bay, customer, car)
+	local door = plot.Origin * CFrame.new(bay.X - 4.6, 0.2, BAY_Z + 13.5)
+	if customer.PrimaryPart and customer.PrimaryPart.Anchored then
+		Npc.WalkTo(customer, door.Position, 5.5)
+		task.wait(0.3)
+	end
+	Npc.SeatInCar(customer, car)
+	task.wait(0.5)
+end
+
 local function spawnCustomer(player, st, bay)
 	local candidates = {}
 	for _, c in ipairs(Config.Cars) do
@@ -682,21 +734,29 @@ local function spawnCustomer(player, st, bay)
 	bay.Car = carInfo
 
 	local plot = st.Plot
-	-- rechte Fahrspur der Werkstattstraße (Rechtsverkehr)
-	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
-	local startCF = lookCF(roadPos - Vector3.new(140, 0, 0), Vector3.xAxis)
-	local turnCF = lookCF(roadPos, Vector3.xAxis)
-	local facingIn = lookCF(roadPos, -Vector3.zAxis)
-	car:PivotTo(startCF)
+	-- Anfahrt auf der rechten Spur, Linkskurve in die Einfahrt, langsam auf die Bühne
+	local bx = bay.X
+	local route = pts(plot, {
+		{ bx - 170, ROAD_Y, LANE_Z },
+		{ bx - 50, ROAD_Y, LANE_Z },
+		{ bx - 16, ROAD_Y, LANE_Z - 2 },
+		{ bx - 3, ROAD_Y + 0.05, 42 },
+		{ bx, FLOOR_Y, 30 },
+		{ bx, FLOOR_Y, 12 },
+		{ bx, FLOOR_Y, BAY_Z + 13.2 },
+		{ bx, LIFT_Y, BAY_Z + 9.4 },
+		{ bx, LIFT_Y, BAY_Z },
+	})
+	car:PivotTo(CFrame.lookAt(route[1], route[2]))
 	car.Parent = plot.Model
 
 	task.spawn(function()
-		moveModel(car, startCF, turnCF, 3)
-		moveModel(car, turnCF, facingIn, 0.6)
-		moveModel(car, facingIn, bay.CF, 3)
+		Util.DrivePath(car, route, { Speed = 22, StartSpeed = 18, Limit = hallLimit(plot) })
 		if not car.Parent then
 			return
 		end
+		car.PrimaryPart.CFrame = bay.CF
+		task.wait(0.6)
 		local stageDef = Config.Stages[stage]
 		carInfo.Label = billboard(car.PrimaryPart, ("🚗 %s\nWunsch: %s%s · %d PS"):format(def.Name, stageDef.Name, popBang and " + Pop & Bang" or "", def.Hp), 5)
 
@@ -718,10 +778,9 @@ local function spawnCustomer(player, st, bay)
 		end)
 		car.Kollision.CanCollide = true
 		carInfo.OnLift = true
-		-- Kunde steigt aus und wartet neben der Bühne
+		-- Kunde steigt aus und geht zu seinem Warteplatz
 		if customer then
-			local spot = plot.Origin * CFrame.new(bay.X - 7.2, 0.2, BAY_Z + 13)
-			Npc.StandAt(customer, CFrame.lookAt(spot.Position, spot.Position + Vector3.new(1, 0, -0.6)), plot.Model)
+			task.spawn(customerGetsOut, plot, bay, customer)
 		end
 		carInfo.Ready = true
 	end)
@@ -741,24 +800,39 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 	animateLift(bay, 0, 2.2)
 	carInfo.OnLift = false
 	setCartText(bay, "OBD")
-	-- Kunde steigt wieder ein
+	-- Kunde geht zur Fahrertür und steigt ein
 	if carInfo.Customer and carInfo.Customer.Parent and car.Parent then
-		Npc.SeatInCar(carInfo.Customer, car)
-		task.wait(0.6)
+		customerGetsIn(plot, bay, carInfo.Customer, car)
 	end
-
-	local function floorPos(x, z)
-		return (plot.Origin * CFrame.new(x, 0.2 + CAR_HEIGHT, z)).Position
+	if not car.Parent then
+		bay.Car = nil
+		return
 	end
-
-	local front = lookCF(floorPos(bay.X, 12), -Vector3.zAxis)
-	moveModel(car, bay.CF, front, 2.2)
-	local exitX = bay.X
+	local bx = bay.X
+	local limit = hallLimit(plot)
 
 	if hasUpgrade(st, "Dyno") and not plot.DynoBusy then
 		plot.DynoBusy = true
-		local dynoCF = lookCF((plot.Origin * CFrame.new(DYNO_POS)).Position + Vector3.new(0, 0.8 + CAR_HEIGHT, 0), -Vector3.zAxis)
-		moveModel(car, front, dynoCF, 2)
+		local dx = DYNO_POS.X
+		-- rückwärts von der Bühne, im Bogen vor den Prüfstand setzen
+		Util.DrivePath(car, pts(plot, {
+			{ bx, LIFT_Y, BAY_Z },
+			{ bx, LIFT_Y, BAY_Z + 9.4 },
+			{ bx, FLOOR_Y, BAY_Z + 13.2 },
+			{ bx, FLOOR_Y, 6 },
+			{ bx + (dx - bx) * 0.35, FLOOR_Y, 13 },
+			{ bx + (dx - bx) * 0.8, FLOOR_Y, 20 },
+			{ dx, FLOOR_Y, 26 },
+			{ dx, FLOOR_Y, 32 },
+		}), { Speed = 5, Reverse = true, Limit = limit })
+		task.wait(0.5)
+		-- vorwärts langsam auf die Rollen
+		Util.DrivePath(car, pts(plot, {
+			{ dx, FLOOR_Y, 32 },
+			{ dx, FLOOR_Y, 27 },
+			{ dx, DYNO_Y, 22.5 },
+			{ dx, DYNO_Y, DYNO_POS.Z },
+		}), { Speed = 3 })
 		local screen = plot.DynoScreen
 		-- Rollen drehen hier; die Räder dreht jeder Client (Attribut DynoSpin)
 		local spinning = {}
@@ -804,17 +878,40 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		if screen and screen.Parent then
 			screen.Text = ("PRÜFSTAND\n%d PS ✔"):format(newHp)
 		end
-		front = dynoCF
-		exitX = DYNO_POS.X
+		task.wait(0.8)
 		plot.DynoBusy = false
+		-- rückwärts vom Prüfstand im Bogen auf die Straße setzen
+		Util.DrivePath(car, pts(plot, {
+			{ dx, DYNO_Y, DYNO_POS.Z },
+			{ dx, DYNO_Y, 22.5 },
+			{ dx, FLOOR_Y, 28 },
+			{ dx, FLOOR_Y, 36 },
+			{ dx - 5, ROAD_Y, 44 },
+			{ dx - 12, ROAD_Y, LANE_Z - 1 },
+			{ dx - 22, ROAD_Y, LANE_Z },
+		}), { Speed = 5, Reverse = true, Limit = limit })
+		bx = dx
+	else
+		-- rückwärts von der Bühne und im Bogen auf die Straße setzen
+		Util.DrivePath(car, pts(plot, {
+			{ bx, LIFT_Y, BAY_Z },
+			{ bx, LIFT_Y, BAY_Z + 9.4 },
+			{ bx, FLOOR_Y, BAY_Z + 13.2 },
+			{ bx, FLOOR_Y, 20 },
+			{ bx, FLOOR_Y, 34 },
+			{ bx - 5, ROAD_Y, 44 },
+			{ bx - 12, ROAD_Y, LANE_Z - 1 },
+			{ bx - 22, ROAD_Y, LANE_Z },
+		}), { Speed = 5, Reverse = true, Limit = limit })
 	end
-
-	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
-	local onRoad = lookCF(roadPos, -Vector3.zAxis)
-	moveModel(car, front, onRoad, 2.2)
-	local turned = lookCF(roadPos, Vector3.xAxis)
-	moveModel(car, onRoad, turned, 0.6)
-	moveModel(car, turned, lookCF(roadPos + Vector3.new(160, 0, 0), Vector3.xAxis), 3)
+	task.wait(0.5)
+	-- vorwärts losfahren auf der rechten Spur
+	Util.DrivePath(car, pts(plot, {
+		{ bx - 22, ROAD_Y, LANE_Z },
+		{ bx - 8, ROAD_Y, LANE_Z },
+		{ bx + 60, ROAD_Y, LANE_Z },
+		{ bx + 180, ROAD_Y, LANE_Z },
+	}), { Speed = 26, EndSpeed = 26, Accel = 6 })
 	car:Destroy()
 	bay.Car = nil
 end
@@ -1066,6 +1163,39 @@ local function getHumanoid(player)
 	return char and char:FindFirstChildOfClass("Humanoid"), char
 end
 
+-- Spieler im Auto ausblenden (das Dach bleibt zu); am Steuer sitzt eine Avatar-Kopie
+local function setCharacterHidden(char, hidden)
+	if not char then
+		return
+	end
+	for _, d in ipairs(char:GetDescendants()) do
+		if d:IsA("BasePart") or d:IsA("Decal") then
+			if hidden then
+				if d:GetAttribute("OrigT") == nil then
+					d:SetAttribute("OrigT", d.Transparency)
+				end
+				d.Transparency = 1
+			elseif d:GetAttribute("OrigT") ~= nil then
+				d.Transparency = d:GetAttribute("OrigT")
+				d:SetAttribute("OrigT", nil)
+			end
+		end
+	end
+end
+
+local function addDriverDouble(player, car)
+	local old = car:FindFirstChild("Fahrer")
+	if old then
+		old:Destroy()
+	end
+	local folder = ReplicatedStorage:FindFirstChild("Leute")
+	local template = folder and folder:FindFirstChild("Avatar_" .. player.UserId)
+	local person = template and template:Clone() or Npc.Random()
+	if person then
+		Npc.SeatInCar(person, car)
+	end
+end
+
 local function teleportHome(player, st)
 	local hum, char = getHumanoid(player)
 	if hum and char and st.Plot then
@@ -1085,6 +1215,7 @@ local function endDrive(player, st, reason)
 		hum.Sit = false
 	end
 	drive.Car:Destroy()
+	setCharacterHidden(player.Character, false)
 	if drive.Mode == "test" then
 		local driven = os.clock() - drive.Started
 		if drive.Tip and drive.Tip > 0 and driven >= Config.TestDriveMinSeconds then
@@ -1141,7 +1272,17 @@ local function spawnDrivable(player, st, def, hp, cf, mode, popBang)
 			pcall(function()
 				car.PrimaryPart:SetNetworkOwner(player)
 			end)
-		elseif mode == "test" and st.Drive == drive then
+			setCharacterHidden(player.Character, true)
+			addDriverDouble(player, car)
+			return
+		end
+		-- ausgestiegen: Spieler wieder zeigen, Avatar-Kopie entfernen
+		setCharacterHidden(player.Character, false)
+		local double = car:FindFirstChild("Fahrer")
+		if double then
+			double:Destroy()
+		end
+		if mode == "test" and st.Drive == drive then
 			task.delay(0.3, function()
 				if st.Drive == drive and not seat.Occupant then
 					endDrive(player, st)

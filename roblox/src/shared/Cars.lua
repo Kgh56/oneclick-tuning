@@ -342,16 +342,19 @@ function Cars.MakeShowCar(def)
 	m:SetAttribute("SeatZ", info.SeatCF.Z)
 	m:SetAttribute("RoofInner", info.RoofInner)
 	m:SetAttribute("Belt", info.Belt)
+	m:SetAttribute("Bottom", info.Bottom)
 	CollectionService:AddTag(m, Cars.TAG)
 	return m
 end
 
--- Fahrbares Cabrio. Pivot = Fahrgestell (CHASSIS_HEIGHT über Boden).
+-- Fahrbares Auto mit Dach. Pivot = Fahrgestell (CHASSIS_HEIGHT über Boden).
+-- Der Spieler wird beim Fahren ausgeblendet; am Steuer sitzt eine passende
+-- Kopie seines Avatars (siehe GameServer / Npc.SeatInCar).
 -- Gelenkt wird vom Client (DriveClient) über "Antrieb" und "Lenkung".
 function Cars.MakeDrivable(def)
 	local m = Instance.new("Model")
 	m.Name = def.Name
-	local info = build(def, m, true)
+	local info = build(def, m, false)
 	local st = info.Style
 
 	local slippery = PhysicalProperties.new(0.7, 0, 0, 100, 1)
@@ -423,6 +426,11 @@ function Cars.MakeDrivable(def)
 	av.Parent = chassis
 
 	m.PrimaryPart = chassis
+	m:SetAttribute("SeatX", info.SeatCF.X)
+	m:SetAttribute("SeatZ", info.SeatCF.Z)
+	m:SetAttribute("RoofInner", info.RoofInner)
+	m:SetAttribute("Bottom", info.Bottom)
+	m:SetAttribute("RootOffsetY", Cars.CHASSIS_HEIGHT - Cars.BODY_HEIGHT)
 	pcall(function()
 		m.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	end)

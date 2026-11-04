@@ -257,12 +257,18 @@ function Npc.SeatInCar(person, car)
 		end
 	end
 	hrp.Anchored = true
-	Npc.SetScale(person, Config.NpcScale)
-	local headTop = Npc.Dim(person, "HeadTop", 2.4)
+	-- Größe und Sitzhöhe so wählen, dass Kopf unter dem Dach und Füße in der Karosserie bleiben
 	local roof = car:GetAttribute("RoofInner") or 2
-	local y = roof - headTop - 0.08
+	local bottom = car:GetAttribute("Bottom") or -0.8
+	local head1 = person:GetAttribute("HeadTop") or 2.4 -- bei Größe 1
+	local minY = bottom + 1.1
+	local scale = math.clamp((roof - 0.08 - minY) / head1, 0.5, Config.NpcScale)
+	Npc.SetScale(person, scale)
+	local y = math.max(minY, roof - head1 * scale - 0.08)
 	hrp.Anchored = false
-	hrp.CFrame = root.CFrame * CFrame.new(car:GetAttribute("SeatX") or -1.3, y, (car:GetAttribute("SeatZ") or 0) + 0.35)
+	-- Fahrbare Autos haben das Fahrgestell als Wurzel (tiefer als die Karosseriemitte)
+	local rootOffset = car:GetAttribute("RootOffsetY") or 0
+	hrp.CFrame = root.CFrame * CFrame.new(car:GetAttribute("SeatX") or -1.3, y - rootOffset, (car:GetAttribute("SeatZ") or 0) + 0.35)
 	local w = Instance.new("WeldConstraint")
 	w.Part0 = root
 	w.Part1 = hrp
@@ -285,6 +291,38 @@ function Npc.StandAt(person, groundCF, parent)
 	hrp.CFrame = groundCF * CFrame.new(0, Npc.Dim(person, "FootOffset", 3), 0)
 	person:SetAttribute("Pose", "stand")
 	person.Parent = parent
+end
+
+-- Läuft (verankert) von der aktuellen Position zu target (Bodenpunkt). Blockiert.
+function Npc.WalkTo(person, target, speed)
+	local RunService = game:GetService("RunService")
+	local hrp = person.PrimaryPart
+	if not hrp then
+		return
+	end
+	speed = speed or 6
+	local foot = Npc.Dim(person, "FootOffset", 3)
+	local startPos = hrp.Position
+	local goal = Vector3.new(target.X, target.Y + foot, target.Z)
+	local dist = (goal - startPos).Magnitude
+	if dist < 0.2 then
+		return
+	end
+	person:SetAttribute("Pose", "walk")
+	local flat = Vector3.new(goal.X - startPos.X, 0, goal.Z - startPos.Z)
+	local dir = flat.Magnitude > 0.01 and flat.Unit or hrp.CFrame.LookVector
+	local t0 = os.clock()
+	local dur = dist / speed
+	while person.Parent do
+		local a = math.clamp((os.clock() - t0) / dur, 0, 1)
+		local pos = startPos:Lerp(goal, a)
+		hrp.CFrame = CFrame.lookAt(pos, pos + dir)
+		if a >= 1 then
+			break
+		end
+		RunService.Heartbeat:Wait()
+	end
+	person:SetAttribute("Pose", "stand")
 end
 
 return Npc

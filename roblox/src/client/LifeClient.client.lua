@@ -53,12 +53,15 @@ local rad = math.rad
 local A = CFrame.Angles
 
 -- Sitzen am Lenkrad; steer: Lenkwinkel (+ = links)
-local function poseSit(person, steer, t, seed)
+local function poseSit(person, steer, t, seed, reversing)
 	local j = joints(person)
-	setJ(j, "LeftHip", A(rad(90), 0, 0))
-	setJ(j, "RightHip", A(rad(90), 0, 0))
-	setJ(j, "LeftKnee", A(rad(-80), 0, 0))
-	setJ(j, "RightKnee", A(rad(-80), 0, 0))
+	-- Beine nach vorn zu den Pedalen (bleiben in der Karosserie)
+	setJ(j, "LeftHip", A(rad(92), 0, 0))
+	setJ(j, "RightHip", A(rad(92), 0, 0))
+	setJ(j, "LeftKnee", A(rad(-22), 0, 0))
+	setJ(j, "RightKnee", A(rad(-22), 0, 0))
+	setJ(j, "LeftAnkle", A(rad(15), 0, 0))
+	setJ(j, "RightAnkle", A(rad(15), 0, 0))
 	local s = math.clamp(steer * 1.6, -0.5, 0.5)
 	setJ(j, "LeftShoulder", A(rad(65) + s * 0.6, 0, rad(10)))
 	setJ(j, "RightShoulder", A(rad(65) - s * 0.6, 0, rad(-10)))
@@ -66,8 +69,15 @@ local function poseSit(person, steer, t, seed)
 	setJ(j, "RightElbow", A(rad(25), 0, 0))
 	-- Kopf: in die Kurve schauen, ab und zu umsehen
 	local glance = math.sin(t * 0.7 + seed) * math.sin(t * 0.23 + seed * 2)
-	setJ(j, "Neck", A(0, steer * 1.2 + glance * 0.5, 0))
-	setJ(j, "Waist", A(0, 0, -steer * 0.15))
+	if reversing then
+		-- beim Rückwärtsfahren über die rechte Schulter nach hinten schauen
+		setJ(j, "Neck", A(0, rad(-75), 0))
+		setJ(j, "Waist", A(0, rad(-35), 0))
+		setJ(j, "RightShoulder", A(rad(40), 0, rad(-50)))
+	else
+		setJ(j, "Neck", A(0, steer * 1.2 + glance * 0.5, 0))
+		setJ(j, "Waist", A(0, 0, -steer * 0.15))
+	end
 end
 
 local function poseStand(person, t, seed)
@@ -230,9 +240,9 @@ local function animateCar(car, dt, now, camPos, mine)
 	if not root then
 		return
 	end
-	if car == mine then
-		dropSound(carState[car]) -- das eigene Auto klingt über DriveClient
-		return
+	local isMine = car == mine
+	if isMine then
+		dropSound(carState[car]) -- das eigene Auto klingt und leuchtet über DriveClient
 	end
 	local pos = root.Position
 	if (pos - camPos).Magnitude > ANIM_DISTANCE then
@@ -274,14 +284,16 @@ local function animateCar(car, dt, now, camPos, mine)
 	st.Steer += (target - st.Steer) * math.min(1, dt * 8)
 	local dyno = car:GetAttribute("DynoSpin") or 0
 	st.Spin = (st.Spin - (v / Cars.WHEEL_RADIUS + dyno) * dt) % (math.pi * 2)
-	for _, m in ipairs(st.Motors) do
-		m.Transform = A(0, m:GetAttribute("Front") and st.Steer or 0, 0) * A(st.Spin, 0, 0)
-	end
-	if st.Steering then
-		st.Steering.Transform = A(-st.Steer * 4, 0, 0)
+	if not isMine then
+		for _, m in ipairs(st.Motors) do
+			m.Transform = A(0, m:GetAttribute("Front") and st.Steer or 0, 0) * A(st.Spin, 0, 0)
+		end
+		if st.Steering then
+			st.Steering.Transform = A(-st.Steer * 4, 0, 0)
+		end
 	end
 	-- Brems- und Blinklichter
-	if car.Name ~= "Geparkt" then
+	if car.Name ~= "Geparkt" and not isMine then
 		st.Lights = st.Lights or Cars.LightParts(car)
 		st.Acc = (st.Acc or 0) + (((v - (st.LastVL or v)) / math.max(dt, 1e-3)) - (st.Acc or 0)) * math.min(1, dt * 5)
 		st.LastVL = v
@@ -302,12 +314,13 @@ local function animateCar(car, dt, now, camPos, mine)
 		if cache and cache.Current then
 			playAnim(driver, nil)
 		end
-		poseSit(driver, st.Steer, now, st.Seed)
+		st.Rev = (st.Rev or 0) + ((v < -0.4 and 1 or 0) - (st.Rev or 0)) * math.min(1, dt * 6)
+		poseSit(driver, st.Steer, now, st.Seed, st.Rev > 0.5)
 	end
 
 	-- Motorgeräusch
 	local dist = (pos - camPos).Magnitude
-	if car.Name == "Geparkt" or dist > SOUND_DISTANCE + 30 then
+	if isMine or car.Name == "Geparkt" or dist > SOUND_DISTANCE + 30 then
 		dropSound(st)
 		return
 	end
@@ -784,7 +797,11 @@ RunService.Heartbeat:Connect(function(dt)
 	-- Wartende und jubelnde Kunden
 	for _, person in ipairs(CollectionService:GetTagged(Npc.TAG)) do
 		local pose = person:GetAttribute("Pose")
-		if (pose == "stand" or pose == "cheer") and person.PrimaryPart and person:IsDescendantOf(workspace) then
+		if pose == "walk" and person.PrimaryPart and person:IsDescendantOf(workspace) then
+			if not playAnim(person, "walk", 0.8) then
+				poseWalk(person, now * 7)
+			end
+		elseif (pose == "stand" or pose == "cheer") and person.PrimaryPart and person:IsDescendantOf(workspace) then
 			if (person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
 				if not playAnim(person, pose == "cheer" and "cheer" or "idle") then
 					if pose == "cheer" then

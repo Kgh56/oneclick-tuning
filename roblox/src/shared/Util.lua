@@ -134,4 +134,107 @@ function Util.moveModel(model, fromCF, toCF, duration)
 	end
 end
 
+-- Weicher Weg (Catmull-Rom) durch die Punkte; liefert dicht gesetzte Punkte
+function Util.SmoothPath(points, perSegment)
+	perSegment = perSegment or 10
+	local out = {}
+	local n = #points
+	for i = 1, n - 1 do
+		local p0 = points[math.max(i - 1, 1)]
+		local p1 = points[i]
+		local p2 = points[i + 1]
+		local p3 = points[math.min(i + 2, n)]
+		for k = 0, perSegment - 1 do
+			local t = k / perSegment
+			local t2, t3 = t * t, t * t * t
+			local pt = (p1 * 2 + (p2 - p0) * t + (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2 + (p1 * 3 - p0 - p2 * 3 + p3) * t3) * 0.5
+			table.insert(out, pt)
+		end
+	end
+	table.insert(out, points[n])
+	local cum = { 0 }
+	for i = 2, #out do
+		cum[i] = cum[i - 1] + (out[i] - out[i - 1]).Magnitude
+	end
+	return { Points = out, Cum = cum, Length = cum[#cum] }
+end
+
+local function samplePath(path, s)
+	local cum, pts = path.Cum, path.Points
+	s = math.clamp(s, 0, path.Length)
+	local lo, hi = 1, #pts - 1
+	while lo < hi do
+		local mid = math.floor((lo + hi + 1) / 2)
+		if cum[mid] <= s then
+			lo = mid
+		else
+			hi = mid - 1
+		end
+	end
+	local seg = cum[lo + 1] - cum[lo]
+	local t = seg > 0 and (s - cum[lo]) / seg or 0
+	return pts[lo]:Lerp(pts[lo + 1], t)
+end
+
+-- Richtung entlang des Weges (über ein Stück gemittelt, damit nichts zittert)
+local function tangent(path, s)
+	local a = samplePath(path, s + 1.5)
+	local b = samplePath(path, s - 1.5)
+	local d = a - b
+	if d.Magnitude < 1e-3 then
+		return nil
+	end
+	return d.Unit
+end
+
+-- Fährt ein Auto realistisch einen Weg ab (blockiert, bis es angekommen ist).
+-- opts.Speed: Höchsttempo, opts.Reverse: rückwärts (Nase zeigt gegen die
+-- Fahrtrichtung), opts.Limit(pos): optionales Tempolimit je Ort,
+-- opts.StartSpeed / opts.EndSpeed: Tempo am Anfang / Ende.
+function Util.DrivePath(model, points, opts)
+	opts = opts or {}
+	local path = Util.SmoothPath(points, 10)
+	local root = model.PrimaryPart
+	local maxV = opts.Speed or 15
+	local accel = opts.Accel or (opts.Reverse and 4 or 7)
+	local decel = opts.Decel or 9
+	local endV = opts.EndSpeed or 0
+	local v = opts.StartSpeed or 0
+	local s = 0
+	local lastLook = nil
+	while s < path.Length and model.Parent do
+		local dt = RunService.Heartbeat:Wait()
+		-- Tempo: Kurven langsamer, rechtzeitig bremsen
+		local target = maxV
+		local t1 = tangent(path, s)
+		local t2 = tangent(path, s + 9)
+		if t1 and t2 then
+			local angle = math.acos(math.clamp(t1:Dot(t2), -1, 1))
+			target = math.min(target, 4 + (maxV - 4) * (1 - math.clamp(angle / 0.7, 0, 1)))
+		end
+		if opts.Limit then
+			target = math.min(target, opts.Limit(samplePath(path, s)) or target)
+		end
+		local remaining = path.Length - s
+		target = math.min(target, math.sqrt(endV * endV + 2 * decel * remaining))
+		if v < target then
+			v = math.min(target, v + accel * dt)
+		else
+			v = math.max(target, v - decel * dt)
+		end
+		v = math.max(v, 0.6)
+		s = math.min(path.Length, s + v * dt)
+		local pos = samplePath(path, s)
+		local tan = tangent(path, s) or lastLook
+		if tan then
+			local look = opts.Reverse and -tan or tan
+			lastLook = tan
+			root.CFrame = CFrame.lookAt(pos, pos + look)
+		else
+			root.CFrame = root.CFrame - root.Position + pos
+		end
+	end
+	return v
+end
+
 return Util
