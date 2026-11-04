@@ -1148,12 +1148,48 @@ local function recordBoard(pos, facing)
 	table.insert(World.RecordBoards, tl)
 end
 
+local function boostPad(pos, dir)
+	local pad = part({
+		Name = "Boostfeld",
+		Size = Vector3.new(12, 0.1, 7),
+		CFrame = CFrame.lookAt(pos, pos + dir),
+		Color = Color3.fromRGB(40, 160, 255),
+		Material = Enum.Material.Neon,
+		Transparency = 0.25,
+		CanCollide = false,
+		Parent = folder,
+	})
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Top
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 20
+	sg.LightInfluence = 0
+	sg.Parent = pad
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = 1
+	tl.TextScaled = true
+	tl.Font = Enum.Font.GothamBlack
+	tl.TextColor3 = Color3.new(1, 1, 1)
+	tl.Text = "▲ ▲ ▲"
+	tl.Rotation = 0
+	tl.Parent = sg
+	tagPart(pad, "Boostfeld")
+	return pad
+end
+
 local function buildAction()
 	buildStuntPark()
 	-- Blitzer: Landstraße Nord (lange Gerade) und Werkstattstraße West
 	blitzer(Vector3.new(0, 0.25, -767), Vector3.xAxis)
 	blitzer(Vector3.new(-500, 0.25, World.ROAD_Z + 13), -Vector3.xAxis)
-	recordBoard(Vector3.new(110, 9, -330), Vector3.zAxis)
+	recordBoard(Vector3.new(84, 9, -328), Vector3.zAxis)
+	-- Boost-Felder: Strecke und Anlauf der Schanzen
+	boostPad(Vector3.new(-120, 0.12, SOUTH_Z), Vector3.xAxis)
+	boostPad(Vector3.new(120, 0.12, NORTH_Z), -Vector3.xAxis)
+	boostPad(Vector3.new(105, 0.12, -333), -Vector3.zAxis)
+	boostPad(Vector3.new(155, 0.12, -333), -Vector3.zAxis)
+	boostPad(Vector3.new(210, 0.12, -333), -Vector3.zAxis)
 	recordBoard(Vector3.new(22, 9, World.ROAD_Z + 42), -Vector3.zAxis)
 end
 

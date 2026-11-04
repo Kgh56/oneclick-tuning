@@ -202,6 +202,7 @@ function Util.DrivePath(model, points, opts)
 	local v = opts.StartSpeed or 0
 	local s = 0
 	local lastLook = nil
+	local blockedFor, honked = 0, false
 	while s < path.Length and model.Parent do
 		local dt = RunService.Heartbeat:Wait()
 		-- Tempo: Kurven langsamer, rechtzeitig bremsen
@@ -217,12 +218,32 @@ function Util.DrivePath(model, points, opts)
 		end
 		local remaining = path.Length - s
 		target = math.min(target, math.sqrt(endV * endV + 2 * decel * remaining))
+		-- Hindernis (z. B. ein Spieler auf der Straße): anhalten und einmal hupen
+		local blocked = false
+		if opts.Blocked and t1 then
+			-- Blickweite = halbe Autolänge + Bremsweg + Sicherheitsabstand
+			local range = 9 + v * v / (2 * decel * 1.6)
+			blocked = opts.Blocked(samplePath(path, s), t1, range)
+		end
+		if blocked then
+			target = 0
+			blockedFor += dt
+			if blockedFor > 0.8 and not honked and opts.OnBlocked then
+				honked = true
+				opts.OnBlocked()
+			end
+		else
+			blockedFor = 0
+			honked = false
+		end
 		if v < target then
 			v = math.min(target, v + accel * dt)
 		else
-			v = math.max(target, v - decel * dt)
+			v = math.max(target, v - decel * 1.6 * dt)
 		end
-		v = math.max(v, 0.6)
+		if not blocked then
+			v = math.max(v, 0.6)
+		end
 		s = math.min(path.Length, s + v * dt)
 		local pos = samplePath(path, s)
 		local tan = tangent(path, s) or lastLook

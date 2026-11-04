@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -37,29 +38,48 @@ local EndDrive = newRemote("EndDrive") -- Client -> Server
 local AdminAction = newRemote("AdminAction") -- Client -> Server (nur Admins)
 local Honk = newRemote("Honk") -- Client -> Server: Hupe
 local ReportRecord = newRemote("ReportRecord") -- Client -> Server: Rekordversuch
+local LevelUp = newRemote("LevelUp") -- Server -> Client
+local DailyReward = newRemote("DailyReward") -- Server -> Client
+local GarageAction = newRemote("GarageAction") -- Client -> Server
+local Travel = newRemote("Travel") -- Client -> Server
+local RaceJoin = newRemote("RaceJoin") -- Client -> Server
+local RaceLap = newRemote("RaceLap") -- Client -> Server
+local RaceGrid = newRemote("RaceGrid") -- Server -> Client: Startplatz
+local SendFeedback = newRemote("SendFeedback") -- Client -> Server: Idee/Fehler
+local FeedbackList = Instance.new("RemoteFunction") -- Client -> Server (nur Admins)
+FeedbackList.Name = "FeedbackList"
+FeedbackList.Parent = remotes
 remotes.Parent = ReplicatedStorage
 
 local function notify(player, text, kind)
 	Notify:FireClient(player, text, kind or "info")
 end
 
--- Sound am Server (alle hören ihn). key = Eintrag in Config.Sounds oder direkte ID
+-- Sound am Server (alle hören ihn). key = Name aus Config.SoundSprite oder direkte ID
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
 local function playSound(parent, key, volume, looped)
-	local id = Config.SoundId(key) or (key:find("://") and key) or nil
-	if not id or not parent then
+	if not parent then
 		return nil
 	end
-	local snd = Instance.new("Sound")
-	snd.SoundId = id
+	local snd
+	if key:find("://") then
+		snd = Instance.new("Sound")
+		snd.SoundId = key
+		snd.Looped = looped or false
+		snd.Parent = parent
+	else
+		snd = EngineSound.Make(parent, key, looped)
+	end
+	if not snd then
+		return nil
+	end
 	snd.Volume = volume or 0.7
-	snd.Looped = looped or false
 	snd.RollOffMode = Enum.RollOffMode.InverseTapered
 	snd.RollOffMinDistance = 10
 	snd.RollOffMaxDistance = 160
-	snd.Parent = parent
 	if not looped then
 		snd:Play()
-		task.delay(4, function()
+		task.delay(5, function()
 			snd:Destroy()
 		end)
 	end
@@ -107,7 +127,19 @@ local usedPlots = {} -- [index] = player
 local jobCounter = 0
 
 local function defaultData()
-	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {}, Receipts = {}, Records = {}, Found = {} }
+	return {
+		Money = Config.StartMoney,
+		Rep = 0,
+		Tunes = 0,
+		Upgrades = {},
+		Receipts = {},
+		Records = {},
+		Found = {},
+		XP = 0,
+		Daily = { Day = 0, Streak = 0 },
+		Quests = { Day = 0, List = {} },
+		Garage = { Owned = {}, Equip = {} },
+	}
 end
 
 local function loadData(player)
@@ -147,6 +179,31 @@ local function loadData(player)
 				end
 			end
 		end
+		data.XP = tonumber(res.XP) or 0
+		if type(res.Daily) == "table" then
+			data.Daily.Day = tonumber(res.Daily.Day) or 0
+			data.Daily.Streak = tonumber(res.Daily.Streak) or 0
+		end
+		if type(res.Quests) == "table" and type(res.Quests.List) == "table" then
+			data.Quests.Day = tonumber(res.Quests.Day) or 0
+			data.Quests.List = res.Quests.List
+		end
+		if type(res.Garage) == "table" then
+			if type(res.Garage.Owned) == "table" then
+				for id, v in pairs(res.Garage.Owned) do
+					if v == true and Config.GetGarageItem(id) then
+						data.Garage.Owned[id] = true
+					end
+				end
+			end
+			if type(res.Garage.Equip) == "table" then
+				for cat, id in pairs(res.Garage.Equip) do
+					if type(id) == "string" and Config.GetGarageItem(id) then
+						data.Garage.Equip[cat] = id
+					end
+				end
+			end
+		end
 		if type(res.Receipts) == "table" then
 			for _, r in ipairs(res.Receipts) do
 				if type(r) == "string" then
@@ -172,6 +229,10 @@ local function saveData(player, st)
 			Receipts = st.Data.Receipts,
 			Records = st.Data.Records,
 			Found = st.Data.Found,
+			XP = st.Data.XP,
+			Daily = st.Data.Daily,
+			Quests = st.Data.Quests,
+			Garage = st.Data.Garage,
 		})
 	end)
 	if not ok then
@@ -211,6 +272,154 @@ local function setRep(st, value)
 	st.RepValue.Value = value
 end
 
+------------------------------------------------------------------------
+-- Fortschritt: Erfahrung/Level, Tagesaufträge, tägliche Belohnung
+------------------------------------------------------------------------
+local function today()
+	return math.floor(os.time() / 86400)
+end
+
+local function syncProgress(player, st)
+	local level, into, need = Config.LevelFromXP(st.Data.XP)
+	player:SetAttribute("Level", level)
+	player:SetAttribute("XPInto", into)
+	player:SetAttribute("XPNeed", need)
+	if st.LevelValue then
+		st.LevelValue.Value = level
+	end
+end
+
+local function addXP(player, st, amount)
+	if amount <= 0 then
+		return
+	end
+	local before = Config.LevelFromXP(st.Data.XP)
+	st.Data.XP += amount
+	local after = Config.LevelFromXP(st.Data.XP)
+	if after > before then
+		local reward = Config.LevelUpMoney * after
+		setMoney(st, st.Data.Money + reward)
+		LevelUp:FireClient(player, after, reward)
+	end
+	syncProgress(player, st)
+end
+
+local function syncQuests(player, st)
+	player:SetAttribute("Quests", HttpService:JSONEncode(st.Data.Quests.List))
+end
+
+local function newQuests(st)
+	local pool = table.clone(Config.QuestPool)
+	local list = {}
+	for _ = 1, 3 do
+		local idx = math.random(1, #pool)
+		local q = table.remove(pool, idx)
+		local goal = math.random(q.Min, q.Max)
+		if q.Id == "money" then
+			goal = math.floor(goal / 500) * 500
+		end
+		table.insert(list, { Id = q.Id, Text = q.Text:format(goal), Goal = goal, Progress = 0, Done = false })
+	end
+	st.Data.Quests = { Day = today(), List = list }
+end
+
+-- Fortschritt melden: kind = "tune", "perfect", "jump", ... value = Menge oder Messwert
+local function questEvent(player, st, kind, value)
+	local changed = false
+	local allBefore = true
+	for _, q in ipairs(st.Data.Quests.List) do
+		allBefore = allBefore and q.Done
+	end
+	for _, q in ipairs(st.Data.Quests.List) do
+		if q.Id == kind and not q.Done then
+			local def
+			for _, d in ipairs(Config.QuestPool) do
+				if d.Id == kind then
+					def = d
+				end
+			end
+			if def and def.Single then
+				local ok = def.Lower and value <= q.Goal or (not def.Lower and value >= q.Goal)
+				if ok then
+					q.Progress = q.Goal
+				end
+			else
+				q.Progress = math.min(q.Goal, q.Progress + (value or 1))
+			end
+			if q.Progress >= q.Goal then
+				q.Done = true
+				setMoney(st, st.Data.Money + Config.QuestReward)
+				notify(player, ("📋 Auftrag erledigt: %s (+%s €)"):format(q.Text, Config.Format(Config.QuestReward)), "good")
+				addXP(player, st, Config.XP.Quest)
+			end
+			changed = true
+		end
+	end
+	if changed then
+		local all = true
+		for _, q in ipairs(st.Data.Quests.List) do
+			all = all and q.Done
+		end
+		if all and not allBefore then
+			setMoney(st, st.Data.Money + Config.QuestBonus)
+			notify(player, ("🏆 Alle Tagesaufträge erledigt! Bonus +%s €"):format(Config.Format(Config.QuestBonus)), "good")
+		end
+		syncQuests(player, st)
+	end
+end
+
+
+-- Garage: ausgewählte Teile des Firmenwagens
+local function equipped(st, cat)
+	local id = st.Data.Garage.Equip[cat] or Config.GarageDefaults[cat]
+	return Config.GetGarageItem(id) or Config.GetGarageItem(Config.GarageDefaults[cat])
+end
+
+local function ownsItem(st, item)
+	return item.Price == 0 or st.Data.Garage.Owned[item.Id] == true
+end
+
+local function syncGarage(player, st)
+	local equip = {}
+	for _, cat in ipairs(Config.GarageCats) do
+		equip[cat] = equipped(st, cat).Id
+	end
+	player:SetAttribute("Garage", HttpService:JSONEncode({ Owned = st.Data.Garage.Owned, Equip = equip }))
+end
+
+local function companyDef(st)
+	local neon = equipped(st, "Neon")
+	return {
+		Name = Config.CompanyCar.Name,
+		Style = equipped(st, "Form").Style,
+		Color = equipped(st, "Lack").Color,
+		RimColor = equipped(st, "Felgen").Color,
+		Underglow = neon.Color,
+		Wing = equipped(st, "Flügel").Id == "fluegel_an",
+		Hp = Config.CompanyCar.Hp,
+		Nm = Config.CompanyCar.Nm,
+	}
+end
+
+local function checkDaily(player, st)
+	local day = today()
+	if st.Data.Quests.Day ~= day or #st.Data.Quests.List == 0 then
+		newQuests(st)
+	end
+	syncQuests(player, st)
+	local d = st.Data.Daily
+	if d.Day == day then
+		return
+	end
+	d.Streak = (d.Day == day - 1) and (d.Streak + 1) or 1
+	d.Day = day
+	local idx = ((d.Streak - 1) % #Config.DailyRewards) + 1
+	local reward = Config.DailyRewards[idx]
+	setMoney(st, st.Data.Money + reward)
+	addXP(player, st, Config.XP.Daily)
+	DailyReward:FireClient(player, d.Streak, idx, reward, Config.DailyRewards)
+end
+
 -- Karosseriemitte über dem Boden (Ausstellungsautos)
 local CAR_HEIGHT = Cars.BODY_HEIGHT
 
@@ -218,18 +427,45 @@ local CAR_HEIGHT = Cars.BODY_HEIGHT
 -- Werkstatt (Grundstück)
 ------------------------------------------------------------------------
 local function buildLock(plot, bay)
-	local lock = part({
-		Name = "Gesperrt",
-		Size = Vector3.new(14, 6, 22),
-		CFrame = plot.Origin * CFrame.new(bay.X, 4, BAY_Z),
-		Color = Color3.fromRGB(200, 40, 40),
-		Material = Enum.Material.ForceField,
-		Transparency = 0.3,
+	-- Absperrung vor der Bühne: zwei Pfosten mit rot-weißer Kette und Schild
+	local m = Instance.new("Model")
+	m.Name = "Gesperrt"
+	local z = BAY_Z + 14.5
+	for _, dx in ipairs({ -5.5, 5.5 }) do
+		for k = 0, 3 do
+			part({
+				Name = "Absperrpfosten",
+				Size = Vector3.new(0.6, 0.9, 0.6),
+				CFrame = plot.Origin * CFrame.new(bay.X + dx, 0.65 + k * 0.9, z),
+				Color = (k % 2 == 0) and Color3.fromRGB(220, 30, 30) or Color3.new(1, 1, 1),
+				CanCollide = false,
+				Parent = m,
+			})
+		end
+		part({ Name = "Pfostenfuss", Size = Vector3.new(1.4, 0.2, 1.4), CFrame = plot.Origin * CFrame.new(bay.X + dx, 0.32, z), Color = Color3.fromRGB(40, 40, 44), CanCollide = false, Parent = m })
+	end
+	for k = 0, 9 do
+		part({
+			Name = "Kette",
+			Size = Vector3.new(1.1, 0.25, 0.25),
+			CFrame = plot.Origin * CFrame.new(bay.X - 4.95 + k * 1.1, 2.9 - math.sin(k / 9 * math.pi) * 0.5, z),
+			Color = (k % 2 == 0) and Color3.fromRGB(220, 30, 30) or Color3.new(1, 1, 1),
+			CanCollide = false,
+			Parent = m,
+		})
+	end
+	local signPart = part({
+		Name = "Sperrschild",
+		Size = Vector3.new(4, 1.6, 0.15),
+		CFrame = plot.Origin * CFrame.new(bay.X, 2.0, z + 0.2),
+		Color = Color3.fromRGB(220, 30, 30),
 		CanCollide = false,
-		Parent = plot.Model,
+		Parent = m,
 	})
-	billboard(lock, "🔒 Hebebühne " .. bay.Index .. "\nim Shop freischalten", 1)
-	bay.Lock = lock
+	textGui(signPart, Enum.NormalId.Back, "GESPERRT", Color3.new(1, 1, 1), Color3.fromRGB(220, 30, 30))
+	m.Parent = plot.Model
+	billboard(signPart, "🔒 Hebebühne " .. bay.Index .. "\nim Shop freischalten", 3)
+	bay.Lock = m
 end
 
 local function buildDyno(plot, owned)
@@ -327,6 +563,12 @@ local function buildPlot(player, st, index)
 	p({ Name = "StreifenR", Size = Vector3.new(0.2, 0.5, 64), CFrame = at(37.85, 7, 0), Color = accent, Material = Enum.Material.Neon, CanCollide = false })
 
 	local backSign = p({ Name = "Wandschild", Size = Vector3.new(40, 4, 0.2), CFrame = at(0, 13, -31.85), Color = Color3.fromRGB(20, 20, 25), CanCollide = false })
+	-- Werkstatt-Geräusche (Schlagschrauber, Klappern) leise in der Halle
+	local ambience = playSound(backSign, "Werkstatt", 0.35, true)
+	if ambience then
+		ambience.RollOffMaxDistance = 70
+		ambience:Play()
+	end
 	textGui(backSign, Enum.NormalId.Back, "ECU · STAGE 1 · 2 · 3 · DYNO", accent, Color3.fromRGB(20, 20, 25))
 
 	-- Front: Pfeiler und beleuchtetes Firmenschild
@@ -453,17 +695,17 @@ local function buildPlot(player, st, index)
 		textGui(poster, ps[3], ps[4], accent, Color3.fromRGB(20, 20, 25))
 	end
 
-	-- Büro-Ecke: Schreibtisch mit Laptop = Upgrade-Shop
-	p({ Name = "Tisch", Size = Vector3.new(7, 0.4, 3.5), CFrame = at(-31, 3.2, 24), Color = Color3.fromRGB(110, 75, 50), Material = Enum.Material.Wood })
-	for _, dx in ipairs({ -3.2, 3.2 }) do
-		p({ Name = "Tischbein", Size = Vector3.new(0.3, 3, 3.2), CFrame = at(-31 + dx, 1.6, 24), Color = dark, Material = Enum.Material.Metal })
+	-- Büro-Ecke an der linken Wand (außerhalb der Fahrwege): Schreibtisch mit Laptop = Upgrade-Shop
+	p({ Name = "Tisch", Size = Vector3.new(3.5, 0.4, 7), CFrame = at(-36, 3.2, 25), Color = Color3.fromRGB(110, 75, 50), Material = Enum.Material.Wood })
+	for _, dz in ipairs({ -3.2, 3.2 }) do
+		p({ Name = "Tischbein", Size = Vector3.new(3.2, 3, 0.3), CFrame = at(-36, 1.6, 25 + dz), Color = dark, Material = Enum.Material.Metal })
 	end
-	p({ Name = "Stuhl", Size = Vector3.new(2, 0.5, 2), CFrame = at(-31, 2, 27), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
-	p({ Name = "Lehne", Size = Vector3.new(2, 2.4, 0.4), CFrame = at(-31, 3.4, 28), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
-	local laptop = p({ Name = "Laptop", Size = Vector3.new(2.4, 0.15, 1.6), CFrame = at(-31, 3.48, 24.3), Color = Color3.fromRGB(30, 30, 35), Material = Enum.Material.Metal })
-	local lid = p({ Name = "Bildschirm", Size = Vector3.new(2.4, 1.6, 0.1), CFrame = at(-31, 4.3, 23.5) * CFrame.Angles(math.rad(-12), 0, 0), Color = Color3.fromRGB(30, 30, 35) })
-	textGui(lid, Enum.NormalId.Back, "ECU", Color3.fromRGB(80, 200, 255), Color3.fromRGB(10, 20, 30))
-	Util.light(lid, "SurfaceLight", { Face = Enum.NormalId.Back, Range = 6, Brightness = 1, Color = Color3.fromRGB(80, 200, 255) })
+	p({ Name = "Stuhl", Size = Vector3.new(2, 0.5, 2), CFrame = at(-33.2, 2, 25), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
+	p({ Name = "Lehne", Size = Vector3.new(0.4, 2.4, 2), CFrame = at(-32.2, 3.4, 25), Color = Color3.fromRGB(25, 25, 28), Material = Enum.Material.Fabric })
+	local laptop = p({ Name = "Laptop", Size = Vector3.new(1.6, 0.15, 2.4), CFrame = at(-35.7, 3.48, 25), Color = Color3.fromRGB(30, 30, 35), Material = Enum.Material.Metal })
+	local lid = p({ Name = "Bildschirm", Size = Vector3.new(0.1, 1.6, 2.4), CFrame = at(-36.6, 4.3, 25) * CFrame.Angles(0, 0, math.rad(12)), Color = Color3.fromRGB(30, 30, 35) })
+	textGui(lid, Enum.NormalId.Right, "ECU", Color3.fromRGB(80, 200, 255), Color3.fromRGB(10, 20, 30))
+	Util.light(lid, "SurfaceLight", { Face = Enum.NormalId.Right, Range = 6, Brightness = 1, Color = Color3.fromRGB(80, 200, 255) })
 	billboard(laptop, "🛠️ Upgrade-Shop", 3)
 
 	local shopPrompt = Instance.new("ProximityPrompt")
@@ -677,6 +919,32 @@ local function pts(plot, list)
 	return out
 end
 
+-- Steht ein Spieler vor dem fahrenden Kundenauto?
+local function playerInWay(pos, dir, range)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local char = plr.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local rel = hrp.Position - pos
+			local fwd = rel:Dot(dir)
+			if fwd > -2 and fwd < (range or 14) and math.abs(rel.Y) < 7 and (rel - dir * fwd).Magnitude < 4.5 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function driveOpts(car, opts)
+	opts.Blocked = playerInWay
+	opts.OnBlocked = function()
+		if car.PrimaryPart then
+			playSound(car.PrimaryPart, "Hupe", 0.6)
+		end
+	end
+	return opts
+end
+
 -- In der Halle langsam, auf der Straße zügig
 local function hallLimit(plot)
 	return function(pos)
@@ -691,8 +959,11 @@ local function hallLimit(plot)
 end
 
 -- Kunde steigt aus und geht zu seinem Warteplatz
-local function customerGetsOut(plot, bay, customer)
+local function customerGetsOut(plot, bay, customer, car)
 	local door = plot.Origin * CFrame.new(bay.X - 4.6, 0.2, BAY_Z + 13.5)
+	if car and car.PrimaryPart then
+		playSound(car.PrimaryPart, "Tuer", 0.8)
+	end
 	local spot = plot.Origin * CFrame.new(bay.X - 7.4, 0.2, BAY_Z + 18)
 	Npc.StandAt(customer, CFrame.lookAt(door.Position, spot.Position), plot.Model)
 	task.wait(0.4)
@@ -712,6 +983,9 @@ local function customerGetsIn(plot, bay, customer, car)
 		task.wait(0.3)
 	end
 	Npc.SeatInCar(customer, car)
+	if car.PrimaryPart then
+		playSound(car.PrimaryPart, "Tuer", 0.8)
+	end
 	task.wait(0.5)
 end
 
@@ -751,7 +1025,7 @@ local function spawnCustomer(player, st, bay)
 	car.Parent = plot.Model
 
 	task.spawn(function()
-		Util.DrivePath(car, route, { Speed = 22, StartSpeed = 18, Limit = hallLimit(plot) })
+		Util.DrivePath(car, route, driveOpts(car, { Speed = 22, StartSpeed = 18, Limit = hallLimit(plot) }))
 		if not car.Parent then
 			return
 		end
@@ -780,7 +1054,7 @@ local function spawnCustomer(player, st, bay)
 		carInfo.OnLift = true
 		-- Kunde steigt aus und geht zu seinem Warteplatz
 		if customer then
-			task.spawn(customerGetsOut, plot, bay, customer)
+			task.spawn(customerGetsOut, plot, bay, customer, car)
 		end
 		carInfo.Ready = true
 	end)
@@ -824,7 +1098,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			{ bx + (dx - bx) * 0.8, FLOOR_Y, 20 },
 			{ dx, FLOOR_Y, 26 },
 			{ dx, FLOOR_Y, 32 },
-		}), { Speed = 5, Reverse = true, Limit = limit })
+		}), driveOpts(car, { Speed = 5, Reverse = true, Limit = limit }))
 		task.wait(0.5)
 		-- vorwärts langsam auf die Rollen
 		Util.DrivePath(car, pts(plot, {
@@ -832,7 +1106,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			{ dx, FLOOR_Y, 27 },
 			{ dx, DYNO_Y, 22.5 },
 			{ dx, DYNO_Y, DYNO_POS.Z },
-		}), { Speed = 3 })
+		}), driveOpts(car, { Speed = 3 }))
 		local screen = plot.DynoScreen
 		-- Rollen drehen hier; die Räder dreht jeder Client (Attribut DynoSpin)
 		local spinning = {}
@@ -889,7 +1163,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			{ dx - 5, ROAD_Y, 44 },
 			{ dx - 12, ROAD_Y, LANE_Z - 1 },
 			{ dx - 22, ROAD_Y, LANE_Z },
-		}), { Speed = 5, Reverse = true, Limit = limit })
+		}), driveOpts(car, { Speed = 5, Reverse = true, Limit = limit }))
 		bx = dx
 	else
 		-- rückwärts von der Bühne und im Bogen auf die Straße setzen
@@ -902,7 +1176,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			{ bx - 5, ROAD_Y, 44 },
 			{ bx - 12, ROAD_Y, LANE_Z - 1 },
 			{ bx - 22, ROAD_Y, LANE_Z },
-		}), { Speed = 5, Reverse = true, Limit = limit })
+		}), driveOpts(car, { Speed = 5, Reverse = true, Limit = limit }))
 	end
 	task.wait(0.5)
 	-- vorwärts losfahren auf der rechten Spur
@@ -911,7 +1185,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		{ bx - 8, ROAD_Y, LANE_Z },
 		{ bx + 60, ROAD_Y, LANE_Z },
 		{ bx + 180, ROAD_Y, LANE_Z },
-	}), { Speed = 26, EndSpeed = 26, Accel = 6 })
+	}), driveOpts(car, { Speed = 26, EndSpeed = 26, Accel = 6 }))
 	car:Destroy()
 	bay.Car = nil
 end
@@ -987,6 +1261,17 @@ local function completeCar(player, st, bay, score, byAzubi)
 	setMoney(st, st.Data.Money + pay)
 	setRep(st, math.max(0, st.Data.Rep + repDelta))
 	st.Data.Tunes += 1
+	-- Erfahrung und Tagesaufträge
+	if byAzubi then
+		addXP(player, st, Config.XP.Azubi)
+	else
+		addXP(player, st, Config.XP.Tune + Config.XP.TuneStage * carInfo.Stage + (score >= 0.95 and Config.XP.Perfect or 0))
+		questEvent(player, st, "tune", 1)
+		if score >= 0.95 then
+			questEvent(player, st, "perfect", 1)
+		end
+	end
+	questEvent(player, st, "money", pay)
 
 	if byAzubi then
 		notify(player, ("🧑‍🔧 Azubi hat den %s getunt: +%s €"):format(def.Name, Config.Format(pay)), "good")
@@ -1060,6 +1345,11 @@ startJob = function(player, st, bay, carInfo)
 	connectCable(bay, carInfo)
 	setCartText(bay, "ECU lesen …")
 	task.spawn(animateLift, bay, LIFT_UP, 2.5)
+	task.delay(2.6, function()
+		if bay.CartAttachment then
+			playSound(bay.CartAttachment.Parent, "Schlagschrauber", 0.5)
+		end
+	end)
 
 	local def = carInfo.Def
 	OpenTuning:FireClient(player, {
@@ -1220,6 +1510,8 @@ local function endDrive(player, st, reason)
 		local driven = os.clock() - drive.Started
 		if drive.Tip and drive.Tip > 0 and driven >= Config.TestDriveMinSeconds then
 			setMoney(st, st.Data.Money + drive.Tip)
+			addXP(player, st, Config.XP.TestDrive)
+			questEvent(player, st, "testdrive", 1)
 			notify(player, ("🏁 Der Kunde ist begeistert! Trinkgeld: +%s €"):format(Config.Format(drive.Tip)), "good")
 		elseif reason == "time" then
 			notify(player, "Die Zeit ist um – Probefahrt beendet.", "info")
@@ -1339,7 +1631,7 @@ RequestCompanyCar.OnServerEvent:Connect(function(player)
 	end
 	st.LastCarRequest = now
 	local hp = Config.CompanyCar.Hp + 120 * (maxStage(st) - 1)
-	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company", hasUpgrade(st, "PopBang"))
+	spawnDrivable(player, st, companyDef(st), hp, st.Plot.CarSpot, "company", hasUpgrade(st, "PopBang"))
 end)
 
 ------------------------------------------------------------------------
@@ -1623,6 +1915,9 @@ ReportRecord.OnServerEvent:Connect(function(player, kind, value)
 		return -- nur aus dem Auto heraus
 	end
 	local def = Config.Records[kind]
+	if kind == "jump" or kind == "speed" or kind == "slalom" then
+		questEvent(player, st, kind, value)
+	end
 	-- Bestenliste dieser Sitzung
 	local list = sessionBest[kind] or {}
 	sessionBest[kind] = list
@@ -1650,6 +1945,7 @@ ReportRecord.OnServerEvent:Connect(function(player, kind, value)
 		if not st.RecordRewardAt[kind] or now - st.RecordRewardAt[kind] > 30 then
 			st.RecordRewardAt[kind] = now
 			setMoney(st, st.Data.Money + def.Reward)
+			addXP(player, st, Config.XP.Record)
 			notify(player, ("🏆 Neuer persönlicher Rekord – %s: %s (+%s €)"):format(def.Name, formatValue(kind, value), Config.Format(def.Reward)), "good")
 		end
 		local rstore = recordStores[kind]
@@ -1724,6 +2020,7 @@ task.spawn(function()
 						syncFound(player, st)
 						local n = #st.Data.Found
 						setMoney(st, st.Data.Money + Config.WrenchReward)
+						addXP(player, st, Config.XP.Wrench)
 						notify(player, ("🔧 Goldener Schraubenschlüssel %d/%d gefunden! +%s €"):format(n, #WRENCH_SPOTS, Config.Format(Config.WrenchReward)), "good")
 						if n == #WRENCH_SPOTS then
 							setMoney(st, st.Data.Money + Config.WrenchBonus)
@@ -1731,6 +2028,267 @@ task.spawn(function()
 						end
 					end
 				end
+			end
+		end
+	end
+end)
+
+------------------------------------------------------------------------
+-- Ideen-Briefkasten: Spieler schicken Ideen und Fehler, Admins lesen sie
+------------------------------------------------------------------------
+local TextService = game:GetService("TextService")
+local feedbackStore
+pcall(function()
+	feedbackStore = DataStoreService:GetDataStore("ChiptuningFeedback_v1")
+end)
+local sessionFeedback = {}
+
+SendFeedback.OnServerEvent:Connect(function(player, text)
+	local st = States[player]
+	if not st or type(text) ~= "string" then
+		return
+	end
+	text = text:sub(1, 400)
+	if #text:gsub("%s", "") < 3 then
+		return
+	end
+	local now = os.clock()
+	if st.LastFeedback and now - st.LastFeedback < 30 then
+		notify(player, "Bitte warte kurz, bevor du noch eine Nachricht schickst.", "bad")
+		return
+	end
+	st.LastFeedback = now
+	-- Text durch den Roblox-Filter schicken
+	local filtered = text
+	pcall(function()
+		local result = TextService:FilterStringAsync(text, player.UserId)
+		filtered = result:GetNonChatStringForBroadcastAsync()
+	end)
+	local entry = { Name = player.Name, Text = filtered, Time = os.time(), Level = Config.LevelFromXP(st.Data.XP) }
+	table.insert(sessionFeedback, 1, entry)
+	if feedbackStore then
+		task.spawn(pcall, function()
+			feedbackStore:UpdateAsync("liste", function(old)
+				old = type(old) == "table" and old or {}
+				table.insert(old, 1, entry)
+				while #old > 150 do
+					table.remove(old)
+				end
+				return old
+			end)
+		end)
+	end
+	print(("[Feedback] %s: %s"):format(player.Name, filtered))
+	notify(player, "💌 Danke für deine Idee! Wir lesen alles.", "good")
+end)
+
+FeedbackList.OnServerInvoke = function(player)
+	if not player:GetAttribute("Admin") then
+		return {}
+	end
+	local list
+	if feedbackStore then
+		pcall(function()
+			list = feedbackStore:GetAsync("liste")
+		end)
+	end
+	if type(list) ~= "table" or #list == 0 then
+		list = sessionFeedback
+	end
+	return list
+end
+
+------------------------------------------------------------------------
+-- Garage, Schnellreise, Rennen
+------------------------------------------------------------------------
+GarageAction.OnServerEvent:Connect(function(player, id)
+	local st = States[player]
+	local item = type(id) == "string" and Config.GetGarageItem(id)
+	if not st or not item then
+		return
+	end
+	if not ownsItem(st, item) then
+		if st.Data.Money < item.Price then
+			notify(player, "Nicht genug Geld!", "bad")
+			return
+		end
+		setMoney(st, st.Data.Money - item.Price)
+		st.Data.Garage.Owned[item.Id] = true
+		notify(player, ("✔ Gekauft: %s (%s)"):format(item.Name, item.Cat), "good")
+	end
+	st.Data.Garage.Equip[item.Cat] = item.Id
+	syncGarage(player, st)
+	-- Firmenwagen neu bauen, falls er gerade steht
+	if st.Drive and st.Drive.Mode == "company" then
+		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		local seated = hum and hum.SeatPart and hum.SeatPart:IsDescendantOf(st.Drive.Car)
+		local cf = seated and st.Drive.Car.PrimaryPart.CFrame + Vector3.new(0, 0.3, 0) or st.Plot.CarSpot
+		local hp = Config.CompanyCar.Hp + 120 * (maxStage(st) - 1)
+		task.spawn(spawnDrivable, player, st, companyDef(st), hp, cf, "company", hasUpgrade(st, "PopBang"))
+	end
+end)
+
+Travel.OnServerEvent:Connect(function(player, dest)
+	local st = States[player]
+	if not st or type(dest) ~= "string" then
+		return
+	end
+	if st.Drive and st.Drive.Mode == "test" then
+		notify(player, "Erst die Probefahrt beenden.", "bad")
+		return
+	end
+	local now = os.clock()
+	if st.LastTravel and now - st.LastTravel < 2 then
+		return
+	end
+	st.LastTravel = now
+	local target
+	if dest == "werkstatt" then
+		target = st.Plot.Origin.Position + Vector3.new(0, 4, 28)
+	else
+		for _, tp in ipairs(Config.TravelPoints) do
+			if tp.Id == dest then
+				target = tp.Pos
+			end
+		end
+	end
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not target or not hum then
+		return
+	end
+	hum.Sit = false
+	pcall(function()
+		player:RequestStreamAroundAsync(target, 3)
+	end)
+	task.wait(0.1)
+	char:PivotTo(CFrame.new(target))
+end)
+
+-- Rennen auf der Teststrecke: beitreten im Auto, Countdown, 2 Runden, Preise
+local Race = { Phase = "idle", Racers = {}, Order = {}, LobbyEnd = 0, StartAt = 0, Deadline = 0 }
+
+local function notifyAll(text, kind)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		notify(plr, text, kind)
+	end
+end
+
+local function setRacePhase(phase)
+	Race.Phase = phase
+	ReplicatedStorage:SetAttribute("RacePhase", phase)
+	ReplicatedStorage:SetAttribute("RaceStartAt", Race.StartAt)
+	ReplicatedStorage:SetAttribute("RaceLaps", Config.RaceLaps)
+end
+setRacePhase("idle")
+
+RaceJoin.OnServerEvent:Connect(function(player)
+	local st = States[player]
+	if not st or not st.Drive then
+		notify(player, "Für ein Rennen musst du im Auto sitzen.", "bad")
+		return
+	end
+	if Race.Phase == "running" or Race.Phase == "countdown" then
+		notify(player, "Gerade läuft ein Rennen – gleich geht es wieder los!", "bad")
+		return
+	end
+	if Race.Racers[player] then
+		return
+	end
+	Race.Racers[player] = { Laps = 0, LastLap = 0 }
+	player:SetAttribute("Racing", true)
+	if Race.Phase == "idle" then
+		Race.LobbyEnd = os.clock() + Config.RaceLobbySeconds
+		Race.Order = {}
+		setRacePhase("lobby")
+		notifyAll(("🏁 %s startet ein Rennen! In %d s geht es los – im Auto auf „🏁 Rennen“ drücken."):format(player.DisplayName, Config.RaceLobbySeconds), "info")
+	else
+		notify(player, "🏁 Du bist dabei! Das Rennen startet gleich.", "good")
+	end
+end)
+
+RaceLap.OnServerEvent:Connect(function(player, laps)
+	local r = Race.Racers[player]
+	local st = States[player]
+	if not r or not st or Race.Phase ~= "running" or type(laps) ~= "number" then
+		return
+	end
+	local now = os.clock()
+	if laps ~= r.Laps + 1 or now - r.LastLap < 12 then
+		return
+	end
+	r.Laps = laps
+	r.LastLap = now
+	if laps >= Config.RaceLaps and not r.Place then
+		table.insert(Race.Order, player)
+		r.Place = #Race.Order
+		local prize = Config.RacePrizes[r.Place] or Config.RaceFinishPrize
+		setMoney(st, st.Data.Money + prize)
+		addXP(player, st, r.Place == 1 and Config.XP.RaceWin or Config.XP.RaceFinish)
+		questEvent(player, st, "race", 1)
+		local t = workspace:GetServerTimeNow() - Race.StartAt
+		notifyAll(("🏁 %s: Platz %d in %.2f s (+%s €)"):format(player.DisplayName, r.Place, t, Config.Format(prize)), "good")
+		if r.Place == 1 then
+			Race.Deadline = math.min(Race.Deadline, os.clock() + 45)
+		end
+	end
+end)
+
+local function endRace()
+	for plr in pairs(Race.Racers) do
+		if plr.Parent then
+			plr:SetAttribute("Racing", nil)
+		end
+	end
+	Race.Racers = {}
+	setRacePhase("idle")
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.25)
+		local now = os.clock()
+		if Race.Phase == "lobby" and now >= Race.LobbyEnd then
+			local i = 0
+			for plr in pairs(Race.Racers) do
+				local st = States[plr]
+				if plr.Parent and st and st.Drive then
+					i += 1
+					RaceGrid:FireClient(plr, World.TrackStart(i))
+				else
+					Race.Racers[plr] = nil
+					if plr.Parent then
+						plr:SetAttribute("Racing", nil)
+					end
+				end
+			end
+			if i == 0 then
+				endRace()
+			else
+				Race.StartAt = workspace:GetServerTimeNow() + 4.5
+				Race.Deadline = now + 4.5 + 240
+				setRacePhase("countdown")
+			end
+		elseif Race.Phase == "countdown" and workspace:GetServerTimeNow() >= Race.StartAt then
+			setRacePhase("running")
+		elseif Race.Phase == "running" then
+			local allDone = true
+			for plr, r in pairs(Race.Racers) do
+				local st = States[plr]
+				if not plr.Parent or not st or not st.Drive then
+					Race.Racers[plr] = nil
+					if plr.Parent then
+						plr:SetAttribute("Racing", nil)
+					end
+				elseif not r.Place then
+					allDone = false
+				end
+			end
+			if allDone or now >= Race.Deadline or next(Race.Racers) == nil then
+				if #Race.Order > 0 then
+					notifyAll(("🏆 Rennen beendet! Sieger: %s"):format(Race.Order[1].DisplayName), "good")
+				end
+				endRace()
 			end
 		end
 	end
@@ -1815,6 +2373,10 @@ local function onPlayerAdded(player)
 	rep.Name = "Ruf"
 	rep.Value = data.Rep
 	rep.Parent = leaderstats
+	local levelValue = Instance.new("IntValue")
+	levelValue.Name = "Level"
+	levelValue.Value = Config.LevelFromXP(data.XP)
+	levelValue.Parent = leaderstats
 	leaderstats.Parent = player
 
 	for id in pairs(data.Upgrades) do
@@ -1826,6 +2388,7 @@ local function onPlayerAdded(player)
 		CanSave = canSave,
 		MoneyValue = money,
 		RepValue = rep,
+		LevelValue = levelValue,
 		Job = nil,
 		Passes = {},
 		NextCustomer = os.clock() + 3,
@@ -1841,6 +2404,13 @@ local function onPlayerAdded(player)
 	st.Plot = buildPlot(player, st, index)
 	States[player] = st
 	syncFound(player, st)
+	syncProgress(player, st)
+	syncGarage(player, st)
+	task.delay(3, function()
+		if States[player] == st then
+			checkDaily(player, st)
+		end
+	end)
 	task.spawn(checkPasses, player, st)
 
 	if player.Character then

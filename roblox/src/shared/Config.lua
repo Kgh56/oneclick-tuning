@@ -4,6 +4,10 @@
 local Config = {}
 
 Config.StartMoney = 300
+
+-- Demo-Hinweis beim Start (auf false setzen, wenn das Spiel fertig ist)
+Config.ShowDemoNotice = true
+Config.DemoText = "🚧 DEMO-VERSION 🚧\n\nChiptuning-Firma ist noch in Entwicklung und kann Fehler haben.\n\nDeine Ideen und Verbesserungsvorschläge sind herzlich willkommen! Schick sie uns jederzeit über den Knopf „💡 Ideen“."
 Config.DataStoreName = "ChiptuningFirma_v1"
 Config.MaxPlots = 6 -- in den Spieleinstellungen "Max Players" auf 6 stellen
 
@@ -104,26 +108,55 @@ Config.LaunchRpm = 4800
 
 ------------------------------------------------------------------------
 -- SOUNDS
--- Die Dateien aus dem Ordner roblox/sounds bei Roblox hochladen
--- (Creator Hub → Entwicklung → Audio, oder in Studio über den Asset Manager)
--- und hier die Zahlen-IDs eintragen. Leer = Sound ist aus.
+-- EINFACH: Die Datei roblox/sounds/alle_sounds.ogg einmal bei Roblox
+-- hochladen (Creator Hub → Entwicklung → Audio, oder in Studio über den
+-- Asset Manager) und die Zahlen-ID hier bei SoundFile eintragen. Fertig –
+-- alle 21 Sounds kommen aus dieser einen Datei.
 ------------------------------------------------------------------------
+Config.SoundFile = "" -- z. B. "1234567890"
+
+-- Inhalt der Sammeldatei (von tools/make_sounds.py erzeugt):
+-- Name = { Start in s, Länge in s, Schleife }
+Config.SoundSprite = {
+	MotorTief = { 0.3, 2.0, true },
+	MotorHoch = { 2.6, 2.0, true },
+	Turbo = { 4.9, 2.0, true },
+	Reifen = { 7.2, 2.0, true },
+	Hydraulik = { 9.5, 2.0, true },
+	Umgebung = { 11.8, 24.0, true },
+	Werkstatt = { 36.1, 12.0, true },
+	Abblasen = { 48.4, 0.75, false },
+	Fehlzuendung = { 49.45, 0.9, false },
+	Hupe = { 50.65, 0.75, false },
+	Kasse = { 51.7, 0.9, false },
+	LevelUp = { 52.9, 1.3, false },
+	Klick = { 54.5, 0.06, false },
+	PiepKurz = { 54.86, 0.25, false },
+	PiepLang = { 55.41, 0.7, false },
+	Jubel = { 56.41, 4.0, false },
+	Tuer = { 60.71, 0.45, false },
+	Aufprall = { 61.46, 0.9, false },
+	Schluessel = { 62.66, 0.9, false },
+	Blitzer = { 63.86, 0.7, false },
+	Schlagschrauber = { 64.86, 1.1, false },
+}
+
+-- Optional: einzelne Dateien statt der Sammeldatei (leer = Sammeldatei)
 Config.Sounds = {
-	MotorTief = "", -- motor_tief.ogg   (Motor unten, Leerlauf)
-	MotorHoch = "", -- motor_hoch.ogg   (Motor hohe Drehzahl)
-	Turbo = "", -- turbo.ogg            (Turbo-Pfeifen)
-	Abblasen = "", -- abblasen.ogg      (Abblasventil beim Schalten)
-	Fehlzuendung = "", -- fehlzuendung.ogg (Knallen aus dem Auspuff)
-	Reifen = "", -- reifen.ogg          (Reifenquietschen)
-	Hydraulik = "", -- hydraulik.ogg    (Hebebühne)
-	Umgebung = "", -- umgebung.ogg      (Wind und Vögel)
-	Hupe = "", -- hupe.ogg              (Hupe, Taste H)
+	MotorTief = "",
+	MotorHoch = "",
+	Turbo = "",
+	Abblasen = "",
+	Fehlzuendung = "",
+	Reifen = "",
+	Hydraulik = "",
+	Umgebung = "",
+	Hupe = "",
 }
 Config.SoundVolume = 1 -- Gesamtlautstärke der Fahrzeuge
 
 -- Wandelt eine eingetragene ID in "rbxassetid://..." um (nil = nicht gesetzt)
-function Config.SoundId(key)
-	local v = Config.Sounds[key]
+local function toAsset(v)
 	if v == nil or v == "" or v == 0 then
 		return nil
 	end
@@ -132,6 +165,21 @@ function Config.SoundId(key)
 		return "rbxassetid://" .. v
 	end
 	return v
+end
+
+-- Einzelne Datei für diesen Sound (nil = nicht gesetzt)
+function Config.SoundId(key)
+	return toAsset(Config.Sounds[key])
+end
+
+-- Sammeldatei
+function Config.SoundFileId()
+	return toAsset(Config.SoundFile)
+end
+
+-- Gibt es diesen Sound (einzeln oder in der Sammeldatei)?
+function Config.HasSound(key)
+	return Config.SoundId(key) ~= nil or (Config.SoundFileId() ~= nil and Config.SoundSprite[key] ~= nil)
 end
 
 ------------------------------------------------------------------------
@@ -157,6 +205,112 @@ Config.Records = {
 Config.RecordOrder = { "speed", "jump", "slalom", "lap" }
 Config.WrenchReward = 1000 -- pro goldenem Schraubenschlüssel
 Config.WrenchBonus = 25000 -- wenn alle gefunden sind
+
+------------------------------------------------------------------------
+-- LEVEL, BELOHNUNGEN, AUFTRÄGE
+------------------------------------------------------------------------
+-- Erfahrungspunkte für Level n -> n+1
+function Config.XPForLevel(n)
+	return 80 + n * 40
+end
+
+-- Level und Fortschritt aus Gesamt-XP
+function Config.LevelFromXP(xp)
+	local level = 1
+	local need = Config.XPForLevel(1)
+	while xp >= need do
+		xp -= need
+		level += 1
+		need = Config.XPForLevel(level)
+	end
+	return level, xp, need
+end
+
+Config.XP = { Tune = 20, TuneStage = 10, Perfect = 10, Azubi = 5, TestDrive = 10, Record = 25, Wrench = 30, Quest = 100, RaceWin = 80, RaceFinish = 25, Daily = 20 }
+Config.LevelUpMoney = 750 -- x Level
+
+-- Tägliche Belohnung (Tag 1..7, danach wieder von vorn)
+Config.DailyRewards = { 1000, 1500, 2000, 3000, 4000, 5000, 15000 }
+
+-- Tagesaufträge: drei zufällige pro Tag
+Config.QuestPool = {
+	{ Id = "tune", Text = "Tune %d Autos", Min = 4, Max = 8 },
+	{ Id = "perfect", Text = "Schaffe %d perfekte Abstimmungen", Min = 2, Max = 4 },
+	{ Id = "jump", Text = "Spring %d m weit", Min = 25, Max = 55, Single = true },
+	{ Id = "speed", Text = "Fahr %d km/h am Blitzer", Min = 140, Max = 230, Single = true },
+	{ Id = "testdrive", Text = "Mach %d Probefahrten", Min = 2, Max = 3 },
+	{ Id = "slalom", Text = "Fahr den Slalom unter %d s", Min = 35, Max = 50, Single = true, Lower = true },
+	{ Id = "race", Text = "Fahr %d Rennen zu Ende", Min = 1, Max = 2 },
+	{ Id = "money", Text = "Verdien %d € mit Aufträgen", Min = 2000, Max = 6000 },
+}
+Config.QuestReward = 2500
+Config.QuestBonus = 6000 -- alle drei erledigt
+
+------------------------------------------------------------------------
+-- GARAGE: Firmenwagen gestalten
+------------------------------------------------------------------------
+Config.GarageItems = {
+	-- Lack
+	{ Id = "lack_orange", Cat = "Lack", Name = "Orange", Price = 0, Color = Color3.fromRGB(255, 140, 0) },
+	{ Id = "lack_rot", Cat = "Lack", Name = "Rennrot", Price = 1500, Color = Color3.fromRGB(200, 15, 25) },
+	{ Id = "lack_schwarz", Cat = "Lack", Name = "Tiefschwarz", Price = 1500, Color = Color3.fromRGB(18, 18, 20) },
+	{ Id = "lack_weiss", Cat = "Lack", Name = "Perlweiß", Price = 1500, Color = Color3.fromRGB(240, 240, 238) },
+	{ Id = "lack_blau", Cat = "Lack", Name = "Racing-Blau", Price = 1500, Color = Color3.fromRGB(20, 70, 200) },
+	{ Id = "lack_gruen", Cat = "Lack", Name = "British Green", Price = 2000, Color = Color3.fromRGB(10, 80, 45) },
+	{ Id = "lack_gelb", Cat = "Lack", Name = "Signalgelb", Price = 2000, Color = Color3.fromRGB(255, 205, 0) },
+	{ Id = "lack_lila", Cat = "Lack", Name = "Violett", Price = 2500, Color = Color3.fromRGB(110, 40, 170) },
+	{ Id = "lack_mint", Cat = "Lack", Name = "Mint", Price = 2500, Color = Color3.fromRGB(110, 230, 190) },
+	{ Id = "lack_silber", Cat = "Lack", Name = "Silber", Price = 2000, Color = Color3.fromRGB(175, 180, 188) },
+	-- Felgen
+	{ Id = "felge_chrom", Cat = "Felgen", Name = "Chrom", Price = 0, Color = Color3.fromRGB(205, 208, 215) },
+	{ Id = "felge_schwarz", Cat = "Felgen", Name = "Schwarz matt", Price = 1000, Color = Color3.fromRGB(30, 30, 33) },
+	{ Id = "felge_gold", Cat = "Felgen", Name = "Gold", Price = 2500, Color = Color3.fromRGB(215, 170, 50) },
+	{ Id = "felge_rot", Cat = "Felgen", Name = "Rot", Price = 1500, Color = Color3.fromRGB(200, 25, 30) },
+	{ Id = "felge_bronze", Cat = "Felgen", Name = "Bronze", Price = 2000, Color = Color3.fromRGB(150, 100, 50) },
+	-- Unterbodenbeleuchtung
+	{ Id = "neon_aus", Cat = "Neon", Name = "Aus", Price = 0 },
+	{ Id = "neon_blau", Cat = "Neon", Name = "Blau", Price = 3000, Color = Color3.fromRGB(40, 120, 255) },
+	{ Id = "neon_pink", Cat = "Neon", Name = "Pink", Price = 3000, Color = Color3.fromRGB(255, 40, 180) },
+	{ Id = "neon_gruen", Cat = "Neon", Name = "Grün", Price = 3000, Color = Color3.fromRGB(40, 255, 100) },
+	{ Id = "neon_orange", Cat = "Neon", Name = "Orange", Price = 3000, Color = Color3.fromRGB(255, 130, 20) },
+	-- Heckflügel
+	{ Id = "fluegel_aus", Cat = "Flügel", Name = "Ohne", Price = 0 },
+	{ Id = "fluegel_an", Cat = "Flügel", Name = "GT-Flügel", Price = 4000 },
+	-- Karosserie
+	{ Id = "form_coupe", Cat = "Form", Name = "Coupé", Price = 0, Style = "coupe" },
+	{ Id = "form_hatch", Cat = "Form", Name = "Hot Hatch", Price = 5000, Style = "hatch" },
+	{ Id = "form_sedan", Cat = "Form", Name = "Limousine", Price = 6000, Style = "sedan" },
+	{ Id = "form_wagon", Cat = "Form", Name = "Kombi", Price = 6000, Style = "wagon" },
+	{ Id = "form_super", Cat = "Form", Name = "Supersportler", Price = 30000, Style = "super" },
+}
+Config.GarageDefaults = { Lack = "lack_orange", Felgen = "felge_chrom", Neon = "neon_aus", ["Flügel"] = "fluegel_aus", Form = "form_coupe" }
+Config.GarageCats = { "Lack", "Felgen", "Neon", "Flügel", "Form" }
+
+function Config.GetGarageItem(id)
+	for _, it in ipairs(Config.GarageItems) do
+		if it.Id == id then
+			return it
+		end
+	end
+	return nil
+end
+
+------------------------------------------------------------------------
+-- SCHNELLREISE und RENNEN
+------------------------------------------------------------------------
+Config.TravelPoints = {
+	{ Id = "werkstatt", Name = "🔧 Meine Werkstatt" },
+	{ Id = "strecke", Name = "🏁 Teststrecke", Pos = Vector3.new(0, 4, -250) },
+	{ Id = "stunt", Name = "🚀 Stuntpark", Pos = Vector3.new(160, 4, -325) },
+	{ Id = "slalom", Name = "🔶 Slalom", Pos = Vector3.new(-155, 4, -325) },
+	{ Id = "see", Name = "🌊 See", Pos = Vector3.new(650, 4, 300) },
+	{ Id = "stadt", Name = "🏙️ Stadt / Spawn", Pos = Vector3.new(0, 4, 80) },
+}
+
+Config.RaceLaps = 2
+Config.RaceLobbySeconds = 20
+Config.RacePrizes = { 6000, 3500, 2000 } -- Platz 1–3, sonst RaceFinishPrize
+Config.RaceFinishPrize = 1000
 
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung

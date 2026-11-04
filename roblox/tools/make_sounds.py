@@ -223,16 +223,206 @@ def horn():
     return normalize(x * env, 0.85)
 
 
+# ---------------------------------------------------------------- Effekte
+def tone(f, dur, decay, harmonics=(1.0,), detune=0.0):
+    n = int(SR * dur)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for k, a in enumerate(harmonics, start=1):
+        x += a * np.sin(2 * np.pi * f * k * (1 + detune * k) * tt)
+    return x * np.exp(-tt / decay)
+
+
+def place(dst, src, at):
+    i = int(at * SR)
+    end = min(len(dst), i + len(src))
+    dst[i:end] += src[: end - i]
+
+
+def cash():
+    x = np.zeros(int(SR * 0.9))
+    click = rng.standard_normal(int(SR * 0.01)) * np.exp(-np.arange(int(SR * 0.01)) / (SR * 0.002))
+    place(x, click * 0.6, 0)
+    place(x, tone(2093, 0.8, 0.18, (1, 0.4, 0.2)), 0.02)
+    place(x, tone(2637, 0.7, 0.16, (1, 0.35, 0.15)), 0.12)
+    return normalize(fade(x, 1, 40), 0.8)
+
+
+def levelup():
+    x = np.zeros(int(SR * 1.3))
+    for i, f in enumerate((523.25, 659.25, 783.99, 1046.5)):
+        place(x, tone(f, 0.6, 0.25, (1, 0.5, 0.25, 0.12)), i * 0.11)
+    place(x, tone(1567.98, 0.8, 0.35, (1, 0.3)) * 0.6, 0.45)
+    return normalize(fade(x, 1, 60), 0.8)
+
+
+def click():
+    x = np.zeros(int(SR * 0.06))
+    place(x, tone(1800, 0.05, 0.008, (1, 0.3)), 0)
+    return normalize(fade(x, 0.5, 10), 0.6)
+
+
+def beep(f, dur):
+    x = tone(f, dur, 10, (1, 0.25, 0.1))
+    return normalize(fade(x, 3, 30), 0.7)
+
+
+def crowd(dur):
+    n = int(SR * dur)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for _ in range(40):
+        f = rng.uniform(250, 900)
+        voice = signal.sosfilt(bp(f * 0.8, f * 1.6), rng.standard_normal(n))
+        env = np.clip(np.sin(np.pi * np.clip((tt - rng.uniform(0, 0.4)) / rng.uniform(1.5, dur), 0, 1)), 0, 1)
+        x += voice * env * rng.uniform(0.3, 1)
+    swell = np.minimum(1, tt / 0.3) * np.minimum(1, (dur - tt) / 1.2)
+    return normalize(fade(x * swell, 10, 200), 0.75)
+
+
+def workshop(dur):
+    n = int(SR * dur)
+    tt = np.arange(n) / SR
+    hum = circ_filter(rng.standard_normal(n), lp(300)) * 0.25 + 0.05 * np.sin(2 * np.pi * 50 * tt)
+    x = normalize(hum, 0.15)
+    # Schlagschrauber-Salven und Metallklänge, kreisförmig verteilt
+    for _ in range(5):
+        start = rng.integers(0, n)
+        ln = int(SR * rng.uniform(0.4, 0.9))
+        t = np.arange(ln) / SR
+        rat = signal.sosfilt(bp(400, 3000), rng.standard_normal(ln)) * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 28 * t)))
+        idx = (start + np.arange(ln)) % n
+        x[idx] += rat * 0.18
+    for _ in range(9):
+        start = rng.integers(0, n)
+        f = rng.uniform(900, 3000)
+        clank = tone(f, 0.5, 0.06, (1, 0.6, 0.3), detune=0.003) + tone(f * 1.48, 0.5, 0.04) * 0.5
+        idx = (start + np.arange(len(clank))) % n
+        x[idx] += clank * 0.08
+    return normalize(x, 0.5)
+
+
+def door():
+    x = np.zeros(int(SR * 0.45))
+    place(x, tone(85, 0.4, 0.06, (1, 0.5)), 0)
+    place(x, signal.sosfilt(lp(1500), rng.standard_normal(int(SR * 0.05))) * np.exp(-np.arange(int(SR * 0.05)) / (SR * 0.01)), 0)
+    place(x, tone(2400, 0.05, 0.01) * 0.3, 0.02)
+    return normalize(fade(x, 1, 40), 0.85)
+
+
+def crash():
+    n = int(SR * 0.9)
+    tt = np.arange(n) / SR
+    noise = signal.sosfilt(lp(2500), rng.standard_normal(n)) * np.exp(-tt / 0.08)
+    thump = np.sin(2 * np.pi * 60 * tt) * np.exp(-tt / 0.12)
+    ring = (tone(740, 0.9, 0.25, (1, 0.5), detune=0.01) + tone(1130, 0.9, 0.2)) * 0.25
+    x = np.tanh((noise * 1.2 + thump + ring[:n]) * 1.5)
+    return normalize(fade(x, 1, 60), 0.9)
+
+
+def wrench_pickup():
+    x = np.zeros(int(SR * 0.9))
+    for i, f in enumerate((1318.5, 1760, 2093, 2637)):
+        place(x, tone(f, 0.5, 0.15, (1, 0.3)), i * 0.06)
+    return normalize(fade(x, 1, 50), 0.7)
+
+
+def camera_flash():
+    x = np.zeros(int(SR * 0.7))
+    shutter = signal.sosfilt(bp(1500, 6000), rng.standard_normal(int(SR * 0.03))) * np.exp(-np.arange(int(SR * 0.03)) / (SR * 0.006))
+    place(x, shutter, 0)
+    place(x, shutter * 0.7, 0.05)
+    t = np.arange(int(SR * 0.5)) / SR
+    whine = np.sin(2 * np.pi * np.cumsum(3000 + 4000 * t) / SR) * np.exp(-t / 0.2) * 0.25
+    place(x, whine, 0.08)
+    return normalize(fade(x, 1, 40), 0.75)
+
+
+def impact_wrench():
+    n = int(SR * 1.1)
+    tt = np.arange(n) / SR
+    motor = signal.sosfilt(bp(300, 4000), rng.standard_normal(n))
+    hammer = 0.55 + 0.45 * np.sign(np.sin(2 * np.pi * 26 * tt))
+    whirr = np.sin(2 * np.pi * 420 * tt) * 0.3
+    x = (motor * hammer + whirr) * np.minimum(1, tt / 0.03) * np.minimum(1, (1.1 - tt) / 0.1)
+    return normalize(x, 0.75)
+
+
+# Reihenfolge und Art (Schleife?) der Sounds in der Sammeldatei
+SPRITE = [
+    ("MotorTief", "motor_tief", True),
+    ("MotorHoch", "motor_hoch", True),
+    ("Turbo", "turbo", True),
+    ("Reifen", "reifen", True),
+    ("Hydraulik", "hydraulik", True),
+    ("Umgebung", "umgebung", True),
+    ("Werkstatt", "werkstatt", True),
+    ("Abblasen", "abblasen", False),
+    ("Fehlzuendung", "fehlzuendung", False),
+    ("Hupe", "hupe", False),
+    ("Kasse", "kasse", False),
+    ("LevelUp", "levelup", False),
+    ("Klick", "klick", False),
+    ("PiepKurz", "piep_kurz", False),
+    ("PiepLang", "piep_lang", False),
+    ("Jubel", "jubel", False),
+    ("Tuer", "tuer", False),
+    ("Aufprall", "aufprall", False),
+    ("Schluessel", "schluessel", False),
+    ("Blitzer", "blitzer", False),
+    ("Schlagschrauber", "schlagschrauber", False),
+]
+
+
+def build_sprite(sounds):
+    """Hängt alle Sounds mit kurzer Pause aneinander und schreibt die Inhaltsliste."""
+    gap = np.zeros(int(SR * 0.3))
+    parts = []
+    table = []
+    t = 0.3
+    parts.append(gap)
+    for key, name, looped in SPRITE:
+        x = np.clip(sounds[name], -1, 1)
+        parts.append(x)
+        table.append((key, round(t, 4), round(len(x) / SR, 4), looped))
+        t += len(x) / SR
+        parts.append(gap)
+        t += len(gap) / SR
+    save("alle_sounds", np.concatenate(parts))
+    lines = ["\t%s = { %s, %s, %s }," % (k, a, b, "true" if l else "false") for k, a, b, l in table]
+    lua = "\n".join(lines)
+    (OUT / "alle_sounds_liste.lua").write_text("-- Start (s), Länge (s), Schleife\n" + lua + "\n", encoding="utf-8")
+    return lua
+
+
 def main():
-    save("motor_tief", engine(40, 2.0, drive=1.6, bright=1400, rough=1.0))
-    save("motor_hoch", engine(140, 2.0, drive=2.6, bright=4200, rough=0.6))
-    save("turbo", turbo(2.0))
-    save("abblasen", blowoff())
-    save("fehlzuendung", backfire())
-    save("reifen", screech(2.0))
-    save("hydraulik", hydraulic(2.0))
-    save("umgebung", ambience(24.0))
-    save("hupe", horn())
+    sounds = {
+        "motor_tief": engine(40, 2.0, drive=1.6, bright=1400, rough=1.0),
+        "motor_hoch": engine(140, 2.0, drive=2.6, bright=4200, rough=0.6),
+        "turbo": turbo(2.0),
+        "abblasen": blowoff(),
+        "fehlzuendung": backfire(),
+        "reifen": screech(2.0),
+        "hydraulik": hydraulic(2.0),
+        "umgebung": ambience(24.0),
+        "hupe": horn(),
+        "kasse": cash(),
+        "levelup": levelup(),
+        "klick": click(),
+        "piep_kurz": beep(880, 0.25),
+        "piep_lang": beep(1320, 0.7),
+        "jubel": crowd(4.0),
+        "werkstatt": workshop(12.0),
+        "tuer": door(),
+        "aufprall": crash(),
+        "schluessel": wrench_pickup(),
+        "blitzer": camera_flash(),
+        "schlagschrauber": impact_wrench(),
+    }
+    for name, x in sounds.items():
+        save(name, x)
+    lua = build_sprite(sounds)
+    print(lua)
 
 
 if __name__ == "__main__":

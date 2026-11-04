@@ -21,6 +21,12 @@ local Notify = Remotes:WaitForChild("Notify")
 local RequestTestDrive = Remotes:WaitForChild("RequestTestDrive")
 local RequestCompanyCar = Remotes:WaitForChild("RequestCompanyCar")
 local AdminAction = Remotes:WaitForChild("AdminAction")
+local LevelUp = Remotes:WaitForChild("LevelUp")
+local DailyReward = Remotes:WaitForChild("DailyReward")
+local GarageAction = Remotes:WaitForChild("GarageAction")
+local Travel = Remotes:WaitForChild("Travel")
+local HttpService = game:GetService("HttpService")
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
 
 local C = {
 	Bg = Color3.fromRGB(22, 24, 30),
@@ -72,7 +78,11 @@ local function button(props)
 	props.TextSize = props.TextSize or 20
 	props.BackgroundColor3 = props.BackgroundColor3 or C.Accent
 	props.AutoButtonColor = true
-	return make("TextButton", props, { corner(10) })
+	local b = make("TextButton", props, { corner(10) })
+	b.Activated:Connect(function()
+		EngineSound.UI("Klick", 0.35)
+	end)
+	return b
 end
 
 local gui = make("ScreenGui", {
@@ -203,34 +213,46 @@ end
 
 local list = scrollList(true) -- Werkstatt-Upgrades (Spielgeld)
 local robuxList = scrollList(false) -- Robux-Artikel
+local garageList = scrollList(false) -- Garage (Firmenwagen gestalten)
 
 local tabUpgrades = button({
-	Size = UDim2.new(0.5, -18, 0, 40),
+	Size = UDim2.new(1 / 3, -14, 0, 40),
 	Position = UDim2.fromOffset(12, 58),
 	Text = "🔧 Werkstatt",
-	TextSize = 18,
+	TextSize = 16,
+	Parent = shopWin,
+})
+local tabGarage = button({
+	Size = UDim2.new(1 / 3, -14, 0, 40),
+	Position = UDim2.new(1 / 3, 6, 0, 58),
+	Text = "🚗 Garage",
+	TextSize = 16,
 	Parent = shopWin,
 })
 local tabRobux = button({
-	Size = UDim2.new(0.5, -18, 0, 40),
-	Position = UDim2.new(0.5, 6, 0, 58),
-	Text = "💎 Robux-Shop",
-	TextSize = 18,
+	Size = UDim2.new(1 / 3, -14, 0, 40),
+	Position = UDim2.new(2 / 3, 2, 0, 58),
+	Text = "💎 Robux",
+	TextSize = 16,
 	Parent = shopWin,
 })
 
 local function showTab(name)
-	local robux = name == "robux"
-	list.Visible = not robux
-	robuxList.Visible = robux
-	tabUpgrades.BackgroundColor3 = robux and C.Gray or C.Accent
-	tabRobux.BackgroundColor3 = robux and C.Accent or C.Gray
+	list.Visible = name == "upgrades"
+	robuxList.Visible = name == "robux"
+	garageList.Visible = name == "garage"
+	tabUpgrades.BackgroundColor3 = name == "upgrades" and C.Accent or C.Gray
+	tabRobux.BackgroundColor3 = name == "robux" and C.Accent or C.Gray
+	tabGarage.BackgroundColor3 = name == "garage" and C.Accent or C.Gray
 end
 tabUpgrades.Activated:Connect(function()
 	showTab("upgrades")
 end)
 tabRobux.Activated:Connect(function()
 	showTab("robux")
+end)
+tabGarage.Activated:Connect(function()
+	showTab("garage")
 end)
 showTab("upgrades")
 
@@ -532,7 +554,12 @@ task.spawn(function()
 	local ls = player:WaitForChild("leaderstats")
 	local geld = ls:WaitForChild("Geld")
 	local ruf = ls:WaitForChild("Ruf")
+	local lastMoney = geld.Value
 	local function update()
+		if geld.Value > lastMoney then
+			EngineSound.UI("Kasse", 0.45)
+		end
+		lastMoney = geld.Value
 		moneyLabel.Text = "💰 " .. Config.Format(geld.Value) .. " €"
 		repLabel.Text = "⭐ Ruf " .. ruf.Value
 		refreshShop()
@@ -1097,3 +1124,390 @@ TuneResult.OnClientEvent:Connect(function(res)
 	shopWin.Visible = false
 	tuneWin.Visible = true
 end)
+
+------------------------------------------------------------------------
+-- Garage: Firmenwagen gestalten (Tab im Shop)
+------------------------------------------------------------------------
+local CAT_LABEL = { Lack = "🎨 Lackfarbe", Felgen = "🛞 Felgen", Neon = "💡 Unterbodenbeleuchtung", ["Flügel"] = "🪽 Heckflügel", Form = "🚘 Karosserie" }
+local garageRows = {}
+do
+	local order = 0
+	for _, cat in ipairs(Config.GarageCats) do
+		order += 1
+		sectionTitle(garageList, order, CAT_LABEL[cat] or cat)
+		for _, item in ipairs(Config.GarageItems) do
+			if item.Cat == cat then
+				order += 1
+				local desc = item.Price == 0 and "Standard" or ("Preis: " .. Config.Format(item.Price) .. " €")
+				local btn = shopRow(garageList, order, item.Name, desc)
+				if item.Color then
+					make("Frame", {
+						Size = UDim2.fromOffset(26, 26),
+						Position = UDim2.new(1, -178, 0.5, 0),
+						AnchorPoint = Vector2.new(0, 0.5),
+						BackgroundColor3 = item.Color,
+						Parent = btn.Parent,
+					}, { corner(13), stroke(Color3.new(1, 1, 1), 1) })
+				end
+				btn.Activated:Connect(function()
+					GarageAction:FireServer(item.Id)
+				end)
+				garageRows[item.Id] = { Btn = btn, Item = item }
+			end
+		end
+	end
+end
+
+local function refreshGarage()
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(player:GetAttribute("Garage") or "{}")
+	end)
+	if not ok or type(data) ~= "table" then
+		data = {}
+	end
+	local owned = data.Owned or {}
+	local equip = data.Equip or {}
+	local money = currentMoney()
+	for id, row in pairs(garageRows) do
+		local item, btn = row.Item, row.Btn
+		btn.AutoButtonColor = true
+		if equip[item.Cat] == id then
+			btn.Text = "✔ Aktiv"
+			btn.BackgroundColor3 = C.Gray
+			btn.AutoButtonColor = false
+		elseif item.Price == 0 or owned[id] then
+			btn.Text = "Auswählen"
+			btn.BackgroundColor3 = C.Accent
+		else
+			btn.Text = Config.Format(item.Price) .. " €"
+			btn.BackgroundColor3 = money >= item.Price and C.Green or C.Red
+		end
+	end
+end
+player:GetAttributeChangedSignal("Garage"):Connect(refreshGarage)
+tabGarage.Activated:Connect(refreshGarage)
+refreshGarage()
+
+------------------------------------------------------------------------
+-- Level-Anzeige mit Erfahrungsbalken
+------------------------------------------------------------------------
+local levelFrame = make("Frame", {
+	Size = UDim2.fromOffset(330, 22),
+	Position = UDim2.new(0.5, 0, 0, 88),
+	AnchorPoint = Vector2.new(0.5, 0),
+	BackgroundColor3 = C.Bg,
+	BackgroundTransparency = 0.25,
+	Parent = gui,
+}, { corner(8) })
+local xpFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.fromRGB(120, 90, 255), BorderSizePixel = 0, Parent = levelFrame }, { corner(8) })
+local levelText = label({ Size = UDim2.fromScale(1, 1), Text = "Level 1", TextSize = 14, ZIndex = 2, Parent = levelFrame })
+local function updateLevel()
+	local lvl = player:GetAttribute("Level") or 1
+	local into = player:GetAttribute("XPInto") or 0
+	local need = player:GetAttribute("XPNeed") or 1
+	xpFill.Size = UDim2.fromScale(math.clamp(into / need, 0, 1), 1)
+	levelText.Text = ("⭐ Level %d   ·   %d / %d XP"):format(lvl, into, need)
+end
+player:GetAttributeChangedSignal("XPInto"):Connect(updateLevel)
+player:GetAttributeChangedSignal("Level"):Connect(updateLevel)
+updateLevel()
+-- der Schlüssel-Zähler rutscht unter den Level-Balken
+wrenchLabel.Position = UDim2.new(0.5, 0, 0, 114)
+
+local bigLabel = label({
+	Size = UDim2.fromOffset(600, 90),
+	Position = UDim2.new(0.5, 0, 0.32, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Font = Enum.Font.GothamBlack,
+	TextSize = 48,
+	TextColor3 = Color3.fromRGB(255, 210, 60),
+	TextStrokeTransparency = 0.2,
+	Text = "",
+	Visible = false,
+	Parent = gui,
+})
+LevelUp.OnClientEvent:Connect(function(level, reward)
+	EngineSound.UI("LevelUp", 0.7)
+	EngineSound.UI("Jubel", 0.35)
+	bigLabel.Text = ("⭐ LEVEL %d! ⭐\n+%s €"):format(level, Config.Format(reward))
+	bigLabel.Visible = true
+	bigLabel.TextTransparency = 0
+	bigLabel.Size = UDim2.fromOffset(300, 45)
+	TweenService:Create(bigLabel, TweenInfo.new(0.4, Enum.EasingStyle.Back), { Size = UDim2.fromOffset(600, 90) }):Play()
+	task.delay(3, function()
+		TweenService:Create(bigLabel, TweenInfo.new(0.6), { TextTransparency = 1 }):Play()
+		task.wait(0.6)
+		bigLabel.Visible = false
+	end)
+end)
+
+------------------------------------------------------------------------
+-- Tägliche Belohnung
+------------------------------------------------------------------------
+local dailyWin = make("Frame", {
+	Size = UDim2.fromOffset(560, 260),
+	Position = UDim2.fromScale(0.5, 0.5),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundColor3 = C.Bg,
+	Visible = false,
+	Parent = gui,
+}, { corner(14), stroke(Color3.fromRGB(255, 210, 60), 2) })
+scaled(dailyWin)
+local dailyTitle = label({ Size = UDim2.new(1, 0, 0, 50), Position = UDim2.fromOffset(0, 10), Text = "🎁 Tägliche Belohnung", TextSize = 26, Parent = dailyWin })
+local dayRow = make("Frame", { Size = UDim2.new(1, -30, 0, 100), Position = UDim2.fromOffset(15, 70), BackgroundTransparency = 1, Parent = dailyWin }, {
+	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+})
+local dayTiles = {}
+for i = 1, 7 do
+	local t = label({ Size = UDim2.new(1 / 7, -6, 1, 0), BackgroundColor3 = C.Panel, BackgroundTransparency = 0, TextSize = 14, TextWrapped = true, LayoutOrder = i, Text = "", Parent = dayRow })
+	corner(10).Parent = t
+	dayTiles[i] = t
+end
+local dailyOk = button({ Size = UDim2.fromOffset(200, 50), Position = UDim2.new(0.5, 0, 1, -20), AnchorPoint = Vector2.new(0.5, 1), Text = "Super!", BackgroundColor3 = C.Green, Parent = dailyWin })
+dailyOk.Activated:Connect(function()
+	dailyWin.Visible = false
+end)
+DailyReward.OnClientEvent:Connect(function(streak, idx, reward, rewards)
+	dailyTitle.Text = ("🎁 Tägliche Belohnung – Tag %d in Folge"):format(streak)
+	for i, t in ipairs(dayTiles) do
+		t.Text = ("Tag %d\n%s €"):format(i, Config.Format(rewards[i] or 0))
+		t.BackgroundColor3 = (i < idx and C.Gray) or (i == idx and Color3.fromRGB(200, 150, 20)) or C.Panel
+	end
+	dailyWin.Visible = true
+	EngineSound.UI("Kasse", 0.6)
+	toast(("🎁 +%s € tägliche Belohnung! Komm morgen wieder für mehr."):format(Config.Format(reward)), "good")
+end)
+
+------------------------------------------------------------------------
+-- Tagesaufträge
+------------------------------------------------------------------------
+local questFrame = make("Frame", {
+	Size = UDim2.fromOffset(270, 112),
+	Position = UDim2.fromOffset(12, 12),
+	BackgroundColor3 = C.Bg,
+	BackgroundTransparency = 0.2,
+	Parent = gui,
+}, { corner(10) })
+label({ Size = UDim2.new(1, -16, 0, 22), Position = UDim2.fromOffset(8, 4), Text = "📋 Tagesaufträge", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 210, 60), Parent = questFrame })
+local questLines = {}
+for i = 1, 3 do
+	questLines[i] = label({
+		Size = UDim2.new(1, -16, 0, 26),
+		Position = UDim2.fromOffset(8, 26 + (i - 1) * 27),
+		Text = "",
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = questFrame,
+	})
+end
+local function updateQuests()
+	local ok, qlist = pcall(function()
+		return HttpService:JSONDecode(player:GetAttribute("Quests") or "[]")
+	end)
+	if not ok or type(qlist) ~= "table" then
+		qlist = {}
+	end
+	for i, l in ipairs(questLines) do
+		local q = qlist[i]
+		if q then
+			local prog = (q.Goal and q.Goal > 20) and "" or (" (%d/%d)"):format(q.Progress or 0, q.Goal or 0)
+			l.Text = (q.Done and "✅ " or "⬜ ") .. q.Text .. prog
+			l.TextColor3 = q.Done and C.Green or C.Text
+		else
+			l.Text = ""
+		end
+	end
+end
+player:GetAttributeChangedSignal("Quests"):Connect(updateQuests)
+updateQuests()
+
+------------------------------------------------------------------------
+-- Schnellreise
+------------------------------------------------------------------------
+local travelWin = make("Frame", {
+	Size = UDim2.fromOffset(240, 60 + #Config.TravelPoints * 46),
+	Position = UDim2.new(0, 140, 0.5, -56),
+	AnchorPoint = Vector2.new(0, 0.5),
+	BackgroundColor3 = C.Bg,
+	Visible = false,
+	Parent = gui,
+}, { corner(12), stroke(C.Accent, 2) })
+label({ Size = UDim2.new(1, 0, 0, 40), Text = "📍 Schnellreise", TextSize = 18, Parent = travelWin })
+for i, tp in ipairs(Config.TravelPoints) do
+	local b = button({ Size = UDim2.new(1, -20, 0, 40), Position = UDim2.fromOffset(10, 44 + (i - 1) * 46), Text = tp.Name, TextSize = 15, BackgroundColor3 = C.Panel, Parent = travelWin })
+	b.Activated:Connect(function()
+		travelWin.Visible = false
+		Travel:FireServer(tp.Id)
+	end)
+end
+local travelBtn = button({
+	Size = UDim2.fromOffset(120, 46),
+	Position = UDim2.new(0, 12, 0.5, -56),
+	AnchorPoint = Vector2.new(0, 0.5),
+	Text = "📍 Reisen",
+	BackgroundColor3 = Color3.fromRGB(70, 75, 90),
+	Parent = gui,
+})
+travelBtn.Activated:Connect(function()
+	travelWin.Visible = not travelWin.Visible
+end)
+
+-- Sound beim Finden eines goldenen Schraubenschlüssels
+do
+	local lastFound = #((player:GetAttribute("Found") or ""):gsub("[^,]", "")) + ((player:GetAttribute("Found") or "") ~= "" and 1 or 0)
+	player:GetAttributeChangedSignal("Found"):Connect(function()
+		local f = player:GetAttribute("Found") or ""
+		local n = f == "" and 0 or (#f:gsub("[^,]", "") + 1)
+		if n > lastFound then
+			EngineSound.UI("Schluessel", 0.7)
+		end
+		lastFound = n
+	end)
+end
+
+------------------------------------------------------------------------
+-- Demo-Hinweis und Ideen-Briefkasten
+------------------------------------------------------------------------
+local SendFeedback = Remotes:WaitForChild("SendFeedback")
+local FeedbackList = Remotes:WaitForChild("FeedbackList")
+
+local function popup(w, h, strokeColor)
+	local f = make("Frame", {
+		Size = UDim2.fromOffset(w, h),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = C.Bg,
+		Visible = false,
+		ZIndex = 20,
+		Parent = gui,
+	}, { corner(14), stroke(strokeColor or C.Accent, 2) })
+	scaled(f)
+	return f
+end
+
+-- Kleiner Dauerhinweis unten links
+label({
+	Size = UDim2.fromOffset(170, 22),
+	Position = UDim2.new(0, 10, 1, -8),
+	AnchorPoint = Vector2.new(0, 1),
+	BackgroundColor3 = Color3.fromRGB(200, 120, 0),
+	BackgroundTransparency = 0.2,
+	Text = "🚧 DEMO – kann Fehler haben",
+	TextSize = 12,
+	Parent = gui,
+}).Name = "DemoTag"
+
+-- Hinweisfenster beim Start
+local demoWin = popup(520, 300, Color3.fromRGB(255, 170, 0))
+label({ Size = UDim2.new(1, -40, 1, -100), Position = UDim2.fromOffset(20, 20), Text = Config.DemoText, TextSize = 19, TextWrapped = true, ZIndex = 21, Parent = demoWin })
+local demoOk = button({ Size = UDim2.fromOffset(220, 50), Position = UDim2.new(0.5, 0, 1, -18), AnchorPoint = Vector2.new(0.5, 1), Text = "Los geht's!", BackgroundColor3 = C.Green, ZIndex = 21, Parent = demoWin })
+demoOk.Activated:Connect(function()
+	demoWin.Visible = false
+end)
+if Config.ShowDemoNotice then
+	task.delay(1.5, function()
+		demoWin.Visible = true
+	end)
+end
+
+-- Ideen schicken
+local ideaWin = popup(480, 300)
+label({ Size = UDim2.new(1, -60, 0, 40), Position = UDim2.fromOffset(20, 10), Text = "💡 Idee oder Fehler melden", TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21, Parent = ideaWin })
+local ideaBox = make("TextBox", {
+	Size = UDim2.new(1, -40, 0, 150),
+	Position = UDim2.fromOffset(20, 56),
+	BackgroundColor3 = C.Panel,
+	TextColor3 = C.Text,
+	PlaceholderText = "Was sollen wir verbessern? Was fehlt dir? Welcher Fehler ist dir aufgefallen?",
+	PlaceholderColor3 = C.Muted,
+	Font = Enum.Font.Gotham,
+	TextSize = 16,
+	TextWrapped = true,
+	MultiLine = true,
+	ClearTextOnFocus = false,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	Text = "",
+	ZIndex = 21,
+	Parent = ideaWin,
+}, { corner(8), make("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingTop = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }) })
+local ideaSend = button({ Size = UDim2.fromOffset(180, 46), Position = UDim2.new(1, -20, 1, -18), AnchorPoint = Vector2.new(1, 1), Text = "Senden", BackgroundColor3 = C.Green, ZIndex = 21, Parent = ideaWin })
+local ideaClose = button({ Size = UDim2.fromOffset(120, 46), Position = UDim2.new(0, 20, 1, -18), AnchorPoint = Vector2.new(0, 1), Text = "Schließen", BackgroundColor3 = C.Gray, ZIndex = 21, Parent = ideaWin })
+ideaSend.Activated:Connect(function()
+	if #ideaBox.Text:gsub("%s", "") >= 3 then
+		SendFeedback:FireServer(ideaBox.Text)
+		ideaBox.Text = ""
+		ideaWin.Visible = false
+	end
+end)
+ideaClose.Activated:Connect(function()
+	ideaWin.Visible = false
+end)
+local ideaBtn = button({
+	Size = UDim2.fromOffset(120, 46),
+	Position = UDim2.new(0, 12, 0.5, -112),
+	AnchorPoint = Vector2.new(0, 0.5),
+	Text = "💡 Ideen",
+	BackgroundColor3 = Color3.fromRGB(200, 140, 20),
+	Parent = gui,
+})
+ideaBtn.Activated:Connect(function()
+	ideaWin.Visible = not ideaWin.Visible
+end)
+
+-- Admin: eingegangene Ideen lesen
+local inboxWin = popup(560, 420)
+label({ Size = UDim2.new(1, -60, 0, 40), Position = UDim2.fromOffset(20, 10), Text = "📬 Ideen und Fehlermeldungen", TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21, Parent = inboxWin })
+local inboxList = make("ScrollingFrame", {
+	Size = UDim2.new(1, -30, 1, -70),
+	Position = UDim2.fromOffset(15, 55),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	CanvasSize = UDim2.new(),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	ScrollBarThickness = 6,
+	ZIndex = 21,
+	Parent = inboxWin,
+}, { make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
+local inboxClose = button({ Size = UDim2.fromOffset(40, 40), Position = UDim2.new(1, -50, 0, 10), Text = "X", BackgroundColor3 = C.Gray, ZIndex = 21, Parent = inboxWin })
+inboxClose.Activated:Connect(function()
+	inboxWin.Visible = false
+end)
+local inboxBtn = button({ Size = UDim2.fromOffset(120, 38), Text = "📬 Ideen lesen", TextSize = 14, BackgroundColor3 = Color3.fromRGB(120, 60, 170), LayoutOrder = 3, Parent = adminFrame })
+inboxBtn.Activated:Connect(function()
+	for _, c in ipairs(inboxList:GetChildren()) do
+		if c:IsA("TextLabel") then
+			c:Destroy()
+		end
+	end
+	local ok, entries = pcall(function()
+		return FeedbackList:InvokeServer()
+	end)
+	entries = ok and entries or {}
+	if #entries == 0 then
+		label({ Size = UDim2.new(1, -10, 0, 40), Text = "Noch keine Nachrichten.", TextSize = 15, ZIndex = 21, Parent = inboxList })
+	end
+	for i, e in ipairs(entries) do
+		local when = e.Time and os.date("%d.%m. %H:%M", e.Time) or ""
+		local l = label({
+			Size = UDim2.new(1, -10, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = C.Panel,
+			BackgroundTransparency = 0,
+			Font = Enum.Font.Gotham,
+			TextSize = 14,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = ("%s · %s (Level %s)\n%s"):format(when, tostring(e.Name), tostring(e.Level or "?"), tostring(e.Text)),
+			LayoutOrder = i,
+			ZIndex = 21,
+			Parent = inboxList,
+		})
+		corner(8).Parent = l
+		make("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = l })
+	end
+	inboxWin.Visible = true
+end)
+adminFrame.Size = UDim2.fromOffset(120, 140)

@@ -28,21 +28,40 @@ function EngineSound.Rpm(speed, top)
 	return EngineSound.IDLE + frac * (EngineSound.REDLINE - EngineSound.IDLE), gear
 end
 
-local function makeLoop(part, key)
+-- Erzeugt einen Sound (einzelne Datei oder Abschnitt der Sammeldatei). Spielt noch nicht.
+function EngineSound.Make(parent, key, looped)
 	local id = Config.SoundId(key)
-	if not id then
+	local file = Config.SoundFileId()
+	local seg = Config.SoundSprite[key]
+	if not id and not (file and seg) then
 		return nil
 	end
 	local s = Instance.new("Sound")
 	s.Name = key
-	s.SoundId = id
-	s.Looped = true
-	s.Volume = 0
+	if id then
+		s.SoundId = id
+	else
+		s.SoundId = file
+		s.PlaybackRegionsEnabled = true
+		s.PlaybackRegion = NumberRange.new(seg[1], seg[1] + seg[2])
+		if looped then
+			s.LoopRegion = NumberRange.new(seg[1], seg[1] + seg[2])
+		end
+	end
+	s.Looped = looped == true
 	s.RollOffMode = Enum.RollOffMode.InverseTapered
 	s.RollOffMinDistance = 12
 	s.RollOffMaxDistance = 200
-	s.Parent = part
-	s:Play()
+	s.Parent = parent
+	return s
+end
+
+local function makeLoop(part, key)
+	local s = EngineSound.Make(part, key, true)
+	if s then
+		s.Volume = 0
+		s:Play()
+	end
 	return s
 end
 
@@ -101,20 +120,31 @@ end
 
 -- Einmaliger Sound an einem Teil (z. B. Abblasen, Fehlzündung)
 function EngineSound.OneShot(part, key, volume, speed)
-	local id = Config.SoundId(key)
-	if not id or not part then
+	if not part then
 		return
 	end
-	local s = Instance.new("Sound")
-	s.SoundId = id
+	local s = EngineSound.Make(part, key, false)
+	if not s then
+		return
+	end
+	s.RollOffMaxDistance = 250
 	s.Volume = (volume or 1) * Config.SoundVolume
 	s.PlaybackSpeed = speed or 1
-	s.RollOffMode = Enum.RollOffMode.InverseTapered
-	s.RollOffMinDistance = 12
-	s.RollOffMaxDistance = 250
-	s.Parent = part
 	s:Play()
-	task.delay(3, function()
+	task.delay(4, function()
+		s:Destroy()
+	end)
+end
+
+-- Oberflächen-Sound (2D, überall gleich laut)
+function EngineSound.UI(key, volume)
+	local s = EngineSound.Make(game:GetService("SoundService"), key, false)
+	if not s then
+		return
+	end
+	s.Volume = volume or 0.6
+	s:Play()
+	task.delay(5, function()
 		s:Destroy()
 	end)
 end

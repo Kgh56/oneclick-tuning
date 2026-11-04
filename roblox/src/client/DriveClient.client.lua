@@ -19,6 +19,9 @@ local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
 local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local Honk = Remotes:WaitForChild("Honk")
 local ReportRecord = Remotes:WaitForChild("ReportRecord")
+local RaceJoin = Remotes:WaitForChild("RaceJoin")
+local RaceLap = Remotes:WaitForChild("RaceLap")
+local RaceGrid = Remotes:WaitForChild("RaceGrid")
 local CollectionService = game:GetService("CollectionService")
 
 local BRAKE = 95
@@ -147,6 +150,7 @@ local function smallBtn(text, y, color)
 	return b
 end
 local nitroBtn = smallBtn("🔥 Nitro [N]", -66, Color3.fromRGB(40, 110, 230))
+local raceBtn = smallBtn("🏁 Rennen [R]", -158, Color3.fromRGB(200, 40, 40))
 local honkBtn = smallBtn("📯 Hupe [H]", -112, Color3.fromRGB(90, 90, 100))
 local keysLabel = make("TextLabel", {
 	Size = UDim2.fromOffset(300, 18),
@@ -174,6 +178,7 @@ local T = Config.Track
 local SOUTH_Z = T.CenterZ + T.Radius
 local NORTH_Z = T.CenterZ - T.Radius
 local lap = { Start = nil, Checkpoint = false, Best = nil, Last = nil, PrevX = nil }
+local raceLaps = 0
 
 local function fmtTime(t)
 	local m = math.floor(t / 60)
@@ -195,6 +200,10 @@ local function updateLap(pos)
 		if lap.Start and lap.Checkpoint then
 			lap.Last = now - lap.Start
 			ReportRecord:FireServer("lap", lap.Last)
+			if player:GetAttribute("Racing") and ReplicatedStorage:GetAttribute("RacePhase") == "running" then
+				raceLaps += 1
+				RaceLap:FireServer(raceLaps)
+			end
 			if not lap.Best or lap.Last < lap.Best then
 				lap.Best = lap.Last
 			end
@@ -259,6 +268,8 @@ local function nearTagged(tag, pos)
 	return nil
 end
 
+local exhaustFlame -- weiter unten definiert
+
 local function updateStunts(a, _dt, speed)
 	local chassis = a.Chassis
 	local pos = chassis.Position
@@ -292,6 +303,9 @@ local function updateStunts(a, _dt, speed)
 		if air > 0.45 and stunt.AirPos then
 			local dist = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(stunt.AirPos.X, 0, stunt.AirPos.Z)).Magnitude * 0.28
 			showStunt(("✈️ %.1f s Flug · %d m"):format(air, math.floor(dist + 0.5)))
+			if dist > 25 then
+				EngineSound.UI("Jubel", 0.4)
+			end
 			if dist >= 3 then
 				ReportRecord:FireServer("jump", dist)
 			end
@@ -320,6 +334,21 @@ local function updateStunts(a, _dt, speed)
 		end
 	end
 
+	-- Boost-Felder
+	local pad = nearTagged("Boostfeld", pos)
+	if pad and clock > (a.PadUntil or 0) - 1 then
+		local padDir = pad.CFrame.LookVector
+		if chassis.CFrame.LookVector:Dot(padDir) > 0.5 then
+			if clock > (a.PadUntil or 0) then
+				EngineSound.OneShot(chassis, "Abblasen", 0.8, 0.7)
+				showStunt("⚡ BOOST!", Color3.fromRGB(80, 200, 255))
+				exhaustFlame(a, true, 1.2)
+			end
+			a.PadUntil = clock + 1.6
+			a.Speed = math.max(a.Speed, math.min(a.Top * Config.NitroBoost, a.Speed + 30))
+		end
+	end
+
 	-- Blitzer
 	if clock - stunt.BlitzAt > 3 then
 		for _, cam in ipairs(CollectionService:GetTagged("Blitzer")) do
@@ -336,6 +365,7 @@ local function updateStunts(a, _dt, speed)
 						end)
 					end
 					showStunt(("📸 Geblitzt: %d km/h"):format(kmh), Color3.fromRGB(255, 255, 255))
+					EngineSound.OneShot(cam, "Blitzer", 0.9)
 					ReportRecord:FireServer("speed", kmh)
 				end
 			end
@@ -407,7 +437,7 @@ local function startDriving(seat)
 end
 
 -- Flammen aus dem Auspuff (nur optisch, lokal)
-local function exhaustFlame(a, blue, duration)
+exhaustFlame = function(a, blue, duration)
 	for _, ex in ipairs(a.Exhausts) do
 		local f = Instance.new("Fire")
 		f.Size = blue and 3.5 or 2.5
@@ -469,8 +499,72 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 	if input.KeyCode == Enum.KeyCode.N or input.KeyCode == Enum.KeyCode.ButtonY then
 		nitro()
+	elseif input.KeyCode == Enum.KeyCode.R then
+		RaceJoin:FireServer()
 	elseif input.KeyCode == Enum.KeyCode.H or input.KeyCode == Enum.KeyCode.ButtonX then
 		honk()
+	end
+end)
+
+------------------------------------------------------------------------
+-- Rennen: Startplatz, Startampel, Runden
+------------------------------------------------------------------------
+raceBtn.Activated:Connect(function()
+	RaceJoin:FireServer()
+end)
+
+RaceGrid.OnClientEvent:Connect(function(cf)
+	local a = active
+	if not a then
+		return
+	end
+	a.Chassis.AssemblyLinearVelocity = Vector3.zero
+	a.Chassis.CFrame = cf + Vector3.new(0, 0.5, 0)
+	a.Speed = 0
+	raceLaps = 0
+	lap.Start = nil
+	lap.Checkpoint = false
+	lap.PrevX = nil
+end)
+
+local raceLabel = make("TextLabel", {
+	Size = UDim2.fromOffset(400, 120),
+	Position = UDim2.new(0.5, 0, 0.3, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBlack,
+	TextSize = 90,
+	TextColor3 = Color3.fromRGB(255, 60, 60),
+	TextStrokeTransparency = 0.1,
+	Text = "",
+}, gui)
+local lastCount = nil
+RunService.RenderStepped:Connect(function()
+	local phase = ReplicatedStorage:GetAttribute("RacePhase")
+	local racing = player:GetAttribute("Racing")
+	raceBtn.Text = racing and ((phase == "lobby") and "🏁 Warte auf Start" or ("🏁 Runde %d/%d"):format(math.min(raceLaps + 1, ReplicatedStorage:GetAttribute("RaceLaps") or 2), ReplicatedStorage:GetAttribute("RaceLaps") or 2)) or (phase == "lobby" and "🏁 Mitmachen! [R]" or "🏁 Rennen [R]")
+	if racing and phase == "countdown" then
+		local left = (ReplicatedStorage:GetAttribute("RaceStartAt") or 0) - workspace:GetServerTimeNow()
+		local n = math.ceil(left)
+		if n ~= lastCount and n >= 1 and n <= 3 then
+			EngineSound.UI("PiepKurz", 0.7)
+		end
+		lastCount = n
+		raceLabel.Text = (n >= 1 and n <= 3) and tostring(n) or ""
+		raceLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+	elseif racing and phase == "running" and lastCount ~= nil and lastCount >= 1 then
+		lastCount = 0
+		EngineSound.UI("PiepLang", 0.8)
+		raceLabel.Text = "GO!"
+		raceLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+		task.delay(1.2, function()
+			raceLabel.Text = ""
+		end)
+	elseif not racing then
+		lastCount = nil
+		if raceLabel.Text ~= "" and raceLabel.Text ~= "GO!" then
+			raceLabel.Text = ""
+		end
 	end
 end)
 
@@ -524,11 +618,14 @@ RunService.Heartbeat:Connect(function(dt)
 
 	local clock = os.clock()
 	local nitroOn = clock < a.NitroUntil
-	local top = nitroOn and a.Top * Config.NitroBoost or a.Top
+	local padOn = clock < (a.PadUntil or 0)
+	local top = (nitroOn or padOn) and a.Top * Config.NitroBoost or a.Top
 	local accel = a.Accel
-	if nitroOn then
+	if nitroOn or padOn then
 		accel *= 2
 	end
+	-- Rennen: vor dem Start festhalten
+	local raceHold = player:GetAttribute("Racing") and ReplicatedStorage:GetAttribute("RacePhase") == "countdown"
 	if clock < a.LaunchBoostUntil then
 		accel *= 1.8
 	end
@@ -542,7 +639,7 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 
 	local speed = a.Speed
-	if a.Launching then
+	if a.Launching or raceHold then
 		speed = 0
 	elseif throttle > 0 then
 		if speed < 0 then
@@ -560,6 +657,11 @@ RunService.Heartbeat:Connect(function(dt)
 	else
 		local drop = math.min(math.abs(speed), COAST * dt)
 		speed -= drop * math.sign(speed)
+	end
+	-- Aufprall: plötzlich viel langsamer -> Krach
+	if a.Speed - actual > 28 and a.Speed > 30 and clock - (a.CrashAt or 0) > 1 then
+		a.CrashAt = clock
+		EngineSound.OneShot(chassis, "Aufprall", math.clamp((a.Speed - actual) / 60, 0.4, 1))
 	end
 	-- Gegen eine Wand gefahren: Geschwindigkeit an die echte anpassen
 	if speed > 0 and speed > actual + 10 then

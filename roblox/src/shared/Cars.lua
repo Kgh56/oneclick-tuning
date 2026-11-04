@@ -174,7 +174,7 @@ local function build(def, m, open)
 		P("Diffusor", Vector3.new(W - 2.4, 0.25, 0.35), CFrame.new(0, bottom + 0.12, L / 2 + 0.1), Color3.fromRGB(15, 15, 17))
 		P("Frontlippe", Vector3.new(W, 0.08, 0.5), CFrame.new(0, bottom + 0.04, -L / 2 - 0.1), Color3.fromRGB(15, 15, 17))
 	end
-	if def.Hp and def.Hp >= 400 then
+	if def.Wing or (def.Wing == nil and def.Hp and def.Hp >= 400) then
 		local wingZ = (def.Style == "wagon") and (zRoofEnd - 0.2) or (L / 2 - 0.6)
 		local wingY = (def.Style == "wagon") and (roofTop + 0.1) or (belt + 0.65)
 		P("Fluegel", Vector3.new(W - 0.4, 0.12, 1.1), CFrame.new(0, wingY, wingZ), Color3.fromRGB(18, 18, 20))
@@ -207,7 +207,7 @@ local function build(def, m, open)
 	------------------------------------------------------------ Räder
 	local wheels = {}
 	local tireW = st.Sport and 1.15 or 1.0
-	local rimColor = (def.Hp and def.Hp >= 400) and Color3.fromRGB(38, 38, 42) or CHROME
+	local rimColor = def.RimColor or ((def.Hp and def.Hp >= 400) and Color3.fromRGB(38, 38, 42) or CHROME)
 	local idx = 0
 	for _, z in ipairs({ -st.Axle, st.Axle }) do
 		for _, s in ipairs({ -1, 1 }) do
@@ -234,6 +234,12 @@ local function build(def, m, open)
 				wp(P("Bremssattel", Vector3.new(tireW - 0.1, 0.5, 0.7), cf * CFrame.new(0, 0.45, 0.35), Color3.fromRGB(220, 30, 30)))
 			end
 		end
+	end
+
+	-- Unterbodenbeleuchtung (Garage)
+	if def.Underglow then
+		local glow = P("Unterboden", Vector3.new(W - 1.2, 0.08, L - 3), CFrame.new(0, bottom - 0.05, 0), def.Underglow, Enum.Material.Neon)
+		Util.light(glow, "SurfaceLight", { Face = Enum.NormalId.Bottom, Range = 10, Brightness = 3, Angle = 170, Color = def.Underglow })
 	end
 
 	return {

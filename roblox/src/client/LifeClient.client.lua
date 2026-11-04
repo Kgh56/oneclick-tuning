@@ -503,14 +503,9 @@ end
 
 -- Umgebungsgeräusch (Wind und Vögel)
 do
-	local id = Config.SoundId("Umgebung")
-	if id then
-		local amb = Instance.new("Sound")
-		amb.Name = "Umgebung"
-		amb.SoundId = id
-		amb.Looped = true
+	local amb = EngineSound.Make(SoundService, "Umgebung", true)
+	if amb then
 		amb.Volume = 0.35
-		amb.Parent = SoundService
 		amb:Play()
 	end
 end
@@ -597,6 +592,7 @@ local function updateTraffic(dt, now, me)
 
 		-- Abstand zum Vordermann halten
 		local nearest = math.huge
+		local blockedByMe = false
 		for _, ob in ipairs(obstacles) do
 			if ob.Car ~= tc.Car then
 				local to = ob.Pos - pos
@@ -605,6 +601,7 @@ local function updateTraffic(dt, now, me)
 					local side = (to - dir * fwd).Magnitude
 					if side < 3.6 and fwd - (ob.Extra or 0) < nearest then
 						nearest = fwd - (ob.Extra or 0)
+						blockedByMe = ob.Extra ~= nil and fwd < 30
 					end
 				end
 			end
@@ -630,6 +627,18 @@ local function updateTraffic(dt, now, me)
 					end
 				end
 			end
+		end
+
+		-- Spieler steht im Weg: kurz anhupen
+		if blockedByMe and tc.V < 3 then
+			tc.BlockedFor = (tc.BlockedFor or 0) + dt
+			if tc.BlockedFor > 0.8 and not tc.Honked then
+				tc.Honked = true
+				EngineSound.OneShot(tc.Root, "Hupe", 0.6)
+			end
+		elseif not blockedByMe then
+			tc.BlockedFor = 0
+			tc.Honked = false
 		end
 
 		-- Gas geben / bremsen

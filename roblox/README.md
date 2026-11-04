@@ -12,6 +12,12 @@ Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunde
   - **12 goldene Schraubenschlüssel** auf der Karte versteckt (je 1.000 €, alle zusammen +25.000 €)
 - **Fahr-Extras:** Nitro (N), Hupe (H), Launch Control (Shift halten + W im Stand), **Pop & Bang** als Upgrade und Kundenwunsch, Brems- und Blinklichter
 - **Echter Verkehr:** Ampeln an den Kreuzungen, Abstand zum Vordermann, Bremsen und Anfahren, langsamer in Kurven, Blinker, Bremslichter und Neigung der Karosserie. Hält auch vor dir an.
+- **Fortschritt:** Level mit Erfahrungspunkten (Geld bei jedem Level-Up), tägliche Belohnung mit Serie (Tag 7: 15.000 €), drei Tagesaufträge pro Tag.
+- **Garage:** Firmenwagen gestalten mit Lack, Felgen, Unterbodenbeleuchtung, Heckflügel und Karosserieform (bis zum Supersportler).
+- **Rennen:** Im Auto auf „🏁 Rennen“ (Taste R) drücken. Alle Spieler können 20 s lang beitreten, dann Startaufstellung, Startampel und 2 Runden. Preisgeld für die Plätze.
+- **Schnellreise** zu Werkstatt, Teststrecke, Stuntpark, Slalom, See und Stadt. **Boost-Felder** auf der Strecke und vor den Schanzen.
+- **Verkehr mit Rücksicht:** Wer auf der Straße steht, wird angehupt, und die Autos warten, bis man zur Seite geht.
+- **Demo-Hinweis und Ideen-Briefkasten:** Spieler schicken Ideen und Fehler über „💡 Ideen“. Als Besitzer liest du sie über den Admin-Knopf „📬 Ideen lesen“ (gespeichert im DataStore). Den Demo-Hinweis schaltest du mit `Config.ShowDemoNotice = false` ab.
 - **Echte Avatare:** Fußgänger, Fahrer, Kunden und Zuschauer sehen aus wie du und deine Roblox-Freunde (Reserve: bekannte Roblox-Konten). Sie laufen mit denselben Animationen wie dein eigener Charakter.
 - **Leben in der Stadt:** Verkehr mit Fahrern auf allen Straßen (Rechtsverkehr, hält vor dir an), Fußgänger auf den Gehwegen und am See, jubelnde Zuschauer auf der Tribüne, geparkte Autos im Fahrerlager. Alle Autos haben drehende und lenkende Räder.
 - **Landschaft:** Hügel, Wiesen, Felder mit Zaun, Büsche, Felsen, Blumen, Bänke, Bushaltestellen und Verkehrsschilder.
@@ -86,26 +92,16 @@ Solange `Id = 0` steht, zeigt der Knopf „Bald verfügbar“. Käufe in Studio 
 Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. Geldpakete werden sofort gutgeschrieben und gespeichert. Jeder Kauf wird nur einmal gutgeschrieben, auch wenn Roblox ihn erneut meldet.
 
 ## Sounds
-Motor, Turbo, Abblasventil, Fehlzündung, Reifen, Hydraulik und Umgebung werden mit `tools/make_sounds.py` per Klangsynthese erzeugt. Die Dateien liegen in `sounds/`. `sounds/hoerprobe.mp3` zeigt, wie das im Spiel klingt (Leerlauf, Gasstoß, Beschleunigen mit Gangwechseln, Gas weg).
+Alle 21 Sounds werden mit `tools/make_sounds.py` per Klangsynthese erzeugt und in **eine einzige Datei** gepackt: `sounds/alle_sounds.ogg`. Das Spiel spielt daraus gezielt Abschnitte ab (PlaybackRegion). Die Inhaltsliste steht in `Config.SoundSprite`.
 
-| Datei | Eintrag in `Config.Sounds` |
-|---|---|
-| `motor_tief.ogg` | `MotorTief` |
-| `motor_hoch.ogg` | `MotorHoch` |
-| `turbo.ogg` | `Turbo` |
-| `abblasen.ogg` | `Abblasen` |
-| `fehlzuendung.ogg` | `Fehlzuendung` |
-| `reifen.ogg` | `Reifen` |
-| `hydraulik.ogg` | `Hydraulik` |
-| `umgebung.ogg` | `Umgebung` |
-| `hupe.ogg` | `Hupe` |
+Enthalten sind: Motor tief und hoch, Turbo, Reifen, Hydraulik, Umgebung, Werkstatt, Abblasventil, Fehlzündung, Hupe, Kasse, Level-Up, Klick, Countdown kurz und lang, Jubel, Autotür, Aufprall, Schraubenschlüssel, Blitzer und Schlagschrauber.
 
-So kommen sie ins Spiel:
-1. Auf https://create.roblox.com/dashboard/creations links **Development Items → Audio** öffnen, dann **Upload Asset** und die 9 Dateien hochladen. In Studio geht es auch über *View → Asset Manager → Bulk Import*.
+**So kommen sie ins Spiel (einmalig):**
+1. Auf https://create.roblox.com/dashboard/creations links **Development Items → Audio** öffnen, dann **Upload Asset** und `alle_sounds.ogg` hochladen. In Studio geht es auch über *View → Asset Manager → Import*.
 2. Die Prüfung durch Roblox abwarten (meist wenige Minuten).
-3. Die Zahlen-IDs in `src/shared/Config.lua` bei `Config.Sounds` eintragen, z. B. `MotorTief = "1234567890",`.
+3. Die Zahlen-ID in `src/shared/Config.lua` bei `Config.SoundFile` eintragen, z. B. `Config.SoundFile = "1234567890"`.
 
-Leere Einträge sind stumm. Das Spiel funktioniert auch ohne Sounds.
+`sounds/hoerprobe.mp3` zeigt, wie der Motor im Spiel klingt. Ohne ID läuft das Spiel stumm, aber fehlerfrei.
 
 ## Testen
 - In **Roblox Studio** startest du automatisch mit 1.000.000 € (`Config.StudioMoney`).
@@ -121,7 +117,7 @@ Leere Einträge sind stumm. Das Spiel funktioniert auch ohne Sounds.
 | `src/shared/Npc.lua` | ReplicatedStorage › ModuleScript | Personen (Fahrer, Kunden, Fußgänger) |
 | `src/shared/Paths.lua` | ReplicatedStorage › ModuleScript | Fahrspuren und Fußwege |
 | `src/shared/Util.lua` | ReplicatedStorage › ModuleScript | Bau-Helfer |
-| `src/shared/EngineSound.lua` | ReplicatedStorage › ModuleScript | Motorsound mit Getriebe und Drehzahl |
+| `src/shared/EngineSound.lua` | ReplicatedStorage › ModuleScript | Sounds (Sammeldatei), Motorsound mit Getriebe |
 | `src/server/GameServer.server.lua` | ServerScriptService › Script | Werkstätten, Kunden, Hebebühnen, Geld, Fahren, Shop, Speichern |
 | `src/server/World.lua` | ServerScriptService › ModuleScript | Gelände, Licht, Straßen, Teststrecke, Natur, Gebäude |
 | `src/client/ChiptuningClient.client.lua` | StarterPlayerScripts › LocalScript | Oberfläche, Tuning-Minispiel, Shop |
