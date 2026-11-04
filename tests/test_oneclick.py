@@ -603,16 +603,15 @@ class WebTests(Basis):
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck
             self.assertNotIn("Zurück zum Programm", self.kunde.get(url, headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
 
-    def test_sofort_kauf_aus_dem_archiv(self):
+    def test_ohne_bezahlung_kein_gratis_sofort_kauf(self):
+        # Sicherheit: ist Stripe nicht eingerichtet (oder kein Preis), gaebe es Archiv-Files gratis -> Admin entscheidet
         A.speichere_config({"archiv_sofort": True})
         aid = self.hochladen(self.golf)
-        self.assertTrue(all(o["sofort"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]))
+        self.assertFalse(any(o["sofort"] for o in self.kunde.get(f"/api/auftrag/{aid}").json["angebot"]))
         self.bestellen(aid, "startstopp")
-        a = self.auftrag(aid)
-        self.assertEqual((a["status"], a["entschieden_von"]), ("FREIGEGEBEN", "automatisch (Archiv)"))
-        d = self.laden(aid)                                   # ohne Zahlung aktiv: sofort herunterladen
-        self.assertEqual((d.status_code, d.data), (200, bytes(self.startstopp)))
-        self.assertNotIn(aid[:8], self.admin().get("/admin/wartend").text)   # landet nicht in "Warten auf Freigabe"
+        self.assertEqual(self.auftrag(aid)["status"], "WARTET")
+        self.assertEqual(self.laden(aid).status_code, 403)
+        self.assertIn(aid, self.admin().get("/admin/wartend").text)   # landet in "Warten auf Freigabe"
 
     def test_rueckruesten_ueber_softwarenummer_bleibt_bei_freigabe(self):
         A.speichere_config({"archiv_sofort": True})
@@ -1374,6 +1373,12 @@ class ZahlungTests(WebTests):
         self.assertEqual(self.laden(aid).status_code, 402)                               # aber erst nach Zahlung laden
         url = self.kunde.post(f"/api/auftrag/{aid}/bezahlen", json={"zustimmung": True}).json["url"]
         self.assertTrue(url.startswith("https://checkout.stripe.test"))
+        # Loesung ohne Preis (waere gratis): nicht sofort, sondern erst deine Freigabe
+        aid2 = self.hochladen(self.golf)
+        self.assertEqual({o["key"]: o["sofort"] for o in self.kunde.get(f"/api/auftrag/{aid2}").json["angebot"]},
+                         {"stage1": True, "startstopp": False})
+        self.bestellen(aid2, "startstopp")
+        self.assertEqual(self.auftrag(aid2)["status"], "WARTET")
 
     def test_preise_und_ablauf(self):
         info = self.kunde.get("/api/info").json

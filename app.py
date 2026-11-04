@@ -678,9 +678,10 @@ def auftrag_abschicken(aid: str, gewaehlt: set, kontakt: str) -> dict:
                        quelle=", ".join(dict.fromkeys(angebot[o]["quelle"] for o in auswahl)),
                        art=art,
                        zeit=datetime.now().isoformat(timespec="seconds"))
-        if art != "softwarenummer" and lade_config().get("archiv_sofort", True) is not False:
+        if sofort_kauf(art, auftrag.get("preis") or 0):
             # File aus dem Archiv (Byte fuer Byte nachgewiesen): sofort freigegeben -> Kunde bezahlt und laedt direkt.
             # Rueckruesten nur ueber die Softwarenummer bleibt bei der Freigabe durch den Admin.
+            # Ohne aktive Bezahlung oder ohne Preis waere das File gratis -> dann entscheidet der Admin.
             auftrag.update(status="FREIGEGEBEN", entschieden=datetime.now().isoformat(timespec="seconds"),
                            entschieden_von="automatisch (Archiv)")
         speichere_auftrag(auftrag)
@@ -731,6 +732,13 @@ def cent_aus(text: str) -> int:
     if wert < 0 or wert > 10_000_000:
         raise ValueError(f"„{text}“ ist kein gültiger Preis.")
     return wert
+
+
+def sofort_kauf(art: str, preis: int) -> bool:
+    """Archiv-File ohne Freigabe verkaufen? Nur mit Byte-Nachweis UND aktiver Bezahlung mit Preis -
+    sonst waere das File gratis und der Admin muss selbst entscheiden."""
+    return (art != "softwarenummer" and lade_config().get("archiv_sofort", True) is not False
+            and zahlung_aktiv() and preis > 0)
 
 
 def zahlung_offen(a: dict) -> bool:
@@ -885,7 +893,7 @@ def api_auftrag(a: dict) -> dict:
         "zeit": a["zeit"], "status": a["status"], "status_text": STATUS_TEXT[a["status"]],
         "option": a.get("option"), "option_name": namen[a["option"]] if a.get("option") else None,
         "ticket": a.get("ticket", "") if a.get("ticket") and finde_ticket(a["ticket"]) else "",
-        "angebot": [{"key": o, "name": namen[o], "sofort": a["angebot"][o].get("art") != "softwarenummer"}
+        "angebot": [{"key": o, "name": namen[o], "sofort": sofort_kauf(a["angebot"][o].get("art"), preis_von([o]))}
                     for o in a.get("angebot", {})] if a["status"] == "ENTWURF" else [],
         "grund": a.get("grund", ""),
         "typ": a.get("typ", "auftrag"), "fahrzeug": fahrzeug_text(a),
