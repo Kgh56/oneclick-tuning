@@ -3,7 +3,7 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "Config": { "$path": "src/shared/Config.lua" }
+      "$path": "src/shared"
     },
     "ServerScriptService": {
       "$path": "src/server"
@@ -14,7 +14,9 @@
       }
     },
     "Lighting": {
-      "$properties": { "Technology": "Future" }
+      "$properties": {
+        "Technology": "Future"
+      }
     }
   }
 }

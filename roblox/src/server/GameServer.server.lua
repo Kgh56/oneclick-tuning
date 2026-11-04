@@ -42,14 +42,16 @@ end
 ------------------------------------------------------------------------
 -- Module
 ------------------------------------------------------------------------
-local Util = require(script.Parent:WaitForChild("Util"))
+local Util = require(ReplicatedStorage:WaitForChild("Util"))
 local World = require(script.Parent:WaitForChild("World"))
-local Cars = require(script.Parent:WaitForChild("Cars"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
+local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
 
 local part, textGui, billboard = Util.part, Util.textGui, Util.billboard
 local lookCF, moveModel = Util.lookCF, Util.moveModel
 
 World.Build()
+Npc.BuildTemplates(12)
 
 local ROAD_Z = World.ROAD_Z
 local PLOT_SPACING = World.PLOT_SPACING
@@ -465,8 +467,8 @@ local function setLift(bay, h)
 		end
 	end
 	local c = bay.Car
-	if c and c.OnLift and c.Model.Parent then
-		c.Model:PivotTo(bay.CF + Vector3.new(0, h, 0))
+	if c and c.OnLift and c.Model.Parent and c.Model.PrimaryPart then
+		c.Model.PrimaryPart.CFrame = bay.CF + Vector3.new(0, h, 0)
 	end
 end
 
@@ -616,11 +618,16 @@ local function spawnCustomer(player, st, bay)
 	local def = candidates[math.random(#candidates)]
 	local stage = math.random(1, maxStage(st))
 	local car = Cars.MakeShowCar(def)
-	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false }
+	local customer = Npc.Random()
+	if customer then
+		Npc.SeatInCar(customer, car)
+	end
+	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false, Customer = customer }
 	bay.Car = carInfo
 
 	local plot = st.Plot
-	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
+	-- rechte Fahrspur der Werkstattstraße (Rechtsverkehr)
+	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local startCF = lookCF(roadPos - Vector3.new(140, 0, 0), Vector3.xAxis)
 	local turnCF = lookCF(roadPos, Vector3.xAxis)
 	local facingIn = lookCF(roadPos, -Vector3.zAxis)
@@ -655,6 +662,11 @@ local function spawnCustomer(player, st, bay)
 		end)
 		car.Kollision.CanCollide = true
 		carInfo.OnLift = true
+		-- Kunde steigt aus und wartet neben der Bühne
+		if customer then
+			local spot = plot.Origin * CFrame.new(bay.X - 7.2, 0.2, BAY_Z + 13)
+			Npc.StandAt(customer, CFrame.lookAt(spot.Position, spot.Position + Vector3.new(1, 0, -0.6)), plot.Model)
+		end
 		carInfo.Ready = true
 	end)
 end
@@ -673,6 +685,11 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 	animateLift(bay, 0, 2.2)
 	carInfo.OnLift = false
 	setCartText(bay, "OBD")
+	-- Kunde steigt wieder ein
+	if carInfo.Customer and carInfo.Customer.Parent and car.Parent then
+		Npc.SeatInCar(carInfo.Customer, car)
+		task.wait(0.6)
+	end
 
 	local function floorPos(x, z)
 		return (plot.Origin * CFrame.new(x, 0.2 + CAR_HEIGHT, z)).Position
@@ -687,12 +704,8 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		local dynoCF = lookCF((plot.Origin * CFrame.new(DYNO_POS)).Position + Vector3.new(0, 0.8 + CAR_HEIGHT, 0), -Vector3.zAxis)
 		moveModel(car, front, dynoCF, 2)
 		local screen = plot.DynoScreen
+		-- Rollen drehen hier; die Räder dreht jeder Client (Attribut DynoSpin)
 		local spinning = {}
-		for _, d in ipairs(car:GetDescendants()) do
-			if d:IsA("BasePart") and (d.Name == "Reifen" or d.Name == "Felge" or d.Name == "Nabe" or d.Name == "Speiche") then
-				table.insert(spinning, d)
-			end
-		end
 		if plot.Dyno then
 			for _, d in ipairs(plot.Dyno:GetChildren()) do
 				if d.Name == "Rolle" then
@@ -711,6 +724,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			local a = math.clamp((now - t0) / 2.6, 0, 1)
 			local hp = math.floor(oldHp + (newHp - oldHp) * a)
 			local spin = (6 + 30 * a) * dt
+			car:SetAttribute("DynoSpin", 6 + 30 * a)
 			for _, sp in ipairs(spinning) do
 				sp.CFrame = sp.CFrame * CFrame.Angles(-spin, 0, 0)
 			end
@@ -726,6 +740,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			end
 			RunService.Heartbeat:Wait()
 		end
+		car:SetAttribute("DynoSpin", 0)
 		if screen and screen.Parent then
 			screen.Text = ("PRÜFSTAND\n%d PS ✔"):format(newHp)
 		end
@@ -734,7 +749,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		plot.DynoBusy = false
 	end
 
-	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
+	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local onRoad = lookCF(roadPos, -Vector3.zAxis)
 	moveModel(car, front, onRoad, 2.2)
 	local turned = lookCF(roadPos, Vector3.xAxis)

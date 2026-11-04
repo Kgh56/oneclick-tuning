@@ -12,7 +12,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
-local Util = require(script.Parent:WaitForChild("Util"))
+local Util = require(ReplicatedStorage:WaitForChild("Util"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local part = Util.part
 
 local World = {}
@@ -101,6 +102,14 @@ local function buildTerrain()
 	local terrain = workspace.Terrain
 	pcall(function()
 		terrain.Decoration = false -- keine Grashalme, die durch Böden wachsen
+	end)
+	-- natürlichere Farben
+	pcall(function()
+		terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(92, 132, 64))
+		terrain:SetMaterialColor(Enum.Material.LeafyGrass, Color3.fromRGB(72, 110, 50))
+		terrain:SetMaterialColor(Enum.Material.Ground, Color3.fromRGB(110, 90, 68))
+		terrain:SetMaterialColor(Enum.Material.Rock, Color3.fromRGB(118, 116, 112))
+		terrain:SetMaterialColor(Enum.Material.Sand, Color3.fromRGB(214, 198, 152))
 	end)
 	-- Grundfläche, Oberkante y = 0
 	terrain:FillBlock(CFrame.new(0, -6, 0), Vector3.new(2800, 12, 2800), Enum.Material.Grass)
@@ -443,7 +452,7 @@ end
 
 local function buildLamps()
 	for x = -900, 900, 60 do
-		lamp(Vector3.new(x, 0, World.ROAD_Z + 14), -Vector3.zAxis)
+		lamp(Vector3.new(x, 0.25, World.ROAD_Z + 19.4), -Vector3.zAxis)
 	end
 	for z = SOUTH_Z + 40, -60, 50 do
 		lamp(Vector3.new(14, 0, z), -Vector3.xAxis)
@@ -530,6 +539,8 @@ local BLOCKED = {
 	{ -715, -685, -795, 275 },
 	{ 685, 715, -795, 275 },
 	{ 480, 820, 290, 570 }, -- See
+	{ -1010, -750, -310, 110 }, -- Feld West
+	{ 750, 1010, -510, -90 }, -- Feld Ost
 }
 
 local function isFree(x, z)
@@ -540,6 +551,16 @@ local function isFree(x, z)
 	end
 	return math.sqrt(x * x + z * z) < 1020
 end
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Include
+rayParams.FilterDescendantsInstances = { workspace.Terrain }
+
+local function groundY(x, z)
+	local hit = workspace:Raycast(Vector3.new(x, 250, z), Vector3.new(0, -500, 0), rayParams)
+	return hit and hit.Position.Y or 0
+end
+World.GroundY = groundY
 
 local function tree(pos, rng)
 	local trunkH = rng:NextNumber(7, 11)
@@ -594,7 +615,7 @@ local function buildTrees()
 		local x = rng:NextNumber(-1020, 1020)
 		local z = rng:NextNumber(-1020, 1020)
 		if isFree(x, z) then
-			tree(Vector3.new(x, 0, z), rng)
+			tree(Vector3.new(x, groundY(x, z) - 0.3, z), rng)
 			placed += 1
 		end
 	end
@@ -602,6 +623,258 @@ local function buildTrees()
 	for z = SOUTH_Z + 110, -60, 40 do
 		tree(Vector3.new(-22, 0, z), rng)
 		tree(Vector3.new(26, 0, z + 20), rng)
+	end
+end
+
+
+------------------------------------------------------------------------
+-- Natur: Hügel, Wiesen, Felder, Büsche, Felsen, Blumen
+------------------------------------------------------------------------
+
+local function areaFree(x, z, r)
+	if not isFree(x, z) then
+		return false
+	end
+	for k = 0, 7 do
+		local a = k / 8 * math.pi * 2
+		if not isFree(x + math.cos(a) * r, z + math.sin(a) * r) then
+			return false
+		end
+	end
+	return true
+end
+
+local function region(x0, z0, x1, z1)
+	return Region3.new(Vector3.new(math.min(x0, x1), -12, math.min(z0, z1)), Vector3.new(math.max(x0, x1), 60, math.max(z0, z1))):ExpandToGrid(4)
+end
+
+local function buildHills()
+	local terrain = workspace.Terrain
+	local rng = Random.new(19)
+	local made, tries = 0, 0
+	while made < 34 and tries < 800 do
+		tries += 1
+		local r = rng:NextNumber(28, 70)
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if areaFree(x, z, r + 12) then
+			terrain:FillBall(Vector3.new(x, -r * 0.78, z), r, Enum.Material.Grass)
+			made += 1
+		end
+	end
+	-- Wiesenflecken und Erdstellen für ein natürlicheres Bild
+	for _ = 1, 70 do
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		local w, d = rng:NextNumber(16, 70), rng:NextNumber(16, 70)
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z, x + w, z + d), 4, Enum.Material.Grass, Enum.Material.LeafyGrass)
+		end)
+	end
+	for _ = 1, 14 do
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		local w = rng:NextNumber(8, 20)
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z, x + w, z + w), 4, Enum.Material.Grass, Enum.Material.Ground)
+		end)
+	end
+end
+
+local function fence(a, b)
+	local dir = b - a
+	local len = dir.Magnitude
+	local n = math.floor(len / 8)
+	local wood = Color3.fromRGB(120, 90, 60)
+	for i = 0, n do
+		local p = a + dir * (i / math.max(n, 1))
+		part({ Name = "Zaunpfahl", Size = Vector3.new(0.5, 3.2, 0.5), CFrame = CFrame.new(p.X, 1.4, p.Z), Color = wood, Material = Enum.Material.Wood, Parent = folder })
+	end
+	local mid = (a + b) / 2
+	for _, h in ipairs({ 1.2, 2.4 }) do
+		part({
+			Name = "Zaunlatte",
+			Size = Vector3.new(0.25, 0.35, len),
+			CFrame = CFrame.lookAt(Vector3.new(mid.X, h, mid.Z), Vector3.new(b.X, h, b.Z)),
+			Color = wood,
+			Material = Enum.Material.WoodPlanks,
+			Parent = folder,
+		})
+	end
+end
+
+local function field(x0, z0, x1, z1)
+	local terrain = workspace.Terrain
+	-- Furchen: abwechselnd Erde und Pflanzenreihen
+	local x = x0
+	local row = 0
+	while x < x1 do
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z0, x + 4, z1), 4, row % 2 == 0 and Enum.Material.Grass or Enum.Material.LeafyGrass, Enum.Material.Ground)
+		end)
+		row += 1
+		x += 8
+	end
+	local c = { Vector3.new(x0, 0, z0), Vector3.new(x1, 0, z0), Vector3.new(x1, 0, z1), Vector3.new(x0, 0, z1) }
+	for i = 1, 4 do
+		fence(c[i], c[i % 4 + 1])
+	end
+end
+
+local function buildNatureDetails()
+	local rng = Random.new(23)
+	field(-1000, -300, -760, 100)
+	field(760, -500, 1000, -100)
+
+	-- Büsche
+	local placed, tries = 0, 0
+	while placed < 260 and tries < 4000 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if isFree(x, z) then
+			local y = groundY(x, z)
+			local green = rng:NextInteger(85, 125)
+			for _ = 1, rng:NextInteger(2, 4) do
+				local sz = rng:NextNumber(2.5, 5)
+				part({
+					Name = "Busch",
+					Shape = Enum.PartType.Ball,
+					Size = Vector3.new(sz, sz, sz),
+					CFrame = CFrame.new(x + rng:NextNumber(-2, 2), y + sz * 0.3, z + rng:NextNumber(-2, 2)),
+					Color = Color3.fromRGB(45, green, 40),
+					Material = Enum.Material.LeafyGrass,
+					CanCollide = false,
+					Parent = folder,
+				})
+			end
+			placed += 1
+		end
+	end
+
+	-- Felsen
+	placed, tries = 0, 0
+	while placed < 70 and tries < 2000 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if isFree(x, z) then
+			local sz = Vector3.new(rng:NextNumber(3, 9), rng:NextNumber(2, 5), rng:NextNumber(3, 9))
+			part({
+				Name = "Fels",
+				Size = sz,
+				CFrame = CFrame.new(x, groundY(x, z) + sz.Y * 0.2, z) * CFrame.Angles(rng:NextNumber(-0.3, 0.3), rng:NextNumber(0, 6.28), rng:NextNumber(-0.3, 0.3)),
+				Color = Color3.fromRGB(rng:NextInteger(105, 135), rng:NextInteger(105, 130), rng:NextInteger(100, 120)),
+				Material = Enum.Material.Rock,
+				Parent = folder,
+			})
+			placed += 1
+		end
+	end
+
+	-- Blumenwiesen
+	local FLOWERS = {
+		Color3.fromRGB(230, 40, 50), Color3.fromRGB(250, 220, 40), Color3.fromRGB(245, 245, 250),
+		Color3.fromRGB(150, 80, 200), Color3.fromRGB(255, 140, 180),
+	}
+	placed, tries = 0, 0
+	while placed < 45 and tries < 1500 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if areaFree(x, z, 10) then
+			local col = FLOWERS[rng:NextInteger(1, #FLOWERS)]
+			for _ = 1, 12 do
+				local fx, fz = x + rng:NextNumber(-9, 9), z + rng:NextNumber(-9, 9)
+				part({
+					Name = "Blume",
+					Shape = Enum.PartType.Ball,
+					Size = Vector3.new(0.7, 0.7, 0.7),
+					CFrame = CFrame.new(fx, groundY(fx, fz) + 0.5, fz),
+					Color = col,
+					CanCollide = false,
+					CastShadow = false,
+					Parent = folder,
+				})
+			end
+			placed += 1
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- Straßenmöbel: Bänke, Mülleimer, Bushaltestellen, Schilder
+------------------------------------------------------------------------
+local function bench(pos, facing)
+	local cf = CFrame.lookAt(pos, pos + facing)
+	local wood = Color3.fromRGB(130, 90, 55)
+	local metal = Color3.fromRGB(45, 48, 52)
+	part({ Name = "Bank", Size = Vector3.new(5, 0.3, 1.4), CFrame = cf * CFrame.new(0, 1.5, 0), Color = wood, Material = Enum.Material.WoodPlanks, Parent = folder })
+	part({ Name = "Banklehne", Size = Vector3.new(5, 1.2, 0.25), CFrame = cf * CFrame.new(0, 2.4, 0.65), Color = wood, Material = Enum.Material.WoodPlanks, Parent = folder })
+	for _, x in ipairs({ -2.1, 2.1 }) do
+		part({ Name = "Bankfuss", Size = Vector3.new(0.25, 1.4, 1.3), CFrame = cf * CFrame.new(x, 0.75, 0), Color = metal, Material = Enum.Material.Metal, Parent = folder })
+	end
+end
+
+local function bin(pos)
+	part({ Name = "Muelleimer", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.4, 1.6, 1.6), CFrame = CFrame.new(pos + Vector3.new(0, 1.2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(40, 110, 60), Material = Enum.Material.Metal, Parent = folder })
+end
+
+local function busStop(x)
+	local z = World.ROAD_Z + 18.5
+	local base = CFrame.new(x, 0.25, z)
+	part({ Name = "Wartehaeuschen", Size = Vector3.new(11, 0.3, 4.4), CFrame = base * CFrame.new(0, 8, 0), Color = Color3.fromRGB(60, 62, 68), Material = Enum.Material.Metal, Parent = folder })
+	part({ Name = "Rueckwand", Size = Vector3.new(11, 7.6, 0.15), CFrame = base * CFrame.new(0, 4, 2.1), Color = Color3.fromRGB(180, 210, 230), Material = Enum.Material.Glass, Transparency = 0.5, Parent = folder })
+	for _, sx in ipairs({ -5.4, 5.4 }) do
+		part({ Name = "Seitenglas", Size = Vector3.new(0.15, 7.6, 4.2), CFrame = base * CFrame.new(sx, 4, 0), Color = Color3.fromRGB(180, 210, 230), Material = Enum.Material.Glass, Transparency = 0.5, Parent = folder })
+	end
+	bench(Vector3.new(x, 0.25, z + 0.8), -Vector3.zAxis)
+	part({ Name = "Haltestellenmast", Size = Vector3.new(0.35, 9, 0.35), CFrame = CFrame.new(x - 7.5, 4.75, World.ROAD_Z + 13), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local sign = part({ Name = "Haltestellenschild", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.2, 2.6, 2.6), CFrame = CFrame.new(x - 7.5, 9.6, World.ROAD_Z + 13) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 210, 0), Parent = folder })
+	local plate = part({ Name = "Haltestelle", Size = Vector3.new(1.6, 1.6, 0.1), CFrame = CFrame.new(x - 7.5, 9.6, World.ROAD_Z + 12.85), Transparency = 1, CanCollide = false, Parent = folder })
+	Util.textGui(plate, Enum.NormalId.Front, "H", Color3.fromRGB(0, 120, 60))
+	sign.Name = "Haltestellenschild"
+end
+
+local function speedSign(pos, facing, text)
+	part({ Name = "Schildmast", Size = Vector3.new(0.3, 7, 0.3), CFrame = CFrame.new(pos + Vector3.new(0, 3.5, 0)), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local cf = CFrame.lookAt(pos + Vector3.new(0, 7.4, 0), pos + Vector3.new(0, 7.4, 0) + facing)
+	part({ Name = "Schildring", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 2.4, 2.4), CFrame = cf * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(210, 20, 30), Parent = folder })
+	part({ Name = "Schildflaeche", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.14, 1.9, 1.9), CFrame = cf * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(245, 245, 245), Parent = folder })
+	local plate = part({ Name = "Schildtext", Size = Vector3.new(1.4, 1.1, 0.05), CFrame = cf * CFrame.new(0, 0, -0.1), Transparency = 1, CanCollide = false, Parent = folder })
+	Util.textGui(plate, Enum.NormalId.Front, text, Color3.fromRGB(15, 15, 15))
+end
+
+local function directionSign(pos, facing, text)
+	part({ Name = "Schildmast", Size = Vector3.new(0.3, 7, 0.3), CFrame = CFrame.new(pos + Vector3.new(0, 3.5, 0)), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local panel = part({ Name = "Wegweiser", Size = Vector3.new(7, 1.6, 0.15), CFrame = CFrame.lookAt(pos + Vector3.new(0, 7, 0), pos + Vector3.new(0, 7, 0) + facing), Color = Color3.fromRGB(250, 210, 0), Parent = folder })
+	Util.textGui(panel, Enum.NormalId.Front, text, Color3.fromRGB(15, 15, 15), Color3.fromRGB(250, 210, 0))
+end
+
+local function buildStreetFurniture()
+	-- durchgehender Gehweg an der Südseite der Werkstattstraße
+	World.Slab(CFrame.new(0, 0, World.ROAD_Z + 16), 1900, 8, 0.25, Color3.fromRGB(178, 176, 172), Enum.Material.Pavement, "Gehweg")
+	for x = -870, 870, 90 do
+		if math.abs(x) > 40 and math.abs(math.abs(x) - 420) > 20 then
+			bench(Vector3.new(x, 0.25, World.ROAD_Z + 18.8), -Vector3.zAxis)
+			bin(Vector3.new(x + 4, 0.25, World.ROAD_Z + 19))
+		end
+	end
+	busStop(-420)
+	busStop(420)
+	speedSign(Vector3.new(-620, 0.25, World.ROAD_Z + 13.5), -Vector3.xAxis, "50")
+	speedSign(Vector3.new(620, 0.25, World.ROAD_Z + 13.5), Vector3.xAxis, "50")
+	directionSign(Vector3.new(-10.3, 0.2, World.ROAD_Z - 13), Vector3.zAxis, "🏁 Teststrecke")
+end
+
+-- Geparkte Autos im Fahrerlager
+local function buildParkedCars()
+	local rng = Random.new(31)
+	local z0 = SOUTH_Z + T.Width / 2 - 1
+	local zc = z0 + 70 - 9
+	local styles = { "hatch", "sedan", "wagon", "coupe", "super" }
+	local colors = { Color3.fromRGB(235, 235, 238), Color3.fromRGB(25, 25, 28), Color3.fromRGB(170, 20, 30), Color3.fromRGB(25, 60, 140), Color3.fromRGB(240, 170, 0), Color3.fromRGB(120, 125, 132) }
+	for x = -171, 171, 10 do
+		if math.abs(x) > 30 and rng:NextNumber() < 0.45 then
+			local car = Cars.MakeShowCar({ Name = "Geparkt", Style = styles[rng:NextInteger(1, #styles)], Hp = rng:NextInteger(150, 600), Color = colors[rng:NextInteger(1, #colors)] })
+			car.PrimaryPart.CFrame = CFrame.new(x, 0.07 + Cars.BODY_HEIGHT, zc) * CFrame.Angles(0, math.pi, 0)
+			car.Kollision.CanCollide = true
+			car.Parent = folder
+		end
 	end
 end
 
@@ -615,12 +888,16 @@ function World.Build()
 
 	buildLighting()
 	buildTerrain()
+	buildHills()
 	buildRoads()
 	buildTrack()
 	buildPaddock()
+	buildStreetFurniture()
 	buildLamps()
 	buildTown()
 	buildTrees()
+	buildNatureDetails()
+	buildParkedCars()
 
 	local spawnLoc = Instance.new("SpawnLocation")
 	spawnLoc.Name = "Spawn"

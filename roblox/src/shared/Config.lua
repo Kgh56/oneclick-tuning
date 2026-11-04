@@ -18,14 +18,14 @@ Config.Stages = {
 
 -- Kundenautos (fiktive Modelle). MinRep = ab welchem Ruf der Kunde kommt
 Config.Cars = {
-	{ Name = "Stadtflitzer 1.0 Turbo", Hp = 95, Nm = 175, PayMult = 0.7, MinRep = 0, Color = Color3.fromRGB(200, 200, 205) },
-	{ Name = "Kompakt 1.4 Turbo", Hp = 150, Nm = 250, PayMult = 0.9, MinRep = 0, Color = Color3.fromRGB(30, 80, 160) },
-	{ Name = "Familienkombi 2.0 Diesel", Hp = 150, Nm = 340, PayMult = 1.0, MinRep = 0, Color = Color3.fromRGB(40, 40, 45) },
-	{ Name = "Hot Hatch GTX", Hp = 245, Nm = 370, PayMult = 1.2, MinRep = 10, Color = Color3.fromRGB(190, 20, 30) },
-	{ Name = "Limousine 3.0 Diesel", Hp = 286, Nm = 650, PayMult = 1.4, MinRep = 25, Color = Color3.fromRGB(20, 40, 90) },
-	{ Name = "Sportkombi 2.9 V6", Hp = 450, Nm = 600, PayMult = 1.8, MinRep = 50, Color = Color3.fromRGB(80, 90, 95) },
-	{ Name = "Sportcoupé 3.8 Turbo", Hp = 580, Nm = 750, PayMult = 2.5, MinRep = 100, Color = Color3.fromRGB(240, 180, 0) },
-	{ Name = "Supersportler V12", Hp = 780, Nm = 720, PayMult = 3.5, MinRep = 200, Color = Color3.fromRGB(10, 150, 80) },
+	{ Name = "Stadtflitzer 1.0 Turbo", Style = "hatch", Hp = 95, Nm = 175, PayMult = 0.7, MinRep = 0, Color = Color3.fromRGB(200, 200, 205) },
+	{ Name = "Kompakt 1.4 Turbo", Style = "hatch", Hp = 150, Nm = 250, PayMult = 0.9, MinRep = 0, Color = Color3.fromRGB(30, 80, 160) },
+	{ Name = "Familienkombi 2.0 Diesel", Style = "wagon", Hp = 150, Nm = 340, PayMult = 1.0, MinRep = 0, Color = Color3.fromRGB(40, 40, 45) },
+	{ Name = "Hot Hatch GTX", Style = "hatch", Hp = 245, Nm = 370, PayMult = 1.2, MinRep = 10, Color = Color3.fromRGB(190, 20, 30) },
+	{ Name = "Limousine 3.0 Diesel", Style = "sedan", Hp = 286, Nm = 650, PayMult = 1.4, MinRep = 25, Color = Color3.fromRGB(20, 40, 90) },
+	{ Name = "Sportkombi 2.9 V6", Style = "wagon", Hp = 450, Nm = 600, PayMult = 1.8, MinRep = 50, Color = Color3.fromRGB(80, 90, 95) },
+	{ Name = "Sportcoupé 3.8 Turbo", Style = "coupe", Hp = 580, Nm = 750, PayMult = 2.5, MinRep = 100, Color = Color3.fromRGB(240, 180, 0) },
+	{ Name = "Supersportler V12", Style = "super", Hp = 780, Nm = 720, PayMult = 3.5, MinRep = 200, Color = Color3.fromRGB(10, 150, 80) },
 }
 
 -- Upgrades im Werkstatt-Shop (Reihenfolge = Anzeige im Shop)
@@ -73,8 +73,14 @@ Config.Track = { CenterZ = -450, HalfLength = 250, Radius = 150, Width = 30 }
 Config.TestDriveSeconds = 75 -- Dauer einer Probefahrt
 Config.TestDriveTip = 0.15 -- Trinkgeld-Anteil nach der Probefahrt
 Config.TestDriveMinSeconds = 15 -- so lange muss man fahren für Trinkgeld
-Config.CompanyCar = { Name = "Firmenwagen", Hp = 220, Nm = 350, Color = Color3.fromRGB(255, 140, 0) }
+Config.CompanyCar = { Name = "Firmenwagen", Style = "coupe", Hp = 220, Nm = 350, Color = Color3.fromRGB(255, 140, 0) }
 Config.DayLengthMinutes = 24 -- ein Tag-Nacht-Zyklus
+
+-- Leben in der Stadt (läuft auf jedem Client)
+Config.TrafficCars = 18 -- Autos im Straßenverkehr
+Config.TrafficSpeed = 42 -- Studs pro Sekunde
+Config.Pedestrians = 34 -- Fußgänger
+Config.NpcScale = 0.85 -- Größe der Fahrer und Fußgänger
 
 -- Fahrwerte aus der Leistung (Studs pro Sekunde)
 function Config.DriveStats(hp)

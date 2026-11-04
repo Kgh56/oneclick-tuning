@@ -4,7 +4,9 @@ Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunde
 
 ## So spielt es sich
 - **Große Welt:** Werkstattstraße mit 6 Werkstätten, Läden, Bäumen und Laternen. Dazu eine **Teststrecke** (Oval mit Tribüne, Curbs und Flutlicht), eine Landstraße als großer Rundkurs, ein See und Berge am Rand. Tag und Nacht wechseln sich ab, ein Tag dauert 24 Minuten.
-- **Kunden** fahren von der Straße auf deine Hebebühne. Über dem Auto steht, welches Modell es ist und welche Stage der Kunde will.
+- **Leben in der Stadt:** Verkehr mit Fahrern auf allen Straßen (Rechtsverkehr, hält vor dir an), Fußgänger auf den Gehwegen und am See, jubelnde Zuschauer auf der Tribüne, geparkte Autos im Fahrerlager. Alle Autos haben drehende und lenkende Räder.
+- **Landschaft:** Hügel, Wiesen, Felder mit Zaun, Büsche, Felsen, Blumen, Bänke, Bushaltestellen und Verkehrsschilder.
+- **Kunden** fahren mit ihrem Auto von der Straße auf deine Hebebühne, steigen aus und warten daneben. Über dem Auto steht, welches Modell es ist und welche Stage der Kunde will.
 - **Tunen:** Zum Auto gehen und **[E]** drücken. Dann stimmst du drei Kennfelder ab (Zündzeitpunkt, Ladedruck, Einspritzmenge): Die Nadel läuft hin und her, und du stoppst sie mit der **Leertaste** oder dem Knopf.
   - Grün = perfekt, Gelb = okay, Rot = der Motor klopft
 - **Probefahrt:** Nach dem Tunen kannst du das Kundenauto mit der neuen Leistung auf der Teststrecke fahren. Es gibt eine Rundenzeit und Trinkgeld, wenn du mindestens 15 Sekunden fährst.
@@ -74,13 +76,16 @@ Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. 
 ## Dateien
 | Datei | Ort in Roblox | Inhalt |
 |---|---|---|
-| `src/shared/Config.lua` | ReplicatedStorage › ModuleScript „Config“ | Preise, Autos, Upgrades, Fahrwerte, Balancing |
-| `src/server/GameServer.server.lua` | ServerScriptService › Script | Werkstätten, Kunden, Geld, Fahren, Shop, Speichern |
-| `src/server/World.lua` | ServerScriptService › ModuleScript | Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude |
-| `src/server/Cars.lua` | ServerScriptService › ModuleScript | Automodelle (Ausstellung und fahrbar) |
-| `src/server/Util.lua` | ServerScriptService › ModuleScript | Bau-Helfer |
+| `src/shared/Config.lua` | ReplicatedStorage › ModuleScript | Preise, Autos, Upgrades, Fahrwerte, Verkehr, Balancing |
+| `src/shared/Cars.lua` | ReplicatedStorage › ModuleScript | Automodelle (5 Karosserieformen, fahrbar und verankert) |
+| `src/shared/Npc.lua` | ReplicatedStorage › ModuleScript | Personen (Fahrer, Kunden, Fußgänger) |
+| `src/shared/Paths.lua` | ReplicatedStorage › ModuleScript | Fahrspuren und Fußwege |
+| `src/shared/Util.lua` | ReplicatedStorage › ModuleScript | Bau-Helfer |
+| `src/server/GameServer.server.lua` | ServerScriptService › Script | Werkstätten, Kunden, Hebebühnen, Geld, Fahren, Shop, Speichern |
+| `src/server/World.lua` | ServerScriptService › ModuleScript | Gelände, Licht, Straßen, Teststrecke, Natur, Gebäude |
 | `src/client/ChiptuningClient.client.lua` | StarterPlayerScripts › LocalScript | Oberfläche, Tuning-Minispiel, Shop |
 | `src/client/DriveClient.client.lua` | StarterPlayerScripts › LocalScript | Fahrphysik, Tacho, Rundenzeit |
+| `src/client/LifeClient.client.lua` | StarterPlayerScripts › LocalScript | Verkehr, Fußgänger, Räder- und Personen-Animation |
 
 Balancing wie Preise, Bezahlung, Kundentempo oder Fahrwerte änderst du in `Config.lua`.
 

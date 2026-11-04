@@ -1,4 +1,421 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="ReplicatedStorage" referent="RBX00000002"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: gemeinsame Einstellungen (Server und Client)
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="ReplicatedStorage" referent="RBX00000006"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Cars</string><ProtectedString name="Source"><![CDATA[-- Automodelle für Werkstatt, Verkehr und Spieler
+-- ModuleScript "Cars" in ReplicatedStorage (Server und Client bauen damit Autos)
+--
+-- Koordinaten relativ zur Karosseriemitte. Die Karosseriemitte liegt 1.7 Studs
+-- über dem Boden, die Front zeigt nach -Z. Räder hängen über Motor6D an der
+-- Wurzel bzw. am Fahrgestell; gedreht und gelenkt werden sie von LifeClient
+-- bzw. DriveClient (nur optisch, ohne Netzwerkverkehr).
+
+local CollectionService = game:GetService("CollectionService")
+
+local Util = require(script.Parent:WaitForChild("Util"))
+local part, wedge = Util.part, Util.wedge
+
+local Cars = {}
+
+Cars.BODY_HEIGHT = 1.7 -- Karosseriemitte über Boden
+Cars.CHASSIS_HEIGHT = 0.9 -- Mitte des Fahrgestells (fahrbares Auto) über Boden
+Cars.WHEEL_RADIUS = 1.2
+Cars.TAG = "AnimCar" -- Autos mit diesem Tag bekommen drehende Räder
+
+-- Karosserieformen. Längen in Studs, Front bei -L/2.
+-- Hood/Wind/Roof/Rear = Länge von Motorhaube, Frontscheibe, Dach, Heckscheibe
+local STYLES = {
+	hatch = { L = 10.6, W = 6.0, Hood = 2.6, Wind = 1.9, Roof = 3.6, Rear = 1.6, Cabin = 1.45, Belt = 0.8, Bottom = -0.8, Axle = 3.4 },
+	sedan = { L = 12.4, W = 6.0, Hood = 3.2, Wind = 2.0, Roof = 3.0, Rear = 1.8, Cabin = 1.4, Belt = 0.8, Bottom = -0.8, Axle = 4.0 },
+	wagon = { L = 12.6, W = 6.0, Hood = 3.0, Wind = 2.0, Roof = 5.6, Rear = 0.9, Cabin = 1.45, Belt = 0.8, Bottom = -0.8, Axle = 4.1 },
+	coupe = { L = 12.0, W = 6.1, Hood = 3.6, Wind = 2.4, Roof = 1.9, Rear = 2.6, Cabin = 1.25, Belt = 0.7, Bottom = -0.85, Axle = 3.9, Sport = true },
+	super = { L = 12.4, W = 6.4, Hood = 2.8, Wind = 2.8, Roof = 1.3, Rear = 3.5, Cabin = 1.05, Belt = 0.55, Bottom = -0.95, Axle = 4.0, Sport = true },
+}
+Cars.STYLES = STYLES
+
+local TIRE = Color3.fromRGB(24, 24, 26)
+local TRIM = Color3.fromRGB(28, 28, 32)
+local CHROME = Color3.fromRGB(205, 208, 215)
+local GLASS = Color3.fromRGB(22, 30, 40)
+
+local PLATE_LETTERS = { "CT", "OC", "TN", "M", "B", "HH", "S", "K" }
+
+local function build(def, m, open)
+	local st = STYLES[def.Style or "sedan"] or STYLES.sedan
+	local L, W = st.L, st.W
+	local belt, bottom = st.Belt, st.Bottom
+	local paint = def.Color
+	local rng = Random.new()
+
+	local function P(name, size, cf, color, material, extra)
+		local props = {
+			Name = name,
+			Size = size,
+			CFrame = cf,
+			Color = color,
+			Material = material or Enum.Material.SmoothPlastic,
+			CanCollide = false,
+			Parent = m,
+		}
+		for k, v in pairs(extra or {}) do
+			props[k] = v
+		end
+		return part(props)
+	end
+	local function lack(name, size, cf)
+		return P(name, size, cf, paint, Enum.Material.SmoothPlastic, { Reflectance = 0.15 })
+	end
+	local function W_(name, size, cf, color, material, extra)
+		local props = {
+			Name = name,
+			Size = size,
+			CFrame = cf,
+			Color = color,
+			Material = material or Enum.Material.SmoothPlastic,
+			CanCollide = false,
+			Parent = m,
+		}
+		for k, v in pairs(extra or {}) do
+			props[k] = v
+		end
+		return wedge(props)
+	end
+
+	------------------------------------------------------------ Karosserie
+	local lowerTop = belt - 0.5
+	lack("Karosserie", Vector3.new(W, lowerTop - bottom, L), CFrame.new(0, (lowerTop + bottom) / 2, 0))
+	lack("Guertel", Vector3.new(W, 0.5, L - 1.6), CFrame.new(0, belt - 0.25, 0))
+	-- abgeschrägte Front und Heckkante
+	W_("Nase", Vector3.new(W, 0.5, 0.8), CFrame.new(0, belt - 0.25, -L / 2 + 0.4), paint, nil, { Reflectance = 0.15 })
+	W_("Heckkante", Vector3.new(W, 0.5, 0.8), CFrame.new(0, belt - 0.25, L / 2 - 0.4) * CFrame.Angles(0, math.pi, 0), paint, nil, { Reflectance = 0.15 })
+
+	------------------------------------------------------------ Kabine
+	local cabW = W - 0.7
+	local zW = -L / 2 + st.Hood
+	local zRoof = zW + st.Wind
+	local zRoofEnd = zRoof + st.Roof
+	local roofTop = belt + st.Cabin
+	local glassProps = { Transparency = 0.35, Reflectance = 0.15 }
+
+	-- Innenraum (durch die Scheiben sichtbar)
+	P("Innenraum", Vector3.new(cabW - 0.1, 0.06, st.Wind + st.Roof + 0.4), CFrame.new(0, belt + 0.03, zRoof + st.Roof / 2 - st.Wind / 2), Color3.fromRGB(30, 30, 33))
+	P("Armaturenbrett", Vector3.new(cabW - 0.2, 0.35, 0.7), CFrame.new(0, belt + 0.2, zW + st.Wind * 0.55), Color3.fromRGB(22, 22, 25))
+	local seatZ = zRoof + 0.9
+	for _, x in ipairs({ -1.3, 1.3 }) do
+		local backH = math.min(1.3, st.Cabin - 0.15)
+		P("Sitzlehne", Vector3.new(1.4, backH, 0.3), CFrame.new(x, belt + backH / 2, seatZ + 0.75), Color3.fromRGB(18, 18, 20), Enum.Material.Fabric)
+	end
+	local steering = P(
+		"Lenkrad",
+		Vector3.new(0.12, 0.9, 0.9),
+		CFrame.new(-1.3, belt + 0.55, seatZ - 0.9) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-25)),
+		Color3.fromRGB(15, 15, 15),
+		nil,
+		{ Shape = Enum.PartType.Cylinder }
+	)
+
+	if not open then
+		W_("Frontscheibe", Vector3.new(cabW, st.Cabin, st.Wind), CFrame.new(0, belt + st.Cabin / 2, zW + st.Wind / 2), GLASS, Enum.Material.Glass, glassProps)
+		lack("Dach", Vector3.new(cabW, 0.18, st.Roof), CFrame.new(0, roofTop - 0.09, zRoof + st.Roof / 2))
+		W_("Heckscheibe", Vector3.new(cabW, st.Cabin, st.Rear), CFrame.new(0, belt + st.Cabin / 2, zRoofEnd + st.Rear / 2) * CFrame.Angles(0, math.pi, 0), GLASS, Enum.Material.Glass, glassProps)
+		for _, s in ipairs({ -1, 1 }) do
+			P("Seitenscheibe", Vector3.new(0.1, st.Cabin - 0.18, st.Roof), CFrame.new(s * (cabW / 2 - 0.05), belt + (st.Cabin - 0.18) / 2, zRoof + st.Roof / 2), GLASS, Enum.Material.Glass, glassProps)
+			if st.Roof > 2.5 then
+				P("BSaeule", Vector3.new(0.14, st.Cabin - 0.18, 0.35), CFrame.new(s * (cabW / 2 - 0.03), belt + (st.Cabin - 0.18) / 2, zRoof + 2.2), TRIM)
+			end
+			if def.Style == "wagon" then
+				P("Dachreling", Vector3.new(0.15, 0.15, st.Roof - 0.6), CFrame.new(s * (cabW / 2 - 0.4), roofTop + 0.08, zRoof + st.Roof / 2), Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+			end
+		end
+	else
+		-- Cabrio: niedrige Frontscheibe und Überrollbügel
+		W_("Frontscheibe", Vector3.new(cabW, 1.0, 1.3), CFrame.new(0, belt + 0.5, zW + 0.65), GLASS, Enum.Material.Glass, { Transparency = 0.45, Reflectance = 0.15 })
+		P("Scheibenrahmen", Vector3.new(cabW, 0.12, 0.15), CFrame.new(0, belt + 1.02, zW + 1.3), TRIM)
+		local zBar = seatZ + 1.3
+		for _, s in ipairs({ -1, 1 }) do
+			P("Buegel", Vector3.new(0.25, 1.1, 0.25), CFrame.new(s * (cabW / 2 - 0.5), belt + 0.55, zBar), CHROME, Enum.Material.Metal)
+		end
+		P("BuegelOben", Vector3.new(cabW - 0.75, 0.25, 0.25), CFrame.new(0, belt + 1.1, zBar), CHROME, Enum.Material.Metal)
+	end
+
+	------------------------------------------------------------ Front
+	P("Frontschuerze", Vector3.new(W + 0.1, 0.7, 0.45), CFrame.new(0, bottom + 0.35, -L / 2 - 0.05), TRIM)
+	local grilleY = (bottom + 0.7 + lowerTop) / 2
+	P("Grill", Vector3.new(W * 0.42, math.max(0.3, lowerTop - bottom - 0.85), 0.08), CFrame.new(0, grilleY, -L / 2 - 0.03), Color3.fromRGB(12, 12, 14))
+	P("Grillspange", Vector3.new(W * 0.42, 0.06, 0.1), CFrame.new(0, grilleY, -L / 2 - 0.05), CHROME, Enum.Material.Metal)
+	P("Emblem", Vector3.new(0.08, 0.45, 0.45), CFrame.new(0, grilleY + 0.05, -L / 2 - 0.08) * CFrame.Angles(0, math.rad(90), 0), CHROME, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+
+	local headlights = {}
+	for _, s in ipairs({ -1, 1 }) do
+		local x = s * (W / 2 - 0.95)
+		P("Scheinwerferglas", Vector3.new(1.4, 0.42, 0.15), CFrame.new(x, belt - 0.62, -L / 2 - 0.02), Color3.fromRGB(200, 210, 220), Enum.Material.Glass, { Transparency = 0.4, Reflectance = 0.3 })
+		table.insert(headlights, P("Scheinwerfer", Vector3.new(1.1, 0.18, 0.1), CFrame.new(x, belt - 0.6, -L / 2 + 0.02), Color3.fromRGB(255, 250, 230), Enum.Material.Neon))
+		P("Tagfahrlicht", Vector3.new(1.3, 0.06, 0.1), CFrame.new(x, belt - 0.88, -L / 2 - 0.01), Color3.fromRGB(235, 245, 255), Enum.Material.Neon)
+	end
+
+	------------------------------------------------------------ Heck
+	P("Heckschuerze", Vector3.new(W + 0.1, 0.7, 0.45), CFrame.new(0, bottom + 0.35, L / 2 + 0.05), TRIM)
+	P("Rueckleuchtenband", Vector3.new(W - 1.4, 0.1, 0.08), CFrame.new(0, belt - 0.55, L / 2 + 0.03), Color3.fromRGB(200, 15, 20), Enum.Material.Neon)
+	for _, s in ipairs({ -1, 1 }) do
+		P("Ruecklicht", Vector3.new(1.1, 0.34, 0.1), CFrame.new(s * (W / 2 - 0.75), belt - 0.6, L / 2 + 0.03), Color3.fromRGB(220, 20, 25), Enum.Material.Neon)
+	end
+	local nExhaust = st.Sport and 4 or 2
+	for i = 1, nExhaust do
+		local x = (nExhaust == 2) and ((i == 1) and -1.6 or 1.6) or ({ -2.0, -1.4, 1.4, 2.0 })[i]
+		P("Auspuff", Vector3.new(0.6, 0.38, 0.38), CFrame.new(x, bottom + 0.3, L / 2 + 0.2) * CFrame.Angles(0, math.rad(90), 0), CHROME, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+	end
+	if st.Sport then
+		P("Diffusor", Vector3.new(W - 2.4, 0.25, 0.35), CFrame.new(0, bottom + 0.12, L / 2 + 0.1), Color3.fromRGB(15, 15, 17))
+		P("Frontlippe", Vector3.new(W, 0.08, 0.5), CFrame.new(0, bottom + 0.04, -L / 2 - 0.1), Color3.fromRGB(15, 15, 17))
+	end
+	if def.Hp and def.Hp >= 400 then
+		local wingZ = (def.Style == "wagon") and (zRoofEnd - 0.2) or (L / 2 - 0.6)
+		local wingY = (def.Style == "wagon") and (roofTop + 0.1) or (belt + 0.65)
+		P("Fluegel", Vector3.new(W - 0.4, 0.12, 1.1), CFrame.new(0, wingY, wingZ), Color3.fromRGB(18, 18, 20))
+		if def.Style ~= "wagon" then
+			for _, s in ipairs({ -1, 1 }) do
+				P("FluegelStuetze", Vector3.new(0.15, 0.6, 0.35), CFrame.new(s * 1.8, belt + 0.3, wingZ), Color3.fromRGB(18, 18, 20))
+			end
+		end
+	end
+
+	-- Kennzeichen
+	local plateText = PLATE_LETTERS[rng:NextInteger(1, #PLATE_LETTERS)] .. " · " .. tostring(rng:NextInteger(10, 99)) .. tostring(rng:NextInteger(100, 999))
+	for _, s in ipairs({ -1, 1 }) do
+		local plate = P("Kennzeichen", Vector3.new(1.7, 0.42, 0.05), CFrame.new(0, bottom + 0.95, s * (L / 2 + 0.3)), Color3.fromRGB(240, 240, 240))
+		local tl = Util.textGui(plate, s < 0 and Enum.NormalId.Front or Enum.NormalId.Back, plateText, Color3.fromRGB(15, 15, 15), Color3.fromRGB(240, 240, 240), Enum.Font.GothamBold)
+		tl.Parent.PixelsPerStud = 60
+	end
+
+	------------------------------------------------------------ Seiten
+	for _, s in ipairs({ -1, 1 }) do
+		lack("Spiegel", Vector3.new(0.5, 0.32, 0.45), CFrame.new(s * (W / 2 + 0.2), belt + 0.25, zW + 0.45))
+		P("Spiegelglas", Vector3.new(0.4, 0.24, 0.05), CFrame.new(s * (W / 2 + 0.2), belt + 0.25, zW + 0.69), Color3.fromRGB(150, 170, 190), Enum.Material.Glass, { Reflectance = 0.6 })
+		P("Seitenschweller", Vector3.new(0.15, 0.3, 2 * st.Axle - 2.8), CFrame.new(s * (W / 2 + 0.03), bottom + 0.15, 0), TRIM)
+		for _, zd in ipairs({ zW + 0.25, zRoof + math.min(st.Roof, 2.4) }) do
+			P("Tuerfuge", Vector3.new(0.04, lowerTop - bottom + 0.3, 0.05), CFrame.new(s * (W / 2 + 0.01), (lowerTop + bottom) / 2 + 0.15, zd), Color3.fromRGB(20, 20, 22))
+		end
+		P("Tuergriff", Vector3.new(0.06, 0.1, 0.45), CFrame.new(s * (W / 2 + 0.03), belt - 0.4, zRoof + math.min(st.Roof, 2.4) - 0.6), CHROME, Enum.Material.Metal)
+	end
+
+	------------------------------------------------------------ Räder
+	local wheels = {}
+	local tireW = st.Sport and 1.15 or 1.0
+	local rimColor = (def.Hp and def.Hp >= 400) and Color3.fromRGB(38, 38, 42) or CHROME
+	local idx = 0
+	for _, z in ipairs({ -st.Axle, st.Axle }) do
+		for _, s in ipairs({ -1, 1 }) do
+			idx += 1
+			local x = s * (W / 2 + 0.05)
+			if st.Sport then
+				lack("Kotfluegel", Vector3.new(0.7, 3.1, 3.1), CFrame.new(s * (W / 2 - 0.2), -0.5, z)).Shape = Enum.PartType.Cylinder
+			end
+			P("Radkasten", Vector3.new(0.12, 2.75, 2.75), CFrame.new(s * (W / 2 + (st.Sport and 0.17 or 0.01)), -0.5, z), Color3.fromRGB(12, 12, 14), nil, { Shape = Enum.PartType.Cylinder })
+			local cf = CFrame.new(x, -0.5, z)
+			local wheel = { Index = idx, CFrame = cf, Front = z < 0, Parts = {} }
+			table.insert(wheels, wheel)
+			local function wp(p)
+				table.insert(wheel.Parts, p)
+				return p
+			end
+			wp(P("Reifen", Vector3.new(tireW, 2.4, 2.4), cf, TIRE, Enum.Material.Rubber, { Shape = Enum.PartType.Cylinder }))
+			wp(P("Felge", Vector3.new(tireW + 0.06, 1.65, 1.65), cf, rimColor, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder, Reflectance = 0.25 }))
+			for k = 0, 2 do
+				wp(P("Speiche", Vector3.new(tireW + 0.08, 1.55, 0.22), cf * CFrame.Angles(k * math.pi / 3, 0, 0), Color3.fromRGB(70, 72, 78), Enum.Material.Metal))
+			end
+			wp(P("Nabe", Vector3.new(tireW + 0.12, 0.5, 0.5), cf, Color3.fromRGB(60, 60, 65), Enum.Material.Metal, { Shape = Enum.PartType.Cylinder }))
+			if st.Sport then
+				wp(P("Bremssattel", Vector3.new(tireW - 0.1, 0.5, 0.7), cf * CFrame.new(0, 0.45, 0.35), Color3.fromRGB(220, 30, 30)))
+			end
+		end
+	end
+
+	return {
+		Lights = headlights,
+		Wheels = wheels,
+		Steering = steering,
+		SeatCF = CFrame.new(-1.3, 0, seatZ),
+		RoofInner = roofTop - 0.18,
+		Belt = belt,
+		Bottom = bottom,
+		Style = st,
+	}
+end
+
+-- Schweißt alle Teile an "root". Räder hängen über Motor6D an root.
+local function assemble(m, root, info, extraSkip)
+	local skip = extraSkip or {}
+	skip[root] = true
+	for _, wheel in ipairs(info.Wheels) do
+		local hub = part({
+			Name = "Radnabe",
+			Size = Vector3.new(0.4, 0.4, 0.4),
+			CFrame = wheel.CFrame,
+			Transparency = 1,
+			CanCollide = false,
+			Parent = m,
+		})
+		hub.Anchored = false
+		hub.Massless = true
+		for _, wpart in ipairs(wheel.Parts) do
+			wpart.Anchored = false
+			wpart.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = hub
+			w.Part1 = wpart
+			w.Parent = wpart
+			skip[wpart] = true
+		end
+		local motor = Instance.new("Motor6D")
+		motor.Name = (wheel.Front and "RadVorne" or "RadHinten") .. wheel.Index
+		motor.Part0 = root
+		motor.Part1 = hub
+		motor.C0 = root.CFrame:Inverse() * hub.CFrame
+		motor.C1 = CFrame.new()
+		motor:SetAttribute("Front", wheel.Front)
+		motor.Parent = root
+		skip[hub] = true
+	end
+	if info.Steering then
+		local sw = info.Steering
+		sw.Anchored = false
+		sw.Massless = true
+		local motor = Instance.new("Motor6D")
+		motor.Name = "LenkradMotor"
+		motor.Part0 = root
+		motor.Part1 = sw
+		motor.C0 = root.CFrame:Inverse() * sw.CFrame
+		motor.C1 = CFrame.new()
+		motor.Parent = root
+		skip[sw] = true
+	end
+	for _, d in ipairs(m:GetDescendants()) do
+		if d:IsA("BasePart") and not skip[d] then
+			d.Anchored = false
+			d.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = root
+			w.Part1 = d
+			w.Parent = d
+		end
+	end
+end
+
+-- Verankertes Auto (Werkstatt-Kunden, Verkehr, geparkte Autos).
+-- Pivot = Karosseriemitte. Bewegen mit model:PivotTo(...).
+function Cars.MakeShowCar(def)
+	local m = Instance.new("Model")
+	m.Name = def.Name
+	local info = build(def, m, false)
+	local st = info.Style
+	local root = part({
+		Name = "Wurzel",
+		Size = Vector3.new(1, 1, 1),
+		CFrame = CFrame.new(),
+		Transparency = 1,
+		CanCollide = false,
+		Parent = m,
+	})
+	-- Unsichtbarer Block, damit niemand durch das stehende Auto läuft.
+	-- Wird nur eingeschaltet, solange das Auto steht.
+	part({
+		Name = "Kollision",
+		Size = Vector3.new(st.W, 2.2, st.L),
+		CFrame = CFrame.new(0, 0, 0),
+		Transparency = 1,
+		CanCollide = false,
+		Parent = m,
+	})
+	assemble(m, root, info)
+	root.Anchored = true
+	m.PrimaryPart = root
+	m:SetAttribute("SeatX", info.SeatCF.X)
+	m:SetAttribute("SeatZ", info.SeatCF.Z)
+	m:SetAttribute("RoofInner", info.RoofInner)
+	m:SetAttribute("Belt", info.Belt)
+	CollectionService:AddTag(m, Cars.TAG)
+	return m
+end
+
+-- Fahrbares Cabrio. Pivot = Fahrgestell (CHASSIS_HEIGHT über Boden).
+-- Gelenkt wird vom Client (DriveClient) über "Antrieb" und "Lenkung".
+function Cars.MakeDrivable(def)
+	local m = Instance.new("Model")
+	m.Name = def.Name
+	local info = build(def, m, true)
+	local st = info.Style
+
+	local slippery = PhysicalProperties.new(0.7, 0, 0, 100, 1)
+	local chassis = part({
+		Name = "Fahrgestell",
+		Size = Vector3.new(st.W - 0.4, 1, st.L - 0.6),
+		CFrame = CFrame.new(0, Cars.CHASSIS_HEIGHT - Cars.BODY_HEIGHT, 0),
+		Transparency = 1,
+		CanCollide = true,
+		CustomPhysicalProperties = slippery,
+		Parent = m,
+	})
+	-- Kugeln als Bodenkontakt: rollen über kleine Kanten
+	for _, z in ipairs({ -st.Axle, st.Axle }) do
+		for _, s in ipairs({ -1, 1 }) do
+			part({
+				Name = "Kontakt",
+				Shape = Enum.PartType.Ball,
+				Size = Vector3.new(1.2, 1.2, 1.2),
+				CFrame = CFrame.new(s * (st.W / 2 - 0.6), 0.6 - Cars.BODY_HEIGHT, z),
+				Transparency = 1,
+				CanCollide = true,
+				CustomPhysicalProperties = slippery,
+				Parent = m,
+			})
+		end
+	end
+
+	local seat = Instance.new("VehicleSeat")
+	seat.Name = "Fahrersitz"
+	seat.Size = Vector3.new(1.6, 0.4, 1.6)
+	seat.CFrame = CFrame.new(info.SeatCF.X, st.Bottom + 0.35, info.SeatCF.Z + 0.3)
+	seat.Transparency = 1
+	seat.CanCollide = false
+	seat.HeadsUpDisplay = false
+	seat.MaxSpeed = 0
+	seat.Torque = 0
+	seat.TurnSpeed = 0
+	seat.Parent = m
+
+	for _, hl in ipairs(info.Lights) do
+		Util.light(hl, "SpotLight", { Face = Enum.NormalId.Front, Range = 60, Brightness = 2, Angle = 70, Color = Color3.fromRGB(255, 245, 225) })
+	end
+
+	assemble(m, chassis, info)
+	chassis.Anchored = false
+
+	local att = Instance.new("Attachment")
+	att.Name = "Mitte"
+	att.Parent = chassis
+
+	local lv = Instance.new("LinearVelocity")
+	lv.Name = "Antrieb"
+	lv.Attachment0 = att
+	lv.RelativeTo = Enum.ActuatorRelativeTo.World
+	lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	lv.PrimaryTangentAxis = Vector3.xAxis
+	lv.SecondaryTangentAxis = Vector3.zAxis
+	lv.PlaneVelocity = Vector2.zero
+	lv.MaxForce = 12000
+	lv.Parent = chassis
+
+	local av = Instance.new("AngularVelocity")
+	av.Name = "Lenkung"
+	av.Attachment0 = att
+	av.RelativeTo = Enum.ActuatorRelativeTo.World
+	av.AngularVelocity = Vector3.zero
+	av.MaxTorque = 60000
+	av.Parent = chassis
+
+	m.PrimaryPart = chassis
+	CollectionService:AddTag(m, Cars.TAG)
+	return m, seat
+end
+
+return Cars
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000002"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: gemeinsame Einstellungen (Server und Client)
 -- ModuleScript "Config" in ReplicatedStorage
 
 local Config = {}
@@ -18,14 +435,14 @@ Config.Stages = {
 
 -- Kundenautos (fiktive Modelle). MinRep = ab welchem Ruf der Kunde kommt
 Config.Cars = {
-	{ Name = "Stadtflitzer 1.0 Turbo", Hp = 95, Nm = 175, PayMult = 0.7, MinRep = 0, Color = Color3.fromRGB(200, 200, 205) },
-	{ Name = "Kompakt 1.4 Turbo", Hp = 150, Nm = 250, PayMult = 0.9, MinRep = 0, Color = Color3.fromRGB(30, 80, 160) },
-	{ Name = "Familienkombi 2.0 Diesel", Hp = 150, Nm = 340, PayMult = 1.0, MinRep = 0, Color = Color3.fromRGB(40, 40, 45) },
-	{ Name = "Hot Hatch GTX", Hp = 245, Nm = 370, PayMult = 1.2, MinRep = 10, Color = Color3.fromRGB(190, 20, 30) },
-	{ Name = "Limousine 3.0 Diesel", Hp = 286, Nm = 650, PayMult = 1.4, MinRep = 25, Color = Color3.fromRGB(20, 40, 90) },
-	{ Name = "Sportkombi 2.9 V6", Hp = 450, Nm = 600, PayMult = 1.8, MinRep = 50, Color = Color3.fromRGB(80, 90, 95) },
-	{ Name = "Sportcoupé 3.8 Turbo", Hp = 580, Nm = 750, PayMult = 2.5, MinRep = 100, Color = Color3.fromRGB(240, 180, 0) },
-	{ Name = "Supersportler V12", Hp = 780, Nm = 720, PayMult = 3.5, MinRep = 200, Color = Color3.fromRGB(10, 150, 80) },
+	{ Name = "Stadtflitzer 1.0 Turbo", Style = "hatch", Hp = 95, Nm = 175, PayMult = 0.7, MinRep = 0, Color = Color3.fromRGB(200, 200, 205) },
+	{ Name = "Kompakt 1.4 Turbo", Style = "hatch", Hp = 150, Nm = 250, PayMult = 0.9, MinRep = 0, Color = Color3.fromRGB(30, 80, 160) },
+	{ Name = "Familienkombi 2.0 Diesel", Style = "wagon", Hp = 150, Nm = 340, PayMult = 1.0, MinRep = 0, Color = Color3.fromRGB(40, 40, 45) },
+	{ Name = "Hot Hatch GTX", Style = "hatch", Hp = 245, Nm = 370, PayMult = 1.2, MinRep = 10, Color = Color3.fromRGB(190, 20, 30) },
+	{ Name = "Limousine 3.0 Diesel", Style = "sedan", Hp = 286, Nm = 650, PayMult = 1.4, MinRep = 25, Color = Color3.fromRGB(20, 40, 90) },
+	{ Name = "Sportkombi 2.9 V6", Style = "wagon", Hp = 450, Nm = 600, PayMult = 1.8, MinRep = 50, Color = Color3.fromRGB(80, 90, 95) },
+	{ Name = "Sportcoupé 3.8 Turbo", Style = "coupe", Hp = 580, Nm = 750, PayMult = 2.5, MinRep = 100, Color = Color3.fromRGB(240, 180, 0) },
+	{ Name = "Supersportler V12", Style = "super", Hp = 780, Nm = 720, PayMult = 3.5, MinRep = 200, Color = Color3.fromRGB(10, 150, 80) },
 }
 
 -- Upgrades im Werkstatt-Shop (Reihenfolge = Anzeige im Shop)
@@ -73,8 +490,14 @@ Config.Track = { CenterZ = -450, HalfLength = 250, Radius = 150, Width = 30 }
 Config.TestDriveSeconds = 75 -- Dauer einer Probefahrt
 Config.TestDriveTip = 0.15 -- Trinkgeld-Anteil nach der Probefahrt
 Config.TestDriveMinSeconds = 15 -- so lange muss man fahren für Trinkgeld
-Config.CompanyCar = { Name = "Firmenwagen", Hp = 220, Nm = 350, Color = Color3.fromRGB(255, 140, 0) }
+Config.CompanyCar = { Name = "Firmenwagen", Style = "coupe", Hp = 220, Nm = 350, Color = Color3.fromRGB(255, 140, 0) }
 Config.DayLengthMinutes = 24 -- ein Tag-Nacht-Zyklus
+
+-- Leben in der Stadt (läuft auf jedem Client)
+Config.TrafficCars = 18 -- Autos im Straßenverkehr
+Config.TrafficSpeed = 42 -- Studs pro Sekunde
+Config.Pedestrians = 34 -- Fußgänger
+Config.NpcScale = 0.85 -- Größe der Fahrer und Fußgänger
 
 -- Fahrwerte aus der Leistung (Studs pro Sekunde)
 function Config.DriveStats(hp)
@@ -140,361 +563,487 @@ function Config.Format(n)
 end
 
 return Config
-]]></ProtectedString></Properties></Item></Item><Item class="ServerScriptService" referent="RBX00000007"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">Cars</string><ProtectedString name="Source"><![CDATA[-- Automodelle: Ausstellungsautos (verankert) und fahrbare Autos
--- ModuleScript "Cars" in ServerScriptService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">Npc</string><ProtectedString name="Source"><![CDATA[-- Personen-Vorlagen für Fahrer, Kunden und Fußgänger
+-- ModuleScript "Npc" in ServerScriptService
 --
--- Koordinaten relativ zur Karosseriemitte. Die Karosseriemitte liegt 1.7 Studs
--- über dem Boden, die Front zeigt nach -Z.
+-- Erstellt beim Start einige R15-Figuren mit verschiedenen Haut-, Shirt- und
+-- Hosenfarben und legt sie in ReplicatedStorage.Leute ab. Server und Clients
+-- klonen daraus. Bewegt (Sitzen, Gehen, Umschauen) werden die Figuren vom
+-- LifeClient über ihre Gelenke – ganz ohne Animations-Assets.
 
-local Util = require(script.Parent:WaitForChild("Util"))
-local part, wedge = Util.part, Util.wedge
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 
-local Cars = {}
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
 
-Cars.BODY_HEIGHT = 1.7 -- Karosseriemitte über Boden
-Cars.CHASSIS_HEIGHT = 0.9 -- Mitte des Fahrgestells (fahrbares Auto) über Boden
+local Npc = {}
+Npc.TAG = "Npc"
 
-local TIRE = Color3.fromRGB(25, 25, 27)
-local TRIM = Color3.fromRGB(30, 30, 34)
-local CHROME = Color3.fromRGB(200, 202, 210)
-local GLASS = Color3.fromRGB(20, 28, 40)
+local SKIN = {
+	Color3.fromRGB(255, 220, 190),
+	Color3.fromRGB(234, 192, 160),
+	Color3.fromRGB(198, 145, 110),
+	Color3.fromRGB(160, 110, 75),
+	Color3.fromRGB(110, 75, 50),
+	Color3.fromRGB(245, 205, 170),
+}
+local SHIRTS = {
+	Color3.fromRGB(30, 60, 120),
+	Color3.fromRGB(180, 30, 40),
+	Color3.fromRGB(240, 240, 240),
+	Color3.fromRGB(40, 40, 45),
+	Color3.fromRGB(60, 130, 70),
+	Color3.fromRGB(255, 140, 0),
+	Color3.fromRGB(120, 70, 150),
+	Color3.fromRGB(90, 160, 210),
+}
+local PANTS = {
+	Color3.fromRGB(35, 45, 80),
+	Color3.fromRGB(30, 30, 32),
+	Color3.fromRGB(110, 95, 75),
+	Color3.fromRGB(70, 75, 85),
+	Color3.fromRGB(50, 70, 110),
+}
+-- Kostenlose Roblox-Frisuren; falls eine nicht lädt, gibt es die Figur ohne Haare
+local HAIR = { "62743701", "451220849", "376548738", "" , "" }
 
-local function buildVisual(def, m, convertible)
-	local paint = def.Color
-	local function lack(name, size, cf)
-		return part({
-			Name = name,
-			Size = size,
-			CFrame = cf,
-			Color = paint,
-			Material = Enum.Material.SmoothPlastic,
-			Reflectance = 0.12,
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-	local function trim(name, size, cf, color, material)
-		return part({
-			Name = name,
-			Size = size,
-			CFrame = cf,
-			Color = color or TRIM,
-			Material = material or Enum.Material.SmoothPlastic,
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-
-	-- Karosserie
-	lack("Karosserie", Vector3.new(6, 1.0, 12), CFrame.new(0, -0.3, 0))
-	lack("Schulter", Vector3.new(5.8, 0.6, 11.6), CFrame.new(0, 0.5, 0))
-	local hood = wedge({
-		Name = "Haube",
-		Size = Vector3.new(5.6, 0.35, 2.6),
-		CFrame = CFrame.new(0, 0.97, -4.4),
-		Color = paint,
-		Material = Enum.Material.SmoothPlastic,
-		Reflectance = 0.12,
-		CanCollide = false,
-		Parent = m,
-	})
-	hood.Name = "Haube"
-
-	-- Fahrgastzelle
-	if convertible then
-		part({
-			Name = "Frontscheibe",
-			Size = Vector3.new(5.0, 1.2, 0.15),
-			CFrame = CFrame.new(0, 1.3, -1.9) * CFrame.Angles(math.rad(30), 0, 0),
-			Color = GLASS,
-			Material = Enum.Material.Glass,
-			Transparency = 0.45,
-			CanCollide = false,
-			Parent = m,
-		})
-		for _, x in ipairs({ -1.3, 1.3 }) do
-			trim("Sitz", Vector3.new(1.6, 1.5, 0.4), CFrame.new(x, 1.35, 1.6), Color3.fromRGB(20, 20, 22), Enum.Material.Fabric)
-		end
-		part({
-			Name = "Lenkrad",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(0.15, 1.0, 1.0),
-			CFrame = CFrame.new(-1.3, 1.25, -0.9) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(-25)),
-			Color = Color3.fromRGB(15, 15, 15),
-			CanCollide = false,
-			Parent = m,
-		})
-	else
-		part({
-			Name = "Scheiben",
-			Size = Vector3.new(5.0, 1.3, 5.4),
-			CFrame = CFrame.new(0, 1.45, 0.9),
-			Color = GLASS,
-			Material = Enum.Material.Glass,
-			Transparency = 0.25,
-			Reflectance = 0.2,
-			CanCollide = false,
-			Parent = m,
-		})
-		lack("Dach", Vector3.new(4.8, 0.2, 4.2), CFrame.new(0, 2.15, 1.1))
-	end
-
-	-- Stoßstangen, Grill, Schweller, Spiegel
-	trim("FrontStoss", Vector3.new(6.1, 0.55, 0.5), CFrame.new(0, -0.55, -6.1))
-	trim("HeckStoss", Vector3.new(6.1, 0.55, 0.5), CFrame.new(0, -0.55, 6.1))
-	trim("Grill", Vector3.new(3.4, 0.45, 0.1), CFrame.new(0, 0.05, -6.03), Color3.fromRGB(12, 12, 14))
-	for _, x in ipairs({ -3.05, 3.05 }) do
-		trim("Schweller", Vector3.new(0.15, 0.3, 6.4), CFrame.new(x, -0.7, 0))
-		lack("Spiegel", Vector3.new(0.5, 0.3, 0.4), CFrame.new(x * 1.02, 1.0, -1.6))
-	end
-
-	-- Lichter
-	local lights = {}
-	for _, x in ipairs({ -2.15, 2.15 }) do
-		local hl = part({
-			Name = "Scheinwerfer",
-			Size = Vector3.new(1.3, 0.35, 0.15),
-			CFrame = CFrame.new(x, 0.35, -6.0),
-			Color = Color3.fromRGB(255, 248, 225),
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Parent = m,
-		})
-		table.insert(lights, hl)
-		part({
-			Name = "Ruecklicht",
-			Size = Vector3.new(1.4, 0.3, 0.15),
-			CFrame = CFrame.new(x, 0.4, 6.0),
-			Color = Color3.fromRGB(220, 20, 25),
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-
-	-- Räder mit Felgen (VL, VR, HL, HR – vorne ist -Z)
-	local wheels = {}
-	for i, w in ipairs({ { -3.05, -3.8 }, { 3.05, -3.8 }, { -3.05, 3.8 }, { 3.05, 3.8 } }) do
-		local cf = CFrame.new(w[1], -0.5, w[2])
-		local wheel = { Index = i, CFrame = cf, Front = w[2] < 0, Parts = {} }
-		wheels[i] = wheel
-		table.insert(wheel.Parts, part({ Name = "Reifen", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.0, 2.4, 2.4), CFrame = cf, Color = TIRE, Material = Enum.Material.Rubber, CanCollide = false, Parent = m }))
-		-- Speichen, damit man das Drehen sieht
-		for k = 0, 2 do
-			table.insert(wheel.Parts, part({
-				Name = "Speiche",
-				Size = Vector3.new(1.08, 1.5, 0.22),
-				CFrame = cf * CFrame.Angles(k * math.pi / 3, 0, 0),
-				Color = Color3.fromRGB(60, 60, 66),
-				Material = Enum.Material.Metal,
-				CanCollide = false,
-				Parent = m,
-			}))
-		end
-		table.insert(wheel.Parts, part({
-			Name = "Felge",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(1.06, 1.6, 1.6),
-			CFrame = cf,
-			Color = def.Hp >= 400 and Color3.fromRGB(40, 40, 44) or CHROME,
-			Material = Enum.Material.Metal,
-			Reflectance = 0.25,
-			CanCollide = false,
-			Parent = m,
-		}))
-		table.insert(wheel.Parts, part({ Name = "Nabe", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.12, 0.5, 0.5), CFrame = cf, Color = Color3.fromRGB(70, 70, 75), CanCollide = false, Parent = m }))
-	end
-
-	-- Auspuff
-	for _, x in ipairs({ -1.6, 1.6 }) do
-		part({
-			Name = "Auspuff",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(0.8, 0.45, 0.45),
-			CFrame = CFrame.new(x, -0.7, 6.3) * CFrame.Angles(0, math.rad(90), 0),
-			Color = CHROME,
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-			Parent = m,
-		})
-	end
-
-	-- Heckflügel für starke Autos
-	if def.Hp >= 400 then
-		trim("Fluegel", Vector3.new(6.0, 0.15, 1.2), CFrame.new(0, 1.55, 5.5))
-		for _, x in ipairs({ -2, 2 }) do
-			trim("FluegelStuetze", Vector3.new(0.2, 0.7, 0.3), CFrame.new(x, 1.15, 5.5))
-		end
-	end
-
-	return lights, wheels
-end
-
--- Verankertes Auto für die Werkstatt. Pivot = Karosseriemitte.
-function Cars.MakeShowCar(def)
+-- Einfache R15-ähnliche Figur aus Bausteinen (Ersatz, falls die Roblox-Funktion fehlt)
+local function fallbackRig(skin, shirt, pants)
 	local m = Instance.new("Model")
-	m.Name = def.Name
-	buildVisual(def, m, false)
-	local root = part({
-		Name = "Wurzel",
-		Size = Vector3.new(1, 1, 1),
-		CFrame = CFrame.new(),
-		Transparency = 1,
-		CanCollide = false,
-		Parent = m,
-	})
-	-- Unsichtbarer Block, damit niemand durch das geparkte Auto läuft.
-	-- Wird vom Server nur eingeschaltet, solange das Auto steht.
-	part({
-		Name = "Kollision",
-		Size = Vector3.new(6, 2.2, 12),
-		CFrame = CFrame.new(0, 0, 0),
-		Transparency = 1,
-		CanCollide = false,
-		Parent = m,
-	})
-	m.PrimaryPart = root
+	local function bp(name, size, pos, color)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Size = size
+		p.CFrame = CFrame.new(pos)
+		p.Color = color
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.Parent = m
+		return p
+	end
+	local hrp = bp("HumanoidRootPart", Vector3.new(2, 2, 1), Vector3.new(0, 3, 0), skin)
+	local lower = bp("LowerTorso", Vector3.new(2, 0.4, 1), Vector3.new(0, 2.6, 0), pants)
+	local upper = bp("UpperTorso", Vector3.new(2, 1.6, 1), Vector3.new(0, 3.6, 0), shirt)
+	local head = bp("Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 5, 0), skin)
+	local face = Instance.new("Decal")
+	face.Name = "face"
+	face.Texture = "rbxasset://textures/face.png"
+	face.Face = Enum.NormalId.Front
+	face.Parent = head
+	local parts = {
+		LeftUpperArm = bp("LeftUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(-1.5, 3.8, 0), shirt),
+		LeftLowerArm = bp("LeftLowerArm", Vector3.new(1, 1.2, 1), Vector3.new(-1.5, 2.6, 0), skin),
+		RightUpperArm = bp("RightUpperArm", Vector3.new(1, 1.2, 1), Vector3.new(1.5, 3.8, 0), shirt),
+		RightLowerArm = bp("RightLowerArm", Vector3.new(1, 1.2, 1), Vector3.new(1.5, 2.6, 0), skin),
+		LeftUpperLeg = bp("LeftUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, 1.8, 0), pants),
+		LeftLowerLeg = bp("LeftLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(-0.5, 0.6, 0), pants),
+		RightUpperLeg = bp("RightUpperLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, 1.8, 0), pants),
+		RightLowerLeg = bp("RightLowerLeg", Vector3.new(1, 1.2, 1), Vector3.new(0.5, 0.6, 0), pants),
+	}
+	local function joint(name, p0, p1, pivot)
+		local j = Instance.new("Motor6D")
+		j.Name = name
+		j.Part0 = p0
+		j.Part1 = p1
+		j.C0 = p0.CFrame:Inverse() * CFrame.new(pivot)
+		j.C1 = p1.CFrame:Inverse() * CFrame.new(pivot)
+		j.Parent = p1
+	end
+	joint("Root", hrp, lower, Vector3.new(0, 2.6, 0))
+	joint("Waist", lower, upper, Vector3.new(0, 2.8, 0))
+	joint("Neck", upper, head, Vector3.new(0, 4.4, 0))
+	joint("LeftShoulder", upper, parts.LeftUpperArm, Vector3.new(-1.5, 4.3, 0))
+	joint("LeftElbow", parts.LeftUpperArm, parts.LeftLowerArm, Vector3.new(-1.5, 3.2, 0))
+	joint("RightShoulder", upper, parts.RightUpperArm, Vector3.new(1.5, 4.3, 0))
+	joint("RightElbow", parts.RightUpperArm, parts.RightLowerArm, Vector3.new(1.5, 3.2, 0))
+	joint("LeftHip", lower, parts.LeftUpperLeg, Vector3.new(-0.5, 2.4, 0))
+	joint("LeftKnee", parts.LeftUpperLeg, parts.LeftLowerLeg, Vector3.new(-0.5, 1.2, 0))
+	joint("RightHip", lower, parts.RightUpperLeg, Vector3.new(0.5, 2.4, 0))
+	joint("RightKnee", parts.RightUpperLeg, parts.RightLowerLeg, Vector3.new(0.5, 1.2, 0))
+	local hum = Instance.new("Humanoid")
+	hum.Parent = m
+	m.PrimaryPart = hrp
 	return m
 end
 
--- Fahrbares Auto. Pivot = Fahrgestell (CHASSIS_HEIGHT über Boden).
--- Gelenkt wird vom Client (DriveClient) über "Antrieb" und "Lenkung".
-function Cars.MakeDrivable(def)
-	local m = Instance.new("Model")
-	m.Name = def.Name
-	local lights, wheels = buildVisual(def, m, true)
-
-	local slippery = PhysicalProperties.new(0.7, 0, 0, 100, 1)
-	local chassis = part({
-		Name = "Fahrgestell",
-		Size = Vector3.new(5.6, 1, 11.4),
-		CFrame = CFrame.new(0, Cars.CHASSIS_HEIGHT - Cars.BODY_HEIGHT, 0),
-		Transparency = 1,
-		CanCollide = true,
-		CustomPhysicalProperties = slippery,
-		Parent = m,
-	})
-	-- Kugeln als Kontakt zum Boden: rollen über kleine Kanten
-	for _, w in ipairs({ { -2.4, -3.8 }, { 2.4, -3.8 }, { -2.4, 3.8 }, { 2.4, 3.8 } }) do
-		part({
-			Name = "Kontakt",
-			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(1.2, 1.2, 1.2),
-			CFrame = CFrame.new(w[1], 0.6 - Cars.BODY_HEIGHT, w[2]),
-			Transparency = 1,
-			CanCollide = true,
-			CustomPhysicalProperties = slippery,
-			Parent = m,
-		})
-	end
-
-	local seat = Instance.new("VehicleSeat")
-	seat.Name = "Fahrersitz"
-	seat.Size = Vector3.new(1.6, 0.4, 1.6)
-	seat.CFrame = CFrame.new(-1.3, 0.9 - Cars.BODY_HEIGHT + 0.6, 1.2)
-	seat.Transparency = 1
-	seat.CanCollide = false
-	seat.HeadsUpDisplay = false
-	seat.MaxSpeed = 0
-	seat.Torque = 0
-	seat.TurnSpeed = 0
-	seat.Anchored = true
-	seat.Parent = m
-
-	for _, hl in ipairs(lights) do
-		Util.light(hl, "SpotLight", { Face = Enum.NormalId.Front, Range = 60, Brightness = 2, Angle = 70, Color = Color3.fromRGB(255, 245, 225) })
-	end
-
-	-- Räder: jedes Rad hängt an einer unsichtbaren Nabe, die über ein Motor6D
-	-- am Fahrgestell sitzt. Der Fahrer-Client dreht und lenkt sie (DriveClient).
-	local skip = {}
-	for _, wheel in ipairs(wheels) do
-		local hub = part({
-			Name = "Radnabe",
-			Size = Vector3.new(0.4, 0.4, 0.4),
-			CFrame = wheel.CFrame,
-			Transparency = 1,
-			CanCollide = false,
-			Parent = m,
-		})
-		for _, wp in ipairs(wheel.Parts) do
-			wp.Anchored = false
-			wp.Massless = true
-			local w = Instance.new("WeldConstraint")
-			w.Part0 = hub
-			w.Part1 = wp
-			w.Parent = wp
-			skip[wp] = true
-		end
-		hub.Anchored = false
-		hub.Massless = true
-		local motor = Instance.new("Motor6D")
-		motor.Name = (wheel.Front and "RadVorne" or "RadHinten") .. wheel.Index
-		motor.Part0 = chassis
-		motor.Part1 = hub
-		motor.C0 = chassis.CFrame:Inverse() * hub.CFrame
-		motor.C1 = CFrame.new()
-		motor:SetAttribute("Front", wheel.Front)
-		motor.Parent = chassis
-		skip[hub] = true
-	end
-	-- Lenkrad dreht sich mit
-	local wheelPart = m:FindFirstChild("Lenkrad")
-	if wheelPart then
-		wheelPart.Anchored = false
-		wheelPart.Massless = true
-		local motor = Instance.new("Motor6D")
-		motor.Name = "LenkradMotor"
-		motor.Part0 = chassis
-		motor.Part1 = wheelPart
-		motor.C0 = chassis.CFrame:Inverse() * wheelPart.CFrame
-		motor.C1 = CFrame.new()
-		motor.Parent = chassis
-		skip[wheelPart] = true
-	end
-
-	-- Alles andere ans Fahrgestell schweißen
-	for _, d in ipairs(m:GetDescendants()) do
-		if d:IsA("BasePart") and d ~= chassis and not skip[d] then
-			d.Anchored = false
+local function prepare(model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
 			d.Massless = true
-			local w = Instance.new("WeldConstraint")
-			w.Part0 = chassis
-			w.Part1 = d
-			w.Parent = d
+			d.Anchored = false
+		elseif d:IsA("Script") or d:IsA("LocalScript") then
+			d:Destroy()
 		end
 	end
-	chassis.Anchored = false
-
-	local att = Instance.new("Attachment")
-	att.Name = "Mitte"
-	att.Parent = chassis
-
-	local lv = Instance.new("LinearVelocity")
-	lv.Name = "Antrieb"
-	lv.Attachment0 = att
-	lv.RelativeTo = Enum.ActuatorRelativeTo.World
-	lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
-	lv.PrimaryTangentAxis = Vector3.xAxis
-	lv.SecondaryTangentAxis = Vector3.zAxis
-	lv.PlaneVelocity = Vector2.zero
-	lv.MaxForce = 12000
-	lv.Parent = chassis
-
-	local av = Instance.new("AngularVelocity")
-	av.Name = "Lenkung"
-	av.Attachment0 = att
-	av.RelativeTo = Enum.ActuatorRelativeTo.World
-	av.AngularVelocity = Vector3.zero
-	av.MaxTorque = 60000
-	av.Parent = chassis
-
-	m.PrimaryPart = chassis
-	return m, seat
+	local hrp = model:FindFirstChild("HumanoidRootPart")
+	hrp.Anchored = true
+	hrp.Transparency = 1
+	model.PrimaryPart = hrp
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		hum.BreakJointsOnDeath = false
+		hum.RequiresNeck = false
+	end
+	pcall(function()
+		model:ScaleTo(Config.NpcScale)
+	end)
+	-- Maße merken: Fußsohle und Scheitel relativ zur Hüfte
+	local cf, size = model:GetBoundingBox()
+	model:SetAttribute("FootOffset", hrp.Position.Y - (cf.Position.Y - size.Y / 2))
+	model:SetAttribute("HeadTop", (cf.Position.Y + size.Y / 2) - hrp.Position.Y)
+	CollectionService:AddTag(model, Npc.TAG)
 end
 
-return Cars
-]]></ProtectedString></Properties></Item><Item class="Script" referent="RBX00000004"><Properties><string name="Name">GameServer</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Server
+function Npc.BuildTemplates(count)
+	local folder = Instance.new("Folder")
+	folder.Name = "Leute"
+	local rng = Random.new(11)
+	for i = 1, count do
+		local skin = SKIN[rng:NextInteger(1, #SKIN)]
+		local shirt = SHIRTS[rng:NextInteger(1, #SHIRTS)]
+		local pants = PANTS[rng:NextInteger(1, #PANTS)]
+		local short = rng:NextNumber() < 0.4
+		local model
+		local ok = pcall(function()
+			local desc = Instance.new("HumanoidDescription")
+			desc.HeadColor = skin
+			desc.TorsoColor = shirt
+			desc.LeftArmColor = short and skin or shirt
+			desc.RightArmColor = short and skin or shirt
+			desc.LeftLegColor = pants
+			desc.RightLegColor = pants
+			desc.HairAccessory = HAIR[rng:NextInteger(1, #HAIR)]
+			model = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+		end)
+		if not ok or not model then
+			ok = pcall(function()
+				local desc = Instance.new("HumanoidDescription")
+				desc.HeadColor = skin
+				desc.TorsoColor = shirt
+				desc.LeftArmColor = shirt
+				desc.RightArmColor = shirt
+				desc.LeftLegColor = pants
+				desc.RightLegColor = pants
+				model = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+			end)
+		end
+		if not ok or not model then
+			model = fallbackRig(skin, shirt, pants)
+		end
+		model.Name = "Person" .. i
+		prepare(model)
+		model.Parent = folder
+	end
+	folder.Parent = ReplicatedStorage
+	return folder
+end
+
+-- Klont eine zufällige Person
+function Npc.Random(rng)
+	local folder = ReplicatedStorage:FindFirstChild("Leute")
+	local list = folder and folder:GetChildren() or {}
+	if #list == 0 then
+		return nil
+	end
+	local r = rng and rng:NextInteger(1, #list) or math.random(1, #list)
+	return list[r]:Clone()
+end
+
+-- Setzt eine Person auf den Fahrersitz eines Ausstellungsautos (verschweißt)
+function Npc.SeatInCar(person, car)
+	local root = car.PrimaryPart
+	local hrp = person.PrimaryPart
+	local headTop = person:GetAttribute("HeadTop") or 2
+	local roof = car:GetAttribute("RoofInner") or 2
+	local y = roof - headTop - 0.08
+	for _, w in ipairs(hrp:GetChildren()) do
+		if w:IsA("WeldConstraint") then
+			w:Destroy()
+		end
+	end
+	hrp.Anchored = false
+	hrp.CFrame = root.CFrame * CFrame.new(car:GetAttribute("SeatX") or -1.3, y, (car:GetAttribute("SeatZ") or 0) + 0.35)
+	local w = Instance.new("WeldConstraint")
+	w.Part0 = root
+	w.Part1 = hrp
+	w.Parent = hrp
+	person.Name = "Fahrer"
+	person:SetAttribute("Pose", "sit")
+	person.Parent = car
+end
+
+-- Lässt die Person neben dem Auto stehen (verankert)
+function Npc.StandAt(person, groundCF, parent)
+	local hrp = person.PrimaryPart
+	for _, w in ipairs(hrp:GetChildren()) do
+		if w:IsA("WeldConstraint") then
+			w:Destroy()
+		end
+	end
+	hrp.Anchored = true
+	hrp.CFrame = groundCF * CFrame.new(0, person:GetAttribute("FootOffset") or 2.5, 0)
+	person:SetAttribute("Pose", "stand")
+	person.Parent = parent
+end
+
+return Npc
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Paths</string><ProtectedString name="Source"><![CDATA[-- Wege für Straßenverkehr und Fußgänger
+-- ModuleScript "Paths" in ReplicatedStorage
+--
+-- Die Koordinaten passen zu World.lua (Werkstattstraße z = 50, Landstraße
+-- als Rechteck x = ±700, z = 260 / -780). Es gilt Rechtsverkehr.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+
+local Paths = {}
+
+local function rightOf(d)
+	return Vector3.new(-d.Z, 0, d.X)
+end
+
+local function finish(pts, closed)
+	local cum = { 0 }
+	local total = 0
+	local n = #pts
+	local last = closed and n or n - 1
+	for i = 1, last do
+		local j = (i % n) + 1
+		total += (pts[j] - pts[i]).Magnitude
+		cum[i + 1] = total
+	end
+	return { Points = pts, Cum = cum, Length = total, Closed = closed }
+end
+
+-- Geschlossene Fahrspur durch Eckpunkte: nach rechts versetzt, Ecken gerundet
+function Paths.Loop(corners, lane, radius)
+	local n = #corners
+	local pts = {}
+	for i = 1, n do
+		local prev = corners[(i - 2) % n + 1]
+		local cur = corners[i]
+		local nxt = corners[i % n + 1]
+		local dIn = (cur - prev).Unit
+		local dOut = (nxt - cur).Unit
+		local c = cur + (rightOf(dIn) + rightOf(dOut)) * lane
+		local a = c - dIn * radius
+		local b = c + dOut * radius
+		for k = 0, 6 do
+			local t = k / 6
+			table.insert(pts, a * ((1 - t) ^ 2) + c * (2 * (1 - t) * t) + b * (t ^ 2))
+		end
+	end
+	return finish(pts, true)
+end
+
+-- Offene Strecke (für Fußgänger, die hin und her gehen)
+function Paths.Line(a, b)
+	return finish({ a, b }, false)
+end
+
+-- Punkt und Richtung bei Weg-Position s
+function Paths.Sample(path, s)
+	local L = path.Length
+	if path.Closed then
+		s = s % L
+	else
+		s = math.clamp(s, 0, L)
+	end
+	local cum = path.Cum
+	local lo, hi = 1, #cum - 1
+	while lo < hi do
+		local mid = math.floor((lo + hi + 1) / 2)
+		if cum[mid] <= s then
+			lo = mid
+		else
+			hi = mid - 1
+		end
+	end
+	local pts = path.Points
+	local p0 = pts[lo]
+	local p1 = pts[(lo % #pts) + 1]
+	local segLen = cum[lo + 1] - cum[lo]
+	local t = segLen > 0 and (s - cum[lo]) / segLen or 0
+	local dir = p1 - p0
+	if dir.Magnitude < 1e-4 then
+		dir = Vector3.new(1, 0, 0)
+	end
+	return p0:Lerp(p1, t), dir.Unit
+end
+
+-- Straßenverkehr: drei Rundkurse, die zusammen beide Fahrtrichtungen abdecken
+local ROAD_Z = 50
+local LANE = 5
+Paths.TrafficLoops = {
+	Paths.Loop({ Vector3.new(-700, 0, ROAD_Z), Vector3.new(700, 0, ROAD_Z), Vector3.new(700, 0, 260), Vector3.new(-700, 0, 260) }, LANE, 12),
+	Paths.Loop({ Vector3.new(-700, 0, 260), Vector3.new(700, 0, 260), Vector3.new(700, 0, -780), Vector3.new(-700, 0, -780) }, LANE, 12),
+	Paths.Loop({ Vector3.new(700, 0, ROAD_Z), Vector3.new(-700, 0, ROAD_Z), Vector3.new(-700, 0, -780), Vector3.new(700, 0, -780) }, LANE, 12),
+}
+
+-- Fußgängerwege: { Weg, Bodenhöhe, Schleife? }
+local T = Config.Track
+local SOUTH_Z = T.CenterZ + T.Radius
+local paddockZ = SOUTH_Z + T.Width / 2 - 1 + 50
+Paths.Walkways = {
+	{ Path = Paths.Line(Vector3.new(-880, 0, ROAD_Z + 15), Vector3.new(880, 0, ROAD_Z + 15)), Ground = 0.3 },
+	{ Path = Paths.Line(Vector3.new(880, 0, ROAD_Z + 17.5), Vector3.new(-880, 0, ROAD_Z + 17.5)), Ground = 0.3 },
+	{ Path = Paths.Line(Vector3.new(-170, 0, paddockZ), Vector3.new(170, 0, paddockZ)), Ground = 0.1 },
+	{ Path = Paths.Loop({ Vector3.new(512, 0, 322), Vector3.new(788, 0, 322), Vector3.new(788, 0, 538), Vector3.new(512, 0, 538) }, 0, 8), Ground = 0.2 },
+}
+
+-- Zuschauer auf der Tribüne: Positionen (Boden) mit Blick zur Strecke
+function Paths.Spectators()
+	local list = {}
+	local standZ = SOUTH_Z - T.Width / 2 - 22
+	local rng = Random.new(5)
+	for _, tier in ipairs({ 1, 2, 3, 4, 5 }) do
+		for _ = 1, 3 do
+			local x = rng:NextNumber(-55, 55)
+			local pos = Vector3.new(x, 1.5 + tier * 1.5, standZ - tier * 4)
+			table.insert(list, CFrame.lookAt(pos, pos + Vector3.zAxis))
+		end
+	end
+	return list
+end
+
+return Paths
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Util</string><ProtectedString name="Source"><![CDATA[-- Bau-Helfer für Teile, Schilder und Bewegungen
+-- ModuleScript "Util" in ServerScriptService
+
+local RunService = game:GetService("RunService")
+
+local Util = {}
+
+-- Erstellt ein verankertes Part. Alle Felder in props werden gesetzt.
+function Util.part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props.Shape then
+		p.Shape = props.Shape
+	end
+	for k, v in pairs(props) do
+		if k ~= "Parent" and k ~= "Shape" then
+			p[k] = v
+		end
+	end
+	p.Parent = props.Parent
+	return p
+end
+
+function Util.wedge(props)
+	local p = Instance.new("WedgePart")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	for k, v in pairs(props) do
+		if k ~= "Parent" then
+			p[k] = v
+		end
+	end
+	p.Parent = props.Parent
+	return p
+end
+
+-- Text auf einer Fläche eines Parts
+function Util.textGui(parentPart, face, text, color, bg, font)
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = face
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 25
+	sg.LightInfluence = 0
+	sg.Parent = parentPart
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = bg and 0 or 1
+	tl.BackgroundColor3 = bg or Color3.new(0, 0, 0)
+	tl.Font = font or Enum.Font.GothamBlack
+	tl.TextScaled = true
+	tl.TextColor3 = color
+	tl.Text = text
+	tl.Parent = sg
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0.03, 0)
+	pad.PaddingRight = UDim.new(0.03, 0)
+	pad.PaddingTop = UDim.new(0.08, 0)
+	pad.PaddingBottom = UDim.new(0.08, 0)
+	pad.Parent = tl
+	return tl
+end
+
+-- Schwebendes Info-Schild
+function Util.billboard(adornee, text, offsetY)
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "Info"
+	bb.Size = UDim2.fromOffset(260, 64)
+	bb.StudsOffset = Vector3.new(0, offsetY or 5, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 90
+	bb.Adornee = adornee
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+	tl.BackgroundTransparency = 0.25
+	tl.TextColor3 = Color3.new(1, 1, 1)
+	tl.Font = Enum.Font.GothamBold
+	tl.TextScaled = true
+	tl.Text = text
+	tl.Parent = bb
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 10)
+	c.Parent = tl
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 4)
+	pad.Parent = tl
+	bb.Parent = adornee
+	return tl
+end
+
+function Util.light(parentPart, kind, props)
+	local l = Instance.new(kind or "PointLight")
+	for k, v in pairs(props or {}) do
+		l[k] = v
+	end
+	l.Parent = parentPart
+	return l
+end
+
+function Util.lookCF(pos, dir)
+	return CFrame.lookAt(pos, pos + dir)
+end
+
+-- Bewegt ein Modell weich von A nach B (blockiert, bis fertig)
+function Util.moveModel(model, fromCF, toCF, duration)
+	local t0 = os.clock()
+	while model.Parent do
+		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
+		local e = a < 0.5 and 2 * a * a or 1 - ((-2 * a + 2) ^ 2) / 2
+		local cf = fromCF:Lerp(toCF, e)
+		local root = model.PrimaryPart
+		if root and root.Anchored then
+			root.CFrame = cf -- verschweißte Teile folgen automatisch
+		else
+			model:PivotTo(cf)
+		end
+		if a >= 1 then
+			break
+		end
+		RunService.Heartbeat:Wait()
+	end
+end
+
+return Util
+]]></ProtectedString></Properties></Item></Item><Item class="ServerScriptService" referent="RBX00000009"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX00000007"><Properties><string name="Name">GameServer</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Server
 -- Script "GameServer" in ServerScriptService
 
 local Players = game:GetService("Players")
@@ -538,14 +1087,16 @@ end
 ------------------------------------------------------------------------
 -- Module
 ------------------------------------------------------------------------
-local Util = require(script.Parent:WaitForChild("Util"))
+local Util = require(ReplicatedStorage:WaitForChild("Util"))
 local World = require(script.Parent:WaitForChild("World"))
-local Cars = require(script.Parent:WaitForChild("Cars"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
+local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
 
 local part, textGui, billboard = Util.part, Util.textGui, Util.billboard
 local lookCF, moveModel = Util.lookCF, Util.moveModel
 
 World.Build()
+Npc.BuildTemplates(12)
 
 local ROAD_Z = World.ROAD_Z
 local PLOT_SPACING = World.PLOT_SPACING
@@ -961,8 +1512,8 @@ local function setLift(bay, h)
 		end
 	end
 	local c = bay.Car
-	if c and c.OnLift and c.Model.Parent then
-		c.Model:PivotTo(bay.CF + Vector3.new(0, h, 0))
+	if c and c.OnLift and c.Model.Parent and c.Model.PrimaryPart then
+		c.Model.PrimaryPart.CFrame = bay.CF + Vector3.new(0, h, 0)
 	end
 end
 
@@ -1112,11 +1663,16 @@ local function spawnCustomer(player, st, bay)
 	local def = candidates[math.random(#candidates)]
 	local stage = math.random(1, maxStage(st))
 	local car = Cars.MakeShowCar(def)
-	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false }
+	local customer = Npc.Random()
+	if customer then
+		Npc.SeatInCar(customer, car)
+	end
+	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false, Customer = customer }
 	bay.Car = carInfo
 
 	local plot = st.Plot
-	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
+	-- rechte Fahrspur der Werkstattstraße (Rechtsverkehr)
+	local roadPos = (plot.Origin * CFrame.new(bay.X, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local startCF = lookCF(roadPos - Vector3.new(140, 0, 0), Vector3.xAxis)
 	local turnCF = lookCF(roadPos, Vector3.xAxis)
 	local facingIn = lookCF(roadPos, -Vector3.zAxis)
@@ -1151,6 +1707,11 @@ local function spawnCustomer(player, st, bay)
 		end)
 		car.Kollision.CanCollide = true
 		carInfo.OnLift = true
+		-- Kunde steigt aus und wartet neben der Bühne
+		if customer then
+			local spot = plot.Origin * CFrame.new(bay.X - 7.2, 0.2, BAY_Z + 13)
+			Npc.StandAt(customer, CFrame.lookAt(spot.Position, spot.Position + Vector3.new(1, 0, -0.6)), plot.Model)
+		end
 		carInfo.Ready = true
 	end)
 end
@@ -1169,6 +1730,11 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 	animateLift(bay, 0, 2.2)
 	carInfo.OnLift = false
 	setCartText(bay, "OBD")
+	-- Kunde steigt wieder ein
+	if carInfo.Customer and carInfo.Customer.Parent and car.Parent then
+		Npc.SeatInCar(carInfo.Customer, car)
+		task.wait(0.6)
+	end
 
 	local function floorPos(x, z)
 		return (plot.Origin * CFrame.new(x, 0.2 + CAR_HEIGHT, z)).Position
@@ -1183,12 +1749,8 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		local dynoCF = lookCF((plot.Origin * CFrame.new(DYNO_POS)).Position + Vector3.new(0, 0.8 + CAR_HEIGHT, 0), -Vector3.zAxis)
 		moveModel(car, front, dynoCF, 2)
 		local screen = plot.DynoScreen
+		-- Rollen drehen hier; die Räder dreht jeder Client (Attribut DynoSpin)
 		local spinning = {}
-		for _, d in ipairs(car:GetDescendants()) do
-			if d:IsA("BasePart") and (d.Name == "Reifen" or d.Name == "Felge" or d.Name == "Nabe" or d.Name == "Speiche") then
-				table.insert(spinning, d)
-			end
-		end
 		if plot.Dyno then
 			for _, d in ipairs(plot.Dyno:GetChildren()) do
 				if d.Name == "Rolle" then
@@ -1207,6 +1769,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			local a = math.clamp((now - t0) / 2.6, 0, 1)
 			local hp = math.floor(oldHp + (newHp - oldHp) * a)
 			local spin = (6 + 30 * a) * dt
+			car:SetAttribute("DynoSpin", 6 + 30 * a)
 			for _, sp in ipairs(spinning) do
 				sp.CFrame = sp.CFrame * CFrame.Angles(-spin, 0, 0)
 			end
@@ -1222,6 +1785,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			end
 			RunService.Heartbeat:Wait()
 		end
+		car:SetAttribute("DynoSpin", 0)
 		if screen and screen.Parent then
 			screen.Text = ("PRÜFSTAND\n%d PS ✔"):format(newHp)
 		end
@@ -1230,7 +1794,7 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 		plot.DynoBusy = false
 	end
 
-	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
+	local roadPos = (plot.Origin * CFrame.new(exitX, 0, ROAD_Z + 5)).Position + Vector3.new(0, CAR_HEIGHT + World.ROAD_TOP, 0)
 	local onRoad = lookCF(roadPos, -Vector3.zAxis)
 	moveModel(car, front, onRoad, 2.2)
 	local turned = lookCF(roadPos, Vector3.xAxis)
@@ -1889,131 +2453,7 @@ task.spawn(function()
 		Lighting.ClockTime = (t + rate * dt) % 24
 	end
 end)
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Util</string><ProtectedString name="Source"><![CDATA[-- Bau-Helfer für Teile, Schilder und Bewegungen
--- ModuleScript "Util" in ServerScriptService
-
-local RunService = game:GetService("RunService")
-
-local Util = {}
-
--- Erstellt ein verankertes Part. Alle Felder in props werden gesetzt.
-function Util.part(props)
-	local p = Instance.new("Part")
-	p.Anchored = true
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	if props.Shape then
-		p.Shape = props.Shape
-	end
-	for k, v in pairs(props) do
-		if k ~= "Parent" and k ~= "Shape" then
-			p[k] = v
-		end
-	end
-	p.Parent = props.Parent
-	return p
-end
-
-function Util.wedge(props)
-	local p = Instance.new("WedgePart")
-	p.Anchored = true
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	for k, v in pairs(props) do
-		if k ~= "Parent" then
-			p[k] = v
-		end
-	end
-	p.Parent = props.Parent
-	return p
-end
-
--- Text auf einer Fläche eines Parts
-function Util.textGui(parentPart, face, text, color, bg, font)
-	local sg = Instance.new("SurfaceGui")
-	sg.Face = face
-	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	sg.PixelsPerStud = 25
-	sg.LightInfluence = 0
-	sg.Parent = parentPart
-	local tl = Instance.new("TextLabel")
-	tl.Size = UDim2.fromScale(1, 1)
-	tl.BackgroundTransparency = bg and 0 or 1
-	tl.BackgroundColor3 = bg or Color3.new(0, 0, 0)
-	tl.Font = font or Enum.Font.GothamBlack
-	tl.TextScaled = true
-	tl.TextColor3 = color
-	tl.Text = text
-	tl.Parent = sg
-	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0.03, 0)
-	pad.PaddingRight = UDim.new(0.03, 0)
-	pad.PaddingTop = UDim.new(0.08, 0)
-	pad.PaddingBottom = UDim.new(0.08, 0)
-	pad.Parent = tl
-	return tl
-end
-
--- Schwebendes Info-Schild
-function Util.billboard(adornee, text, offsetY)
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "Info"
-	bb.Size = UDim2.fromOffset(260, 64)
-	bb.StudsOffset = Vector3.new(0, offsetY or 5, 0)
-	bb.AlwaysOnTop = true
-	bb.MaxDistance = 90
-	bb.Adornee = adornee
-	local tl = Instance.new("TextLabel")
-	tl.Size = UDim2.fromScale(1, 1)
-	tl.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
-	tl.BackgroundTransparency = 0.25
-	tl.TextColor3 = Color3.new(1, 1, 1)
-	tl.Font = Enum.Font.GothamBold
-	tl.TextScaled = true
-	tl.Text = text
-	tl.Parent = bb
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 10)
-	c.Parent = tl
-	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 8)
-	pad.PaddingRight = UDim.new(0, 8)
-	pad.PaddingTop = UDim.new(0, 4)
-	pad.PaddingBottom = UDim.new(0, 4)
-	pad.Parent = tl
-	bb.Parent = adornee
-	return tl
-end
-
-function Util.light(parentPart, kind, props)
-	local l = Instance.new(kind or "PointLight")
-	for k, v in pairs(props or {}) do
-		l[k] = v
-	end
-	l.Parent = parentPart
-	return l
-end
-
-function Util.lookCF(pos, dir)
-	return CFrame.lookAt(pos, pos + dir)
-end
-
--- Bewegt ein Modell weich von A nach B (blockiert, bis fertig)
-function Util.moveModel(model, fromCF, toCF, duration)
-	local t0 = os.clock()
-	while model.Parent do
-		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
-		local e = a < 0.5 and 2 * a * a or 1 - ((-2 * a + 2) ^ 2) / 2
-		model:PivotTo(fromCF:Lerp(toCF, e))
-		if a >= 1 then
-			break
-		end
-		RunService.Heartbeat:Wait()
-	end
-end
-
-return Util
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- Die Spielwelt: Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- Die Spielwelt: Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude
 -- ModuleScript "World" in ServerScriptService
 --
 -- Übersicht (von oben, Norden = -Z):
@@ -2027,7 +2467,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
-local Util = require(script.Parent:WaitForChild("Util"))
+local Util = require(ReplicatedStorage:WaitForChild("Util"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local part = Util.part
 
 local World = {}
@@ -2116,6 +2557,14 @@ local function buildTerrain()
 	local terrain = workspace.Terrain
 	pcall(function()
 		terrain.Decoration = false -- keine Grashalme, die durch Böden wachsen
+	end)
+	-- natürlichere Farben
+	pcall(function()
+		terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(92, 132, 64))
+		terrain:SetMaterialColor(Enum.Material.LeafyGrass, Color3.fromRGB(72, 110, 50))
+		terrain:SetMaterialColor(Enum.Material.Ground, Color3.fromRGB(110, 90, 68))
+		terrain:SetMaterialColor(Enum.Material.Rock, Color3.fromRGB(118, 116, 112))
+		terrain:SetMaterialColor(Enum.Material.Sand, Color3.fromRGB(214, 198, 152))
 	end)
 	-- Grundfläche, Oberkante y = 0
 	terrain:FillBlock(CFrame.new(0, -6, 0), Vector3.new(2800, 12, 2800), Enum.Material.Grass)
@@ -2458,7 +2907,7 @@ end
 
 local function buildLamps()
 	for x = -900, 900, 60 do
-		lamp(Vector3.new(x, 0, World.ROAD_Z + 14), -Vector3.zAxis)
+		lamp(Vector3.new(x, 0.25, World.ROAD_Z + 19.4), -Vector3.zAxis)
 	end
 	for z = SOUTH_Z + 40, -60, 50 do
 		lamp(Vector3.new(14, 0, z), -Vector3.xAxis)
@@ -2545,6 +2994,8 @@ local BLOCKED = {
 	{ -715, -685, -795, 275 },
 	{ 685, 715, -795, 275 },
 	{ 480, 820, 290, 570 }, -- See
+	{ -1010, -750, -310, 110 }, -- Feld West
+	{ 750, 1010, -510, -90 }, -- Feld Ost
 }
 
 local function isFree(x, z)
@@ -2555,6 +3006,16 @@ local function isFree(x, z)
 	end
 	return math.sqrt(x * x + z * z) < 1020
 end
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Include
+rayParams.FilterDescendantsInstances = { workspace.Terrain }
+
+local function groundY(x, z)
+	local hit = workspace:Raycast(Vector3.new(x, 250, z), Vector3.new(0, -500, 0), rayParams)
+	return hit and hit.Position.Y or 0
+end
+World.GroundY = groundY
 
 local function tree(pos, rng)
 	local trunkH = rng:NextNumber(7, 11)
@@ -2609,7 +3070,7 @@ local function buildTrees()
 		local x = rng:NextNumber(-1020, 1020)
 		local z = rng:NextNumber(-1020, 1020)
 		if isFree(x, z) then
-			tree(Vector3.new(x, 0, z), rng)
+			tree(Vector3.new(x, groundY(x, z) - 0.3, z), rng)
 			placed += 1
 		end
 	end
@@ -2617,6 +3078,258 @@ local function buildTrees()
 	for z = SOUTH_Z + 110, -60, 40 do
 		tree(Vector3.new(-22, 0, z), rng)
 		tree(Vector3.new(26, 0, z + 20), rng)
+	end
+end
+
+
+------------------------------------------------------------------------
+-- Natur: Hügel, Wiesen, Felder, Büsche, Felsen, Blumen
+------------------------------------------------------------------------
+
+local function areaFree(x, z, r)
+	if not isFree(x, z) then
+		return false
+	end
+	for k = 0, 7 do
+		local a = k / 8 * math.pi * 2
+		if not isFree(x + math.cos(a) * r, z + math.sin(a) * r) then
+			return false
+		end
+	end
+	return true
+end
+
+local function region(x0, z0, x1, z1)
+	return Region3.new(Vector3.new(math.min(x0, x1), -12, math.min(z0, z1)), Vector3.new(math.max(x0, x1), 60, math.max(z0, z1))):ExpandToGrid(4)
+end
+
+local function buildHills()
+	local terrain = workspace.Terrain
+	local rng = Random.new(19)
+	local made, tries = 0, 0
+	while made < 34 and tries < 800 do
+		tries += 1
+		local r = rng:NextNumber(28, 70)
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if areaFree(x, z, r + 12) then
+			terrain:FillBall(Vector3.new(x, -r * 0.78, z), r, Enum.Material.Grass)
+			made += 1
+		end
+	end
+	-- Wiesenflecken und Erdstellen für ein natürlicheres Bild
+	for _ = 1, 70 do
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		local w, d = rng:NextNumber(16, 70), rng:NextNumber(16, 70)
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z, x + w, z + d), 4, Enum.Material.Grass, Enum.Material.LeafyGrass)
+		end)
+	end
+	for _ = 1, 14 do
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		local w = rng:NextNumber(8, 20)
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z, x + w, z + w), 4, Enum.Material.Grass, Enum.Material.Ground)
+		end)
+	end
+end
+
+local function fence(a, b)
+	local dir = b - a
+	local len = dir.Magnitude
+	local n = math.floor(len / 8)
+	local wood = Color3.fromRGB(120, 90, 60)
+	for i = 0, n do
+		local p = a + dir * (i / math.max(n, 1))
+		part({ Name = "Zaunpfahl", Size = Vector3.new(0.5, 3.2, 0.5), CFrame = CFrame.new(p.X, 1.4, p.Z), Color = wood, Material = Enum.Material.Wood, Parent = folder })
+	end
+	local mid = (a + b) / 2
+	for _, h in ipairs({ 1.2, 2.4 }) do
+		part({
+			Name = "Zaunlatte",
+			Size = Vector3.new(0.25, 0.35, len),
+			CFrame = CFrame.lookAt(Vector3.new(mid.X, h, mid.Z), Vector3.new(b.X, h, b.Z)),
+			Color = wood,
+			Material = Enum.Material.WoodPlanks,
+			Parent = folder,
+		})
+	end
+end
+
+local function field(x0, z0, x1, z1)
+	local terrain = workspace.Terrain
+	-- Furchen: abwechselnd Erde und Pflanzenreihen
+	local x = x0
+	local row = 0
+	while x < x1 do
+		pcall(function()
+			terrain:ReplaceMaterial(region(x, z0, x + 4, z1), 4, row % 2 == 0 and Enum.Material.Grass or Enum.Material.LeafyGrass, Enum.Material.Ground)
+		end)
+		row += 1
+		x += 8
+	end
+	local c = { Vector3.new(x0, 0, z0), Vector3.new(x1, 0, z0), Vector3.new(x1, 0, z1), Vector3.new(x0, 0, z1) }
+	for i = 1, 4 do
+		fence(c[i], c[i % 4 + 1])
+	end
+end
+
+local function buildNatureDetails()
+	local rng = Random.new(23)
+	field(-1000, -300, -760, 100)
+	field(760, -500, 1000, -100)
+
+	-- Büsche
+	local placed, tries = 0, 0
+	while placed < 260 and tries < 4000 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if isFree(x, z) then
+			local y = groundY(x, z)
+			local green = rng:NextInteger(85, 125)
+			for _ = 1, rng:NextInteger(2, 4) do
+				local sz = rng:NextNumber(2.5, 5)
+				part({
+					Name = "Busch",
+					Shape = Enum.PartType.Ball,
+					Size = Vector3.new(sz, sz, sz),
+					CFrame = CFrame.new(x + rng:NextNumber(-2, 2), y + sz * 0.3, z + rng:NextNumber(-2, 2)),
+					Color = Color3.fromRGB(45, green, 40),
+					Material = Enum.Material.LeafyGrass,
+					CanCollide = false,
+					Parent = folder,
+				})
+			end
+			placed += 1
+		end
+	end
+
+	-- Felsen
+	placed, tries = 0, 0
+	while placed < 70 and tries < 2000 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if isFree(x, z) then
+			local sz = Vector3.new(rng:NextNumber(3, 9), rng:NextNumber(2, 5), rng:NextNumber(3, 9))
+			part({
+				Name = "Fels",
+				Size = sz,
+				CFrame = CFrame.new(x, groundY(x, z) + sz.Y * 0.2, z) * CFrame.Angles(rng:NextNumber(-0.3, 0.3), rng:NextNumber(0, 6.28), rng:NextNumber(-0.3, 0.3)),
+				Color = Color3.fromRGB(rng:NextInteger(105, 135), rng:NextInteger(105, 130), rng:NextInteger(100, 120)),
+				Material = Enum.Material.Rock,
+				Parent = folder,
+			})
+			placed += 1
+		end
+	end
+
+	-- Blumenwiesen
+	local FLOWERS = {
+		Color3.fromRGB(230, 40, 50), Color3.fromRGB(250, 220, 40), Color3.fromRGB(245, 245, 250),
+		Color3.fromRGB(150, 80, 200), Color3.fromRGB(255, 140, 180),
+	}
+	placed, tries = 0, 0
+	while placed < 45 and tries < 1500 do
+		tries += 1
+		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
+		if areaFree(x, z, 10) then
+			local col = FLOWERS[rng:NextInteger(1, #FLOWERS)]
+			for _ = 1, 12 do
+				local fx, fz = x + rng:NextNumber(-9, 9), z + rng:NextNumber(-9, 9)
+				part({
+					Name = "Blume",
+					Shape = Enum.PartType.Ball,
+					Size = Vector3.new(0.7, 0.7, 0.7),
+					CFrame = CFrame.new(fx, groundY(fx, fz) + 0.5, fz),
+					Color = col,
+					CanCollide = false,
+					CastShadow = false,
+					Parent = folder,
+				})
+			end
+			placed += 1
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- Straßenmöbel: Bänke, Mülleimer, Bushaltestellen, Schilder
+------------------------------------------------------------------------
+local function bench(pos, facing)
+	local cf = CFrame.lookAt(pos, pos + facing)
+	local wood = Color3.fromRGB(130, 90, 55)
+	local metal = Color3.fromRGB(45, 48, 52)
+	part({ Name = "Bank", Size = Vector3.new(5, 0.3, 1.4), CFrame = cf * CFrame.new(0, 1.5, 0), Color = wood, Material = Enum.Material.WoodPlanks, Parent = folder })
+	part({ Name = "Banklehne", Size = Vector3.new(5, 1.2, 0.25), CFrame = cf * CFrame.new(0, 2.4, 0.65), Color = wood, Material = Enum.Material.WoodPlanks, Parent = folder })
+	for _, x in ipairs({ -2.1, 2.1 }) do
+		part({ Name = "Bankfuss", Size = Vector3.new(0.25, 1.4, 1.3), CFrame = cf * CFrame.new(x, 0.75, 0), Color = metal, Material = Enum.Material.Metal, Parent = folder })
+	end
+end
+
+local function bin(pos)
+	part({ Name = "Muelleimer", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.4, 1.6, 1.6), CFrame = CFrame.new(pos + Vector3.new(0, 1.2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(40, 110, 60), Material = Enum.Material.Metal, Parent = folder })
+end
+
+local function busStop(x)
+	local z = World.ROAD_Z + 18.5
+	local base = CFrame.new(x, 0.25, z)
+	part({ Name = "Wartehaeuschen", Size = Vector3.new(11, 0.3, 4.4), CFrame = base * CFrame.new(0, 8, 0), Color = Color3.fromRGB(60, 62, 68), Material = Enum.Material.Metal, Parent = folder })
+	part({ Name = "Rueckwand", Size = Vector3.new(11, 7.6, 0.15), CFrame = base * CFrame.new(0, 4, 2.1), Color = Color3.fromRGB(180, 210, 230), Material = Enum.Material.Glass, Transparency = 0.5, Parent = folder })
+	for _, sx in ipairs({ -5.4, 5.4 }) do
+		part({ Name = "Seitenglas", Size = Vector3.new(0.15, 7.6, 4.2), CFrame = base * CFrame.new(sx, 4, 0), Color = Color3.fromRGB(180, 210, 230), Material = Enum.Material.Glass, Transparency = 0.5, Parent = folder })
+	end
+	bench(Vector3.new(x, 0.25, z + 0.8), -Vector3.zAxis)
+	part({ Name = "Haltestellenmast", Size = Vector3.new(0.35, 9, 0.35), CFrame = CFrame.new(x - 7.5, 4.75, World.ROAD_Z + 13), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local sign = part({ Name = "Haltestellenschild", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.2, 2.6, 2.6), CFrame = CFrame.new(x - 7.5, 9.6, World.ROAD_Z + 13) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 210, 0), Parent = folder })
+	local plate = part({ Name = "Haltestelle", Size = Vector3.new(1.6, 1.6, 0.1), CFrame = CFrame.new(x - 7.5, 9.6, World.ROAD_Z + 12.85), Transparency = 1, CanCollide = false, Parent = folder })
+	Util.textGui(plate, Enum.NormalId.Front, "H", Color3.fromRGB(0, 120, 60))
+	sign.Name = "Haltestellenschild"
+end
+
+local function speedSign(pos, facing, text)
+	part({ Name = "Schildmast", Size = Vector3.new(0.3, 7, 0.3), CFrame = CFrame.new(pos + Vector3.new(0, 3.5, 0)), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local cf = CFrame.lookAt(pos + Vector3.new(0, 7.4, 0), pos + Vector3.new(0, 7.4, 0) + facing)
+	part({ Name = "Schildring", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 2.4, 2.4), CFrame = cf * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(210, 20, 30), Parent = folder })
+	part({ Name = "Schildflaeche", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.14, 1.9, 1.9), CFrame = cf * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(245, 245, 245), Parent = folder })
+	local plate = part({ Name = "Schildtext", Size = Vector3.new(1.4, 1.1, 0.05), CFrame = cf * CFrame.new(0, 0, -0.1), Transparency = 1, CanCollide = false, Parent = folder })
+	Util.textGui(plate, Enum.NormalId.Front, text, Color3.fromRGB(15, 15, 15))
+end
+
+local function directionSign(pos, facing, text)
+	part({ Name = "Schildmast", Size = Vector3.new(0.3, 7, 0.3), CFrame = CFrame.new(pos + Vector3.new(0, 3.5, 0)), Color = Color3.fromRGB(150, 150, 155), Material = Enum.Material.Metal, Parent = folder })
+	local panel = part({ Name = "Wegweiser", Size = Vector3.new(7, 1.6, 0.15), CFrame = CFrame.lookAt(pos + Vector3.new(0, 7, 0), pos + Vector3.new(0, 7, 0) + facing), Color = Color3.fromRGB(250, 210, 0), Parent = folder })
+	Util.textGui(panel, Enum.NormalId.Front, text, Color3.fromRGB(15, 15, 15), Color3.fromRGB(250, 210, 0))
+end
+
+local function buildStreetFurniture()
+	-- durchgehender Gehweg an der Südseite der Werkstattstraße
+	World.Slab(CFrame.new(0, 0, World.ROAD_Z + 16), 1900, 8, 0.25, Color3.fromRGB(178, 176, 172), Enum.Material.Pavement, "Gehweg")
+	for x = -870, 870, 90 do
+		if math.abs(x) > 40 and math.abs(math.abs(x) - 420) > 20 then
+			bench(Vector3.new(x, 0.25, World.ROAD_Z + 18.8), -Vector3.zAxis)
+			bin(Vector3.new(x + 4, 0.25, World.ROAD_Z + 19))
+		end
+	end
+	busStop(-420)
+	busStop(420)
+	speedSign(Vector3.new(-620, 0.25, World.ROAD_Z + 13.5), -Vector3.xAxis, "50")
+	speedSign(Vector3.new(620, 0.25, World.ROAD_Z + 13.5), Vector3.xAxis, "50")
+	directionSign(Vector3.new(-10.3, 0.2, World.ROAD_Z - 13), Vector3.zAxis, "🏁 Teststrecke")
+end
+
+-- Geparkte Autos im Fahrerlager
+local function buildParkedCars()
+	local rng = Random.new(31)
+	local z0 = SOUTH_Z + T.Width / 2 - 1
+	local zc = z0 + 70 - 9
+	local styles = { "hatch", "sedan", "wagon", "coupe", "super" }
+	local colors = { Color3.fromRGB(235, 235, 238), Color3.fromRGB(25, 25, 28), Color3.fromRGB(170, 20, 30), Color3.fromRGB(25, 60, 140), Color3.fromRGB(240, 170, 0), Color3.fromRGB(120, 125, 132) }
+	for x = -171, 171, 10 do
+		if math.abs(x) > 30 and rng:NextNumber() < 0.45 then
+			local car = Cars.MakeShowCar({ Name = "Geparkt", Style = styles[rng:NextInteger(1, #styles)], Hp = rng:NextInteger(150, 600), Color = colors[rng:NextInteger(1, #colors)] })
+			car.PrimaryPart.CFrame = CFrame.new(x, 0.07 + Cars.BODY_HEIGHT, zc) * CFrame.Angles(0, math.pi, 0)
+			car.Kollision.CanCollide = true
+			car.Parent = folder
+		end
 	end
 end
 
@@ -2630,12 +3343,16 @@ function World.Build()
 
 	buildLighting()
 	buildTerrain()
+	buildHills()
 	buildRoads()
 	buildTrack()
 	buildPaddock()
+	buildStreetFurniture()
 	buildLamps()
 	buildTown()
 	buildTrees()
+	buildNatureDetails()
+	buildParkedCars()
 
 	local spawnLoc = Instance.new("SpawnLocation")
 	spawnLoc.Name = "Spawn"
@@ -2665,7 +3382,7 @@ function World.TrackStart(index)
 end
 
 return World
-]]></ProtectedString></Properties></Item></Item><Item class="StarterPlayer" referent="RBX0000000B"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000000A"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX00000008"><Properties><string name="Name">ChiptuningClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Benutzeroberfläche
+]]></ProtectedString></Properties></Item></Item><Item class="StarterPlayer" referent="RBX0000000E"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000000D"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX0000000A"><Properties><string name="Name">ChiptuningClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Benutzeroberfläche
 -- LocalScript "ChiptuningClient" in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -3462,7 +4179,7 @@ TuneResult.OnClientEvent:Connect(function(res)
 	shopWin.Visible = false
 	tuneWin.Visible = true
 end)
-]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX00000009"><Properties><string name="Name">DriveClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Fahrphysik und Tacho
+]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000B"><Properties><string name="Name">DriveClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Fahrphysik und Tacho
 -- LocalScript "DriveClient" in StarterPlayer > StarterPlayerScripts
 --
 -- Der Server gibt dem Fahrer die Physik des Autos (Network Owner). Hier
@@ -3797,4 +4514,354 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 	unitLabel.Text = speed < -0.5 and "km/h  ·  R" or "km/h"
 end)
-]]></ProtectedString></Properties></Item></Item></Item><Item class="Lighting" referent="RBX0000000C"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item></roblox>
+]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000C"><Properties><string name="Name">LifeClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Leben in der Stadt
+-- LocalScript "LifeClient" in StarterPlayer > StarterPlayerScripts
+--
+--  * dreht und lenkt die Räder aller Autos (Kunden, Verkehr, andere Spieler)
+--  * bewegt Fahrer, wartende Kunden, Fußgänger und Zuschauer (Gelenke)
+--  * Straßenverkehr und Fußgänger: laufen nur hier auf dem Client, aber für
+--    alle Spieler gleich, weil alles aus der Serverzeit berechnet wird
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+
+local player = Players.LocalPlayer
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
+local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
+local Paths = require(ReplicatedStorage:WaitForChild("Paths"))
+ReplicatedStorage:WaitForChild("Leute")
+
+local ANIM_DISTANCE = 320 -- weiter entfernt wird nicht animiert
+
+------------------------------------------------------------------------
+-- Gelenke einer Person
+------------------------------------------------------------------------
+local jointCache = setmetatable({}, { __mode = "k" })
+
+local function joints(person)
+	local j = jointCache[person]
+	if j then
+		return j
+	end
+	j = {}
+	for _, d in ipairs(person:GetDescendants()) do
+		if d:IsA("Motor6D") then
+			j[d.Name] = d
+		end
+	end
+	jointCache[person] = j
+	return j
+end
+
+local function setJ(j, name, cf)
+	local m = j[name]
+	if m then
+		m.Transform = cf
+	end
+end
+
+local rad = math.rad
+local A = CFrame.Angles
+
+-- Sitzen am Lenkrad; steer: Lenkwinkel (+ = links)
+local function poseSit(person, steer, t, seed)
+	local j = joints(person)
+	setJ(j, "LeftHip", A(rad(90), 0, 0))
+	setJ(j, "RightHip", A(rad(90), 0, 0))
+	setJ(j, "LeftKnee", A(rad(-80), 0, 0))
+	setJ(j, "RightKnee", A(rad(-80), 0, 0))
+	local s = math.clamp(steer * 1.6, -0.5, 0.5)
+	setJ(j, "LeftShoulder", A(rad(65) + s * 0.6, 0, rad(10)))
+	setJ(j, "RightShoulder", A(rad(65) - s * 0.6, 0, rad(-10)))
+	setJ(j, "LeftElbow", A(rad(25), 0, 0))
+	setJ(j, "RightElbow", A(rad(25), 0, 0))
+	-- Kopf: in die Kurve schauen, ab und zu umsehen
+	local glance = math.sin(t * 0.7 + seed) * math.sin(t * 0.23 + seed * 2)
+	setJ(j, "Neck", A(0, steer * 1.2 + glance * 0.5, 0))
+	setJ(j, "Waist", A(0, 0, -steer * 0.15))
+end
+
+local function poseStand(person, t, seed)
+	local j = joints(person)
+	for _, n in ipairs({ "LeftHip", "RightHip", "LeftKnee", "RightKnee", "LeftElbow", "RightElbow" }) do
+		setJ(j, n, CFrame.new())
+	end
+	local breath = math.sin(t * 1.6 + seed) * 0.03
+	setJ(j, "Waist", A(breath, 0, 0))
+	setJ(j, "LeftShoulder", A(0, 0, rad(4) + breath))
+	setJ(j, "RightShoulder", A(0, 0, rad(-4) - breath))
+	setJ(j, "Neck", A(math.sin(t * 0.5 + seed) * 0.1, math.sin(t * 0.3 + seed) * 0.6, 0))
+end
+
+local function poseWalk(person, phase)
+	local j = joints(person)
+	local s = math.sin(phase)
+	local c = math.cos(phase)
+	setJ(j, "LeftHip", A(s * 0.55, 0, 0))
+	setJ(j, "RightHip", A(-s * 0.55, 0, 0))
+	setJ(j, "LeftKnee", A(-math.max(0, -c) * 0.8, 0, 0))
+	setJ(j, "RightKnee", A(-math.max(0, c) * 0.8, 0, 0))
+	setJ(j, "LeftShoulder", A(-s * 0.45, 0, rad(4)))
+	setJ(j, "RightShoulder", A(s * 0.45, 0, rad(-4)))
+	setJ(j, "LeftElbow", A(rad(15), 0, 0))
+	setJ(j, "RightElbow", A(rad(15), 0, 0))
+	setJ(j, "Waist", A(0, s * 0.08, 0))
+	setJ(j, "Neck", A(0, -s * 0.05, 0))
+end
+
+local function poseCheer(person, t, seed)
+	local j = joints(person)
+	local wave = math.sin(t * 6 + seed) * 0.35
+	local up = (math.sin(t * 0.8 + seed) > 0.3) and 1 or 0
+	setJ(j, "LeftShoulder", A(rad(-30) * (1 - up) + rad(-160) * up + wave * up, 0, rad(10)))
+	setJ(j, "RightShoulder", A(rad(-30) * (1 - up) + rad(-160) * up - wave * up, 0, rad(-10)))
+	setJ(j, "LeftElbow", A(rad(20), 0, 0))
+	setJ(j, "RightElbow", A(rad(20), 0, 0))
+	setJ(j, "Neck", A(0, math.sin(t * 0.9 + seed) * 0.7, 0))
+	setJ(j, "Waist", A(0, 0, math.sin(t * 3 + seed) * 0.04 * up))
+end
+
+------------------------------------------------------------------------
+-- Räder und Fahrer aller Autos
+------------------------------------------------------------------------
+local carState = setmetatable({}, { __mode = "k" })
+
+local function myCar()
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local seat = hum and hum.SeatPart
+	return seat and seat.Parent
+end
+
+local function animateCar(car, dt, now, camPos, mine)
+	local root = car.PrimaryPart
+	if not root or car == mine then
+		return
+	end
+	local pos = root.Position
+	if (pos - camPos).Magnitude > ANIM_DISTANCE then
+		local st = carState[car]
+		if st then
+			st.LastPos = pos
+			st.LastLook = root.CFrame.LookVector
+		end
+		return
+	end
+	local st = carState[car]
+	if not st then
+		st = { LastPos = pos, LastLook = root.CFrame.LookVector, Spin = 0, Steer = 0, Motors = {}, Seed = math.random() * 10 }
+		for _, m in ipairs(root:GetChildren()) do
+			if m:IsA("Motor6D") then
+				if m.Name:sub(1, 3) == "Rad" then
+					table.insert(st.Motors, m)
+				elseif m.Name == "LenkradMotor" then
+					st.Steering = m
+				end
+			end
+		end
+		carState[car] = st
+	end
+	local look = root.CFrame.LookVector
+	local v = (pos - st.LastPos):Dot(look) / math.max(dt, 1e-3)
+	if math.abs(v) > 400 then
+		v = 0 -- Teleport
+	end
+	local cross = st.LastLook:Cross(look).Y
+	local yawRate = math.asin(math.clamp(cross, -1, 1)) / math.max(dt, 1e-3)
+	st.LastPos = pos
+	st.LastLook = look
+	local target = 0
+	if math.abs(v) > 0.5 then
+		target = math.clamp(math.atan(yawRate * 8 / math.max(math.abs(v), 3)) * (v >= 0 and 1 or -1), -0.6, 0.6)
+	end
+	st.Steer += (target - st.Steer) * math.min(1, dt * 8)
+	local dyno = car:GetAttribute("DynoSpin") or 0
+	st.Spin = (st.Spin - (v / Cars.WHEEL_RADIUS + dyno) * dt) % (math.pi * 2)
+	for _, m in ipairs(st.Motors) do
+		m.Transform = A(0, m:GetAttribute("Front") and st.Steer or 0, 0) * A(st.Spin, 0, 0)
+	end
+	if st.Steering then
+		st.Steering.Transform = A(-st.Steer * 4, 0, 0)
+	end
+	local driver = car:FindFirstChild("Fahrer")
+	if driver then
+		poseSit(driver, st.Steer, now, st.Seed)
+	end
+end
+
+------------------------------------------------------------------------
+-- Straßenverkehr
+------------------------------------------------------------------------
+local lifeFolder = Instance.new("Folder")
+lifeFolder.Name = "Stadtleben"
+lifeFolder.Parent = workspace
+
+local STYLES = { "hatch", "hatch", "sedan", "sedan", "wagon", "coupe", "super" }
+local COLORS = {
+	Color3.fromRGB(235, 235, 238), Color3.fromRGB(25, 25, 28), Color3.fromRGB(120, 125, 132),
+	Color3.fromRGB(170, 20, 30), Color3.fromRGB(25, 60, 140), Color3.fromRGB(30, 90, 60),
+	Color3.fromRGB(200, 200, 205), Color3.fromRGB(240, 170, 0), Color3.fromRGB(90, 40, 30),
+	Color3.fromRGB(60, 120, 190),
+}
+
+local traffic = {}
+do
+	local rng = Random.new(2002)
+	local loops = Paths.TrafficLoops
+	local total = 0
+	for _, l in ipairs(loops) do
+		total += l.Length
+	end
+	for li, loop in ipairs(loops) do
+		local n = math.max(1, math.floor(Config.TrafficCars * loop.Length / total + 0.5))
+		for i = 1, n do
+			local def = {
+				Name = "Verkehr",
+				Style = STYLES[rng:NextInteger(1, #STYLES)],
+				Hp = rng:NextInteger(90, 320),
+				Color = COLORS[rng:NextInteger(1, #COLORS)],
+			}
+			local car = Cars.MakeShowCar(def)
+			car.Kollision.CanCollide = true
+			local person = Npc.Random(rng)
+			if person then
+				Npc.SeatInCar(person, car)
+			end
+			car.Parent = lifeFolder
+			table.insert(traffic, {
+				Car = car,
+				Root = car.PrimaryPart,
+				Path = loop,
+				Offset = (i - 1) / n * loop.Length + li * 37,
+				Speed = Config.TrafficSpeed * rng:NextNumber(0.9, 1.05),
+				Delay = 0,
+			})
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- Fußgänger und Zuschauer
+------------------------------------------------------------------------
+local walkers = {}
+local spectators = {}
+do
+	local rng = Random.new(77)
+	local ways = Paths.Walkways
+	for i = 1, Config.Pedestrians do
+		local way = ways[(i - 1) % #ways + 1]
+		local person = Npc.Random(rng)
+		if person then
+			person.Parent = lifeFolder
+			table.insert(walkers, {
+				Person = person,
+				Root = person.PrimaryPart,
+				Way = way,
+				Speed = rng:NextNumber(4.2, 6.2),
+				Phase = rng:NextNumber(0, 1000),
+				Foot = person:GetAttribute("FootOffset") or 2.5,
+			})
+		end
+	end
+	for _, cf in ipairs(Paths.Spectators()) do
+		local person = Npc.Random(rng)
+		if person then
+			person.PrimaryPart.CFrame = cf * CFrame.new(0, person:GetAttribute("FootOffset") or 2.5, 0)
+			person.Parent = lifeFolder
+			table.insert(spectators, { Person = person, Seed = rng:NextNumber(0, 10) })
+		end
+	end
+end
+
+local function pingpong(u)
+	local m = u % 2
+	return (m < 1) and m or (2 - m), (m < 1) and 1 or -1
+end
+
+------------------------------------------------------------------------
+-- Hauptschleife
+------------------------------------------------------------------------
+local function referencePos()
+	local mine = myCar()
+	if mine and mine.PrimaryPart then
+		return mine.PrimaryPart.Position, mine
+	end
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	return hrp and hrp.Position or nil, nil
+end
+
+RunService.RenderStepped:Connect(function(dt)
+	local now = workspace:GetServerTimeNow()
+	local cam = workspace.CurrentCamera
+	local camPos = cam and cam.CFrame.Position or Vector3.zero
+	local me, mine = referencePos()
+
+	-- Verkehr bewegen
+	for _, tc in ipairs(traffic) do
+		local s = now * tc.Speed + tc.Offset + tc.Delay
+		local pos, _ = Paths.Sample(tc.Path, s)
+		local ahead = Paths.Sample(tc.Path, s + 4)
+		local behind = Paths.Sample(tc.Path, s - 4)
+		local dir = ahead - behind
+		dir = dir.Magnitude > 0.01 and dir.Unit or Vector3.xAxis
+		-- Vor dem Spieler anhalten
+		if me then
+			local to = me - pos
+			local fwd = to:Dot(dir)
+			local side = (to - dir * fwd).Magnitude
+			if fwd > 0 and fwd < 20 and side < 4.5 and math.abs(to.Y) < 8 then
+				tc.Delay -= tc.Speed * dt
+				pos = Paths.Sample(tc.Path, now * tc.Speed + tc.Offset + tc.Delay)
+			end
+		end
+		local p = pos + Vector3.new(0, Cars.BODY_HEIGHT + 0.06, 0)
+		tc.Root.CFrame = CFrame.lookAt(p, p + dir)
+	end
+
+	-- Räder und Fahrer aller Autos
+	for _, car in ipairs(CollectionService:GetTagged(Cars.TAG)) do
+		if car:IsDescendantOf(workspace) then
+			animateCar(car, dt, now, camPos, mine)
+		end
+	end
+
+	-- Fußgänger
+	for _, w in ipairs(walkers) do
+		local path = w.Way.Path
+		local s, dirSign
+		if path.Closed then
+			s = now * w.Speed + w.Phase
+			dirSign = 1
+		else
+			local u
+			u, dirSign = pingpong((now * w.Speed + w.Phase) / path.Length)
+			s = u * path.Length
+		end
+		local pos, dir = Paths.Sample(path, s)
+		dir *= dirSign
+		local p = pos + Vector3.new(0, w.Way.Ground + w.Foot, 0)
+		w.Root.CFrame = CFrame.lookAt(p, p + dir)
+		if (p - camPos).Magnitude < ANIM_DISTANCE then
+			poseWalk(w.Person, (now * w.Speed + w.Phase) * 1.15)
+		end
+	end
+
+	-- Zuschauer und wartende Kunden
+	for _, sp in ipairs(spectators) do
+		if (sp.Person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
+			poseCheer(sp.Person, now, sp.Seed)
+		end
+	end
+	for _, person in ipairs(CollectionService:GetTagged(Npc.TAG)) do
+		if person:GetAttribute("Pose") == "stand" and person.PrimaryPart and person:IsDescendantOf(workspace) then
+			if (person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
+				poseStand(person, now, (person.PrimaryPart.Position.X % 7))
+			end
+		end
+	end
+end)
+]]></ProtectedString></Properties></Item></Item></Item><Item class="Lighting" referent="RBX0000000F"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item></roblox>

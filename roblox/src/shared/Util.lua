@@ -113,7 +113,13 @@ function Util.moveModel(model, fromCF, toCF, duration)
 	while model.Parent do
 		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
 		local e = a < 0.5 and 2 * a * a or 1 - ((-2 * a + 2) ^ 2) / 2
-		model:PivotTo(fromCF:Lerp(toCF, e))
+		local cf = fromCF:Lerp(toCF, e)
+		local root = model.PrimaryPart
+		if root and root.Anchored then
+			root.CFrame = cf -- verschweißte Teile folgen automatisch
+		else
+			model:PivotTo(cf)
+		end
 		if a >= 1 then
 			break
 		end
