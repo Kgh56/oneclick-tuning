@@ -677,6 +677,34 @@ class WebTests(Basis):
         # Anmeldung bleibt gleich streng: ohne Login kein Admin, auch nicht mit App-Kennung
         self.assertEqual(c.get("/admin", headers=app_ua).status_code, 302)
 
+    def test_werbeseite_seo(self):
+        b = A.app.test_client()
+        browser = {"User-Agent": "Mozilla/5.0 Chrome/130"}
+        seite = b.get("/", headers=browser).text
+        self.assertIn('<link rel="canonical"', seite)
+        self.assertIn('property="og:image"', seite)
+        ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', seite, re.S).group(1))
+        typen = [g["@type"] for g in ld["@graph"]]
+        for t in ("SoftwareApplication", "FAQPage", "HowTo", "Organization"):
+            self.assertIn(t, typen)
+        faq = next(g for g in ld["@graph"] if g["@type"] == "FAQPage")["mainEntity"]
+        self.assertEqual(len(faq), len(A.WERBE_FAQ))
+        for q, _ in A.WERBE_FAQ:                                         # sichtbar UND in den Daten
+            self.assertIn(html.escape(q, quote=False), seite)
+        r = b.get("/robots.txt").text
+        self.assertIn("Disallow: /admin", r)
+        self.assertIn("Sitemap:", r)
+        self.assertIn("GPTBot", r)
+        self.assertIn("/impressum</loc>", b.get("/sitemap.xml").text)
+        self.assertIn("## Häufige Fragen", b.get("/llms.txt").text)
+        self.assertEqual(b.get("/bilder/og-oneclick.png").mimetype, "image/png")
+        # Admin, Login, Auftraege nicht in Google; Rechtstexte schon (mit eigenem Titel)
+        self.assertEqual(b.get("/login", headers=browser).headers.get("X-Robots-Tag"), "noindex, nofollow")
+        self.assertIsNone(b.get("/", headers=browser).headers.get("X-Robots-Tag"))
+        imp = b.get("/impressum", headers=browser)
+        self.assertIsNone(imp.headers.get("X-Robots-Tag"))
+        self.assertIn("<title>Impressum | OneClick Solutions</title>", imp.text)
+
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:
             self.assertIn("Zurück zum Programm", self.kunde.get(url).text)          # im Programm: Weg zurueck

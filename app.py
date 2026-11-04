@@ -372,6 +372,8 @@ def merken(art: str):
 
 @app.after_request
 def sicherheits_header(antwort):
+    if request.path.startswith(("/admin", "/login", "/api/", "/auftrag/", "/download/", "/logout")):
+        antwort.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
     antwort.headers.setdefault("X-Content-Type-Options", "nosniff")
     antwort.headers.setdefault("X-Frame-Options", "DENY")
     antwort.headers.setdefault("Referrer-Policy", "same-origin")
@@ -614,9 +616,63 @@ def favicon():
 
 @app.route("/bilder/<name>")
 def bild(name):
-    if not re.fullmatch(r"[a-z0-9-]+\.webp", name) or not (BASE / "web" / "bilder" / name).is_file():
+    if not re.fullmatch(r"[a-z0-9-]+\.(webp|png)", name) or not (BASE / "web" / "bilder" / name).is_file():
         abort(404)
-    return send_file(BASE / "web" / "bilder" / name, mimetype="image/webp", max_age=86400)
+    return send_file(BASE / "web" / "bilder" / name, mimetype="image/png" if name.endswith(".png") else "image/webp", max_age=86400)
+
+
+# Fragen der Werbeseite: sichtbar als FAQ und gleichzeitig als strukturierte Daten fuer Google und KI-Antwortdienste
+WERBE_FAQ = [
+    ("Was kostet das Programm?", "Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo und ohne Credits."),
+    ("Wie lange dauert es, bis ich mein File habe?", "Liegt dein File schon in unserem Archiv, lädst du es direkt nach der Zahlung herunter – rund um die Uhr. "
+     "Bei einer Anfrage erstellen wir das File individuell, das Programm meldet sich, sobald es fertig ist."),
+    ("Wie bezahle ich?", "Sicher über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
+    ("Brauche ich ein Konto?", "Nein. Deine Aufträge merkt sich das Programm auf deinem PC."),
+    ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
+     "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
+    ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem Tool auf – "
+     "zum Beispiel mit dem Magic Motorsport Flex. Die Checksumme korrigiert dein Flash-Tool beim Schreiben."),
+    ("Was mache ich, wenn es ein Problem mit dem File gibt?", "Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. "
+     "Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat."),
+    ("Gibt es das Programm für Mac oder Handy?", "Für den Mac ja (macOS 11 oder neuer, Intel und Apple-Chip). Fürs Handy gibt es OneClick Solutions nicht – "
+     "du brauchst einen Windows-PC, Laptop oder Mac."),
+    ("Wer steckt hinter OneClick Solutions?", "GH-MAPPING, ein Chiptuning-Fileservice aus Dierdorf (Rheinland-Pfalz). "
+     "Alle Files im Archiv werden in einer lizenzierten WinOLS-5-Umgebung erstellt und geprüft."),
+]
+
+
+def basis_adresse() -> str:
+    return (lade_config().get("basis_url") or request.url_root).rstrip("/")
+
+
+def werbe_daten() -> str:
+    """Strukturierte Daten (schema.org) der Werbeseite als JSON-LD."""
+    b = basis_adresse()
+    daten = {"@context": "https://schema.org", "@graph": [
+        {"@type": "Organization", "@id": "https://gh-mapping.de/#business", "name": "GH-MAPPING", "url": "https://gh-mapping.de/",
+         "email": "chiptuning2002@gmail.com", "telephone": "+49 155 68540674",
+         "address": {"@type": "PostalAddress", "streetAddress": "Hachenburgerstraße 3", "postalCode": "56269",
+                     "addressLocality": "Dierdorf", "addressCountry": "DE"}},
+        {"@type": "WebSite", "@id": b + "/#website", "url": b + "/", "name": PROGRAMM_NAME, "inLanguage": "de-DE",
+         "publisher": {"@id": "https://gh-mapping.de/#business"}},
+        {"@type": "SoftwareApplication", "@id": b + "/#programm", "name": PROGRAMM_NAME, "url": b + "/",
+         "applicationCategory": "BusinessApplication", "operatingSystem": "Windows 10, Windows 11, macOS 11 oder neuer",
+         "description": "Programm zum Bestellen von Chiptuning-Files: Original laden, Steuergerät und Software werden erkannt, "
+                        "Lösung wählen, sicher über Stripe bezahlen und das File sofort herunterladen. Kein Abo.",
+         "downloadUrl": [b + "/download/windows", b + "/download/mac"],
+         "screenshot": [b + "/bilder/programm-auswahl.webp", b + "/bilder/programm-auftraege.webp", b + "/bilder/programm-support.webp"],
+         "featureList": ["Automatische Erkennung von Steuergerät und Software", "Sofort-Kauf von Files aus dem Archiv",
+                         "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Automatische Updates"],
+         "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
+         "publisher": {"@id": "https://gh-mapping.de/#business"}},
+        {"@type": "HowTo", "name": "Chiptuning-File mit OneClick Solutions bestellen", "step": [
+            {"@type": "HowToStep", "position": 1, "name": "Programm laden", "text": "OneClick Solutions für Windows oder Mac herunterladen und starten."},
+            {"@type": "HowToStep", "position": 2, "name": "Original laden", "text": "Das ausgelesene Original-File ins Programm ziehen."},
+            {"@type": "HowToStep", "position": 3, "name": "Lösung wählen", "text": "Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken."},
+            {"@type": "HowToStep", "position": 4, "name": "Bezahlen und laden", "text": "Über Stripe bezahlen und das File sofort herunterladen."}]},
+        {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}}
+                                            for q, a in WERBE_FAQ]}]}
+    return json.dumps(daten, ensure_ascii=False).replace("</", "<\\/")
 
 
 @app.route("/programm")
@@ -624,7 +680,60 @@ def programm_seite():
     """Werbeseite fuer das Windows-Programm - das ist alles, was Kunden im Browser sehen."""
     cfg = lade_config()
     return render_template("werbung.html", download="/download/windows", download_mac="/download/mac", firma=PROGRAMM_NAME, jahr=datetime.now().year,
-                           whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""))
+                           whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""),
+                           faq=WERBE_FAQ, jsonld=werbe_daten(), basis=basis_adresse())
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    text = f"""User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /login
+Disallow: /api/
+Disallow: /auftrag/
+Disallow: /download/
+
+# KI-Suchmaschinen und Antwort-Dienste ausdruecklich erlaubt (gleiche Regeln)
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: PerplexityBot
+User-agent: Google-Extended
+Allow: /
+Disallow: /admin
+Disallow: /login
+Disallow: /api/
+Disallow: /auftrag/
+Disallow: /download/
+
+Sitemap: {basis_adresse()}/sitemap.xml
+"""
+    return app.response_class(text, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    b = basis_adresse()
+    seiten = [("/", "1.0")] + [(f"/{n}", "0.3") for n in RECHTLICHES]
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           + "".join(f"  <url><loc>{b}{u}</loc><priority>{pr}</priority></url>\n" for u, pr in seiten) + "</urlset>\n")
+    return app.response_class(xml, mimetype="application/xml")
+
+
+@app.route("/llms.txt")
+def llms_txt():
+    b = basis_adresse()
+    text = (f"# {PROGRAMM_NAME}\n\n> {PROGRAMM_NAME} ist das Programm des Chiptuning-Fileservice GH-MAPPING aus Dierdorf (Deutschland) "
+            "für Windows und Mac. Kunden laden ihr ausgelesenes Original-File, das Programm erkennt Steuergerät und Software und zeigt die "
+            "verfügbaren Lösungen. Files aus dem Archiv werden sofort gekauft (Stripe) und heruntergeladen; gibt es noch nichts, stellt der "
+            "Kunde eine Anfrage. Kein Abo, keine Credits. Die Files werden in einer lizenzierten WinOLS-5-Umgebung erstellt.\n\n"
+            f"## Links\n- Programm und Download: {b}/\n- Windows: {b}/download/windows\n- Mac: {b}/download/mac\n"
+            "- Fileservice-Website: https://gh-mapping.de/\n- Kontakt: chiptuning2002@gmail.com, WhatsApp +49 155 68540674\n\n"
+            "## Häufige Fragen\n" + "".join(f"\n### {q}\n{a}\n" for q, a in WERBE_FAQ))
+    return app.response_class(text, mimetype="text/plain")
 
 
 @app.route("/")
@@ -2878,7 +2987,7 @@ TEMPLATES = {
 "basis.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ firma }}</title>
+<title>{% if titel is defined and titel %}{{ titel }} | {{ programm_name }}{% else %}{{ firma }}{% endif %}</title>
 <meta name="theme-color" content="#040919">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
 <style>
@@ -3524,8 +3633,17 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 {% endblock %}""",
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ firma }} – Programm für Windows und Mac</title>
-<meta name="description" content="OneClick Solutions: Chiptuning-Files als Programm für Windows und Mac. Original laden, Lösung wählen, sofort bezahlen und herunterladen. Kein Abo.">
+<title>OneClick Solutions – Chiptuning-Files sofort laden | Windows &amp; Mac</title>
+<meta name="description" content="Kostenloses Programm für Chiptuning-Files: Original laden, Lösung wählen, über Stripe bezahlen und sofort herunterladen. Windows &amp; Mac, ohne Abo.">
+<link rel="canonical" href="{{ basis }}/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta property="og:type" content="website"><meta property="og:site_name" content="{{ firma }}"><meta property="og:locale" content="de_DE">
+<meta property="og:url" content="{{ basis }}/"><meta property="og:title" content="OneClick Solutions – Chiptuning-Files mit einem Klick">
+<meta property="og:description" content="Original laden, Lösung wählen, sofort herunterladen. Kostenlos für Windows &amp; Mac, ohne Abo.">
+<meta property="og:image" content="{{ basis }}/bilder/og-oneclick.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="OneClick Solutions – Programm für Chiptuning-Files">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{{ basis }}/bilder/og-oneclick.png">
+<script type="application/ld+json">{{ jsonld|safe }}</script>
 <meta name="theme-color" content="#0d0f14">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
 <link rel="alternate icon" href="/favicon.ico">
@@ -3585,7 +3703,7 @@ h2{font-size:clamp(26px,3.4vw,38px);margin:0 0 10px;font-weight:800;letter-spaci
 .hinweis{margin-top:22px;padding:16px 18px;border-radius:12px;border:1px solid rgba(255,194,61,.35);background:rgba(255,194,61,.07);color:#ffd88a;font-size:14.5px}
 .hinweis b{color:#ffc23d}
 .faq details{border:1px solid var(--rand);background:var(--karte);border-radius:12px;padding:16px 18px;margin-bottom:10px}
-.faq summary{cursor:pointer;font-weight:700}.faq p{color:var(--leise);margin:10px 0 0}
+.faq summary{cursor:pointer;font-weight:700}.faq summary h3{display:inline;font:inherit;margin:0}.faq p{color:var(--leise);margin:10px 0 0}
 .cta{text-align:center;padding:50px 24px;border-radius:18px;border:1px solid rgba(47,123,255,.45);
  background:radial-gradient(600px 240px at 50% 0%,rgba(47,123,255,.22),transparent 70%),var(--karte)}
 .cta p{color:var(--leise);margin:0 0 24px}
@@ -3650,12 +3768,8 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
 </div></section>
 <section id="faq" class="faq"><div class="breit">
  <h2>Häufige Fragen</h2><p class="unter">Noch etwas offen? Schreib uns einfach.</p>
- <details><summary>Was kostet das Programm?</summary><p>Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo.</p></details>
- <details><summary>Brauche ich ein Konto?</summary><p>Nein. Deine Aufträge merkt sich das Programm auf deinem PC.</p></details>
- <details><summary>Für welche Steuergeräte gibt es Files?</summary><p>Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File.</p></details>
- <details><summary>Was mache ich, wenn es ein Problem mit dem File gibt?</summary><p>Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat.</p></details>
- <details><summary>Muss ich die Checksumme korrigieren?</summary><p>Ja, lass die Checksumme beim Schreiben von deinem Flash-Tool korrigieren.</p></details>
- <details><summary>Gibt es das Programm für Mac oder Handy?</summary><p>Für den Mac ja (macOS 11 oder neuer, Intel und Apple-Chip). Fürs Handy gibt es OneClick Solutions nicht – du brauchst einen Windows-PC, Laptop oder Mac.</p></details>
+ {% for q, a in faq %}<details{{ ' open' if loop.first }}><summary><h3>{{ q }}</h3></summary><p>{{ a }}</p></details>
+ {% endfor %}
 </div></section>
 <section><div class="breit"><div class="cta">
  <h2>Bereit für dein nächstes File?</h2><p>Programm laden, Original rein, fertig.</p>
@@ -3663,7 +3777,7 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
  <div class="handy-hinweis" style="max-width:520px;margin:0 auto">Bitte öffne diese Seite am Windows-PC, Laptop oder Mac.</div>
  {% if whatsapp %}<p style="margin:18px 0 0"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Per WhatsApp schreiben</a></p>{% endif %}
 </div></div></section>
-<footer><div class="breit"><span>© {{ jahr }} {{ firma }}</span>
+<footer><div class="breit"><span>© {{ jahr }} {{ firma }} · ein Service von <a href="https://gh-mapping.de/">GH-MAPPING</a>, Dierdorf</span>
  <span class="rechts"><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="/agb">AGB</a><a href="/widerruf">Widerruf</a><a href="/haftung">Haftung</a><a href="/login">Admin</a></span></div></footer>
 <script>
 if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.querySelectorAll('.pc').forEach(function(e){e.style.display='none'});
