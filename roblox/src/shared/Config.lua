@@ -9,7 +9,7 @@ Config.StartMoney = 300
 Config.ShowDemoNotice = true
 Config.DemoText = "🚧 DEMO-VERSION 🚧\n\nChiptuning-Firma ist noch in Entwicklung und kann Fehler haben.\n\nDeine Ideen und Verbesserungsvorschläge sind herzlich willkommen! Schick sie uns jederzeit über den Knopf „💡 Ideen“."
 Config.DataStoreName = "ChiptuningFirma_v1"
-Config.MaxPlots = 6 -- in den Spieleinstellungen "Max Players" auf 6 stellen
+Config.MaxPlots = 12 -- Werkstätten pro Server; in den Spieleinstellungen "Server Size" auf 12 stellen
 
 -- Die drei Kennfelder, die beim Tunen nacheinander abgestimmt werden
 Config.MapNames = { "Zündzeitpunkt", "Ladedruck", "Einspritzmenge" }

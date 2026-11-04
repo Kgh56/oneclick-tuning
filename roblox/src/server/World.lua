@@ -549,7 +549,7 @@ end
 local BLOCKED = {
 	-- {minX, maxX, minZ, maxZ}
 	{ -960, 960, 20, 80 }, -- Werkstattstraße + Laternen
-	{ -330, 330, -50, 45 }, -- Werkstätten
+	{ -625, 625, -50, 45 }, -- Werkstätten (12 Stück)
 	{ -25, 25, SOUTH_Z, 60 }, -- Zufahrt
 	{ -T.HalfLength - T.Radius - 40, T.HalfLength + T.Radius + 40, NORTH_Z - 50, SOUTH_Z + 95 }, -- Teststrecke + Fahrerlager
 	{ -600, 600, 75, 200 }, -- Gebäude
@@ -1238,7 +1238,8 @@ end
 
 -- Startplatz auf der Start-Ziel-Geraden (Fahrtrichtung +X)
 function World.TrackStart(index)
-	local x = -60 - (index - 1) * 18
+	-- zwei Reihen versetzt: 1 links vorn, 2 rechts vorn, 3 links dahinter, ...
+	local x = -60 - math.floor((index - 1) / 2) * 16
 	local z = SOUTH_Z + ((index % 2 == 0) and 6 or -6)
 	local pos = Vector3.new(x, 0.09 + 0.9, z)
 	return CFrame.lookAt(pos, pos + Vector3.xAxis)

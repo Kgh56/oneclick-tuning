@@ -26,7 +26,7 @@ Bau deine Werkstatt aus: mehr Hebebühnen, Leistungsprüfstand, Azubi und Stage-
 Simulation (alternativ: Fahrzeuge)
 
 ## Hinweise zum Veröffentlichen
-- **Server Size:** 6 (Places → Server Size)
+- **Server Size:** 12 (Places → Server Size)
 - **API-Zugriff:** Security → „Enable Studio Access to API Services“ (für Speichern und Rekorde)
 - **Fragebogen zur Altersfreigabe** im Creator Hub ausfüllen, sonst bleibt das Spiel unsichtbar.
 - **Icon und Thumbnails** hochladen (Screenshots aus der Werkstatt, vom Stuntpark und von der Teststrecke).

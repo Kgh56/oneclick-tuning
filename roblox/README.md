@@ -3,7 +3,7 @@
 Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunden fahren mit ihren Autos vor, und du tunst sie per Minispiel am Laptop. Mit dem verdienten Geld baust du deine Firma aus.
 
 ## So spielt es sich
-- **Große Welt:** Werkstattstraße mit 6 Werkstätten, Läden, Bäumen und Laternen. Dazu eine **Teststrecke** (Oval mit Tribüne, Curbs und Flutlicht), eine Landstraße als großer Rundkurs, ein See und Berge am Rand. Tag und Nacht wechseln sich ab, ein Tag dauert 24 Minuten.
+- **Große Welt:** Werkstattstraße mit 12 Werkstätten, Läden, Bäumen und Laternen. Dazu eine **Teststrecke** (Oval mit Tribüne, Curbs und Flutlicht), eine Landstraße als großer Rundkurs, ein See und Berge am Rand. Tag und Nacht wechseln sich ab, ein Tag dauert 24 Minuten.
 - **Action:**
   - **Stuntpark** im Innenfeld der Teststrecke: drei Sprungschanzen (Mega-Schanze über einen Bus) und Kicker
   - **Slalom** mit Zeitmessung und Strafsekunden für jede Pylone
@@ -56,7 +56,7 @@ Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunde
 1. In Studio: *File → Publish to Roblox*, Namen und Beschreibung eingeben.
 2. *Home → Game Settings*:
    - **Security** → „Enable Studio Access to API Services“ einschalten. Sonst wird beim Testen in Studio nichts gespeichert.
-   - **Places → Server Size** auf **6** stellen (es gibt 6 Werkstätten pro Server).
+   - **Places → Server Size** auf **12** stellen (es gibt 12 Werkstätten pro Server).
 3. Auf https://create.roblox.com/dashboard/creations beim Spiel ein Icon und Thumbnails hochladen und die Sichtbarkeit auf **Public** stellen.
 
 ### Für Fortgeschrittene: Rojo
