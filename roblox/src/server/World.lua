@@ -14,6 +14,8 @@ local Lighting = game:GetService("Lighting")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Util = require(ReplicatedStorage:WaitForChild("Util"))
 local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
+local Paths = require(ReplicatedStorage:WaitForChild("Paths"))
+local CollectionService = game:GetService("CollectionService")
 local part = Util.part
 
 local World = {}
@@ -410,26 +412,43 @@ local function buildPaddock()
 			})
 		end
 	end
-	-- Boxengebäude
-	local box = part({
-		Name = "Boxengebaeude",
-		Size = Vector3.new(120, 12, 16),
-		CFrame = CFrame.new(-120, 6, z0 + depth + 8),
-		Color = Color3.fromRGB(230, 232, 236),
-		Material = Enum.Material.SmoothPlastic,
-		Parent = folder,
-	})
-	Util.textGui(box, Enum.NormalId.Front, "BOXEN · PIT LANE", Color3.fromRGB(255, 140, 0), Color3.fromRGB(25, 25, 30))
-	for i = 0, 4 do
-		part({
-			Name = "Boxentor",
-			Size = Vector3.new(18, 8, 0.3),
-			CFrame = CFrame.new(-168 + i * 24, 4.2, z0 + depth - 0.1),
-			Color = Color3.fromRGB(40, 42, 48),
-			Material = Enum.Material.Metal,
-			Parent = folder,
-		})
+	-- Boxengebäude: 5 offene Boxen mit Licht, Werkzeug und Rennwagen
+	local boxW, boxD, boxH = 22, 18, 11
+	local zFront = z0 + depth + 0.5
+	local x0 = -175
+	local white = Color3.fromRGB(236, 238, 242)
+	local dark = Color3.fromRGB(35, 37, 42)
+	part({ Name = "Boxenrueckwand", Size = Vector3.new(5 * boxW + 1, boxH, 1), CFrame = CFrame.new(x0 + 2.5 * boxW, boxH / 2, zFront + boxD), Color = white, Material = Enum.Material.SmoothPlastic, Parent = folder })
+	part({ Name = "Boxendach", Size = Vector3.new(5 * boxW + 3, 1, boxD + 3), CFrame = CFrame.new(x0 + 2.5 * boxW, boxH + 0.5, zFront + boxD / 2 - 1), Color = dark, Material = Enum.Material.Metal, Parent = folder })
+	World.Slab(CFrame.new(x0 + 2.5 * boxW, 0, zFront + boxD / 2), 5 * boxW, boxD, 0.12, Color3.fromRGB(150, 152, 158), Enum.Material.Concrete, "Boxenboden")
+	local styles = { "super", "coupe", "hatch", "super", "coupe" }
+	local colors = { Color3.fromRGB(200, 20, 30), Color3.fromRGB(20, 60, 150), Color3.fromRGB(255, 140, 0), Color3.fromRGB(240, 240, 240), Color3.fromRGB(20, 120, 70) }
+	for i = 0, 5 do
+		part({ Name = "Boxenwand", Size = Vector3.new(0.8, boxH, boxD), CFrame = CFrame.new(x0 + i * boxW, boxH / 2, zFront + boxD / 2), Color = white, Material = Enum.Material.SmoothPlastic, Parent = folder })
 	end
+	for i = 0, 4 do
+		local cx = x0 + (i + 0.5) * boxW
+		-- halb geöffnetes Rolltor
+		part({ Name = "Rolltor", Size = Vector3.new(boxW - 1, 2.2, 0.3), CFrame = CFrame.new(cx, boxH - 1.2, zFront), Color = Color3.fromRGB(90, 94, 102), Material = Enum.Material.DiamondPlate, Parent = folder })
+		-- Deckenlicht
+		local panel = part({ Name = "Boxenlicht", Size = Vector3.new(12, 0.3, 2), CFrame = CFrame.new(cx, boxH - 0.2, zFront + boxD / 2), Color = Color3.fromRGB(240, 245, 255), Material = Enum.Material.Neon, CanCollide = false, Parent = folder })
+		Util.light(panel, "SurfaceLight", { Face = Enum.NormalId.Bottom, Range = 16, Brightness = 2, Angle = 120 })
+		-- Werkzeugwand und Reifen
+		part({ Name = "Werkzeugwand", Size = Vector3.new(10, 4, 0.2), CFrame = CFrame.new(cx, 5, zFront + boxD - 0.65), Color = Color3.fromRGB(60, 62, 70), Material = Enum.Material.DiamondPlate, Parent = folder })
+		for h = 0, 2 do
+			part({ Name = "Reifen", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.9, 2.8, 2.8), CFrame = CFrame.new(cx + 8, 0.6 + h * 0.92, zFront + boxD - 2.5) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(25, 25, 27), CastShadow = false, Parent = folder })
+		end
+		-- Rennwagen in der Box
+		local car = Cars.MakeShowCar({ Name = "Geparkt", Style = styles[i + 1], Hp = 700, Color = colors[i + 1] })
+		car.Kollision.CanCollide = true
+		car.Parent = folder
+		car:PivotTo(CFrame.new(cx - 2, 0.12 + Cars.BODY_HEIGHT, zFront + boxD / 2 + 1) * CFrame.Angles(0, math.pi, 0))
+		-- Boxennummer
+		local num = part({ Name = "Boxennummer", Size = Vector3.new(4, 2, 0.2), CFrame = CFrame.new(cx, boxH - 3, zFront - 0.25), Color = dark, CanCollide = false, Parent = folder })
+		Util.textGui(num, Enum.NormalId.Front, tostring(i + 1), Color3.fromRGB(255, 140, 0), dark)
+	end
+	local sign = part({ Name = "Boxenschild", Size = Vector3.new(60, 3.2, 0.4), CFrame = CFrame.new(x0 + 2.5 * boxW, boxH + 2.7, zFront - 1), Color = dark, Parent = folder })
+	Util.textGui(sign, Enum.NormalId.Front, "BOXEN · PIT LANE", Color3.fromRGB(255, 140, 0), dark)
 end
 
 ------------------------------------------------------------------------
@@ -563,43 +582,62 @@ end
 World.GroundY = groundY
 
 local function tree(pos, rng)
-	local trunkH = rng:NextNumber(7, 11)
+	local kind = rng:NextNumber()
+	local scale = rng:NextNumber(0.8, 1.35)
+	local trunkH = rng:NextNumber(7, 11) * scale
+	local birch = kind > 0.85
+	local trunkD = (birch and 1.0 or 1.5) * scale
 	part({
 		Name = "Stamm",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(trunkH, 1.4, 1.4),
+		Size = Vector3.new(trunkH, trunkD, trunkD),
 		CFrame = CFrame.new(pos + Vector3.new(0, trunkH / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = Color3.fromRGB(95, 70, 50),
-		Material = Enum.Material.Wood,
+		Color = birch and Color3.fromRGB(225, 222, 212) or Color3.fromRGB(rng:NextInteger(80, 100), rng:NextInteger(58, 72), 45),
+		Material = birch and Enum.Material.SmoothPlastic or Enum.Material.Wood,
 		Parent = folder,
 	})
-	if rng:NextNumber() < 0.35 then
-		-- Nadelbaum: gestapelte Scheiben
-		for i = 0, 3 do
-			local d = 11 - i * 2.5
+	if kind < 0.3 then
+		-- Nadelbaum: gestapelte, nach oben kleiner werdende Scheiben
+		local layers = 5
+		for i = 0, layers - 1 do
+			local d = (12 - i * 2.2) * scale
 			part({
 				Name = "Nadeln",
 				Shape = Enum.PartType.Cylinder,
-				Size = Vector3.new(2.6, d, d),
-				CFrame = CFrame.new(pos + Vector3.new(0, trunkH - 2 + i * 2.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-				Color = Color3.fromRGB(35, 80 + i * 5, 45),
-				Material = Enum.Material.Grass,
+				Size = Vector3.new(2.4 * scale, d, d),
+				CFrame = CFrame.new(pos + Vector3.new(0, trunkH * 0.55 + i * 2.3 * scale, 0)) * CFrame.Angles(0, 0, math.rad(90)) * CFrame.Angles(rng:NextNumber(0, 6), 0, 0),
+				Color = Color3.fromRGB(30, 70 + i * 6, 40),
+				Material = Enum.Material.LeafyGrass,
 				CanCollide = false,
 				Parent = folder,
 			})
 		end
 	else
-		local g = rng:NextInteger(95, 140)
-		for _ = 1, 3 do
-			local s = rng:NextNumber(7, 11)
+		-- Laubbaum: Krone aus mehreren Kugeln, innen dunkler
+		local g = rng:NextInteger(95, 135)
+		local top = pos + Vector3.new(0, trunkH, 0)
+		part({
+			Name = "Krone",
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.one * 10 * scale,
+			CFrame = CFrame.new(top + Vector3.new(0, 1.5 * scale, 0)),
+			Color = Color3.fromRGB(40, g - 25, 35),
+			Material = Enum.Material.LeafyGrass,
+			CanCollide = false,
+			Parent = folder,
+		})
+		for _ = 1, 4 do
+			local sz = rng:NextNumber(5.5, 8.5) * scale
+			local off = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(0, 5), rng:NextNumber(-4, 4)) * scale
 			part({
 				Name = "Krone",
 				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(s, s, s),
-				CFrame = CFrame.new(pos + Vector3.new(rng:NextNumber(-2, 2), trunkH + rng:NextNumber(0, 3), rng:NextNumber(-2, 2))),
-				Color = Color3.fromRGB(55, g, 50),
-				Material = Enum.Material.Grass,
+				Size = Vector3.one * sz,
+				CFrame = CFrame.new(top + off),
+				Color = birch and Color3.fromRGB(110, 160, 70) or Color3.fromRGB(50, g, 45),
+				Material = Enum.Material.LeafyGrass,
 				CanCollide = false,
+				CastShadow = false,
 				Parent = folder,
 			})
 		end
@@ -610,7 +648,7 @@ local function buildTrees()
 	local rng = Random.new(42)
 	local placed = 0
 	local tries = 0
-	while placed < 380 and tries < 5000 do
+	while placed < 190 and tries < 5000 do
 		tries += 1
 		local x = rng:NextNumber(-1020, 1020)
 		local z = rng:NextNumber(-1020, 1020)
@@ -652,7 +690,7 @@ local function buildHills()
 	local terrain = workspace.Terrain
 	local rng = Random.new(19)
 	local made, tries = 0, 0
-	while made < 34 and tries < 800 do
+	while made < 18 and tries < 800 do
 		tries += 1
 		local r = rng:NextNumber(28, 70)
 		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
@@ -725,13 +763,13 @@ local function buildNatureDetails()
 
 	-- Büsche
 	local placed, tries = 0, 0
-	while placed < 260 and tries < 4000 do
+	while placed < 90 and tries < 4000 do
 		tries += 1
 		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
 		if isFree(x, z) then
 			local y = groundY(x, z)
 			local green = rng:NextInteger(85, 125)
-			for _ = 1, rng:NextInteger(2, 4) do
+			for _ = 1, rng:NextInteger(2, 3) do
 				local sz = rng:NextNumber(2.5, 5)
 				part({
 					Name = "Busch",
@@ -741,6 +779,7 @@ local function buildNatureDetails()
 					Color = Color3.fromRGB(45, green, 40),
 					Material = Enum.Material.LeafyGrass,
 					CanCollide = false,
+					CastShadow = false,
 					Parent = folder,
 				})
 			end
@@ -750,7 +789,7 @@ local function buildNatureDetails()
 
 	-- Felsen
 	placed, tries = 0, 0
-	while placed < 70 and tries < 2000 do
+	while placed < 35 and tries < 2000 do
 		tries += 1
 		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
 		if isFree(x, z) then
@@ -773,12 +812,12 @@ local function buildNatureDetails()
 		Color3.fromRGB(150, 80, 200), Color3.fromRGB(255, 140, 180),
 	}
 	placed, tries = 0, 0
-	while placed < 45 and tries < 1500 do
+	while placed < 12 and tries < 1500 do
 		tries += 1
 		local x, z = rng:NextNumber(-1000, 1000), rng:NextNumber(-1000, 1000)
 		if areaFree(x, z, 10) then
 			local col = FLOWERS[rng:NextInteger(1, #FLOWERS)]
-			for _ = 1, 12 do
+			for _ = 1, 9 do
 				local fx, fz = x + rng:NextNumber(-9, 9), z + rng:NextNumber(-9, 9)
 				part({
 					Name = "Blume",
@@ -871,11 +910,251 @@ local function buildParkedCars()
 	for x = -171, 171, 10 do
 		if math.abs(x) > 30 and rng:NextNumber() < 0.45 then
 			local car = Cars.MakeShowCar({ Name = "Geparkt", Style = styles[rng:NextInteger(1, #styles)], Hp = rng:NextInteger(150, 600), Color = colors[rng:NextInteger(1, #colors)] })
-			car.PrimaryPart.CFrame = CFrame.new(x, 0.07 + Cars.BODY_HEIGHT, zc) * CFrame.Angles(0, math.pi, 0)
 			car.Kollision.CanCollide = true
 			car.Parent = folder
+			car:PivotTo(CFrame.new(x, 0.07 + Cars.BODY_HEIGHT, zc) * CFrame.Angles(0, math.pi, 0))
 		end
 	end
+end
+
+
+------------------------------------------------------------------------
+-- Ampeln, Haltelinien, Zebrastreifen
+------------------------------------------------------------------------
+local function trafficLight(pos, facing, axis)
+	local pole = Color3.fromRGB(55, 58, 62)
+	part({ Name = "Ampelmast", Size = Vector3.new(0.5, 11, 0.5), CFrame = CFrame.new(pos + Vector3.new(0, 5.5, 0)), Color = pole, Material = Enum.Material.Metal, Parent = folder })
+	local cf = CFrame.lookAt(pos + Vector3.new(0, 9, 0), pos + Vector3.new(0, 9, 0) + facing)
+	local m = Instance.new("Model")
+	m.Name = "Ampel"
+	part({ Name = "Gehaeuse", Size = Vector3.new(1.4, 3.8, 1), CFrame = cf, Color = Color3.fromRGB(25, 25, 28), Parent = m })
+	local cols = { Rot = Color3.fromRGB(60, 10, 10), Gelb = Color3.fromRGB(60, 45, 10), Gruen = Color3.fromRGB(10, 50, 20) }
+	for i, name in ipairs({ "Rot", "Gelb", "Gruen" }) do
+		part({
+			Name = name,
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.2, 0.95, 0.95),
+			CFrame = cf * CFrame.new(0, 1.2 - (i - 1) * 1.2, -0.52) * CFrame.Angles(0, math.rad(90), 0),
+			Color = cols[name],
+			Material = Enum.Material.Neon,
+			Parent = m,
+		})
+	end
+	m:SetAttribute("Axis", axis)
+	m.Parent = folder
+	CollectionService:AddTag(m, "Ampel")
+end
+
+local function stripe(cf, size)
+	part({ Name = "Haltelinie", Size = size, CFrame = cf, Color = Color3.new(1, 1, 1), Material = Enum.Material.SmoothPlastic, CanCollide = false, Parent = folder })
+end
+
+local function buildTrafficLights()
+	for _, c in ipairs(Paths.Intersections) do
+		local y = 0.08
+		-- Ostwärts (kommt von Westen, rechte Spur z+5), Westwärts (von Osten, z-5)
+		trafficLight(c + Vector3.new(-15, 0.25, 13.5), -Vector3.xAxis, "EW")
+		trafficLight(c + Vector3.new(15, 0, -13.5), Vector3.xAxis, "EW")
+		stripe(CFrame.new(c + Vector3.new(-13, y, 5.5)), Vector3.new(0.8, 0.05, 10))
+		stripe(CFrame.new(c + Vector3.new(13, y, -5.5)), Vector3.new(0.8, 0.05, 10))
+		-- Südwärts (kommt von Norden)
+		trafficLight(c + Vector3.new(-13.5, 0, -15), -Vector3.zAxis, "NS")
+		stripe(CFrame.new(c + Vector3.new(-5, y, -13)), Vector3.new(9, 0.05, 0.8))
+		if math.abs(c.X) > 1 then
+			-- Nordwärts (kommt von Süden) gibt es nur an den äußeren Kreuzungen
+			trafficLight(c + Vector3.new(13.5, 0.25, 15), Vector3.zAxis, "NS")
+			stripe(CFrame.new(c + Vector3.new(5, y, 13)), Vector3.new(9, 0.05, 0.8))
+		end
+		-- Zebrastreifen über die Werkstattstraße (westlich der Kreuzung)
+		for k = -4, 4 do
+			stripe(CFrame.new(c + Vector3.new(-20, y, k * 2.4)), Vector3.new(3.5, 0.05, 1.2))
+		end
+	end
+	-- Querstraßen der Landstraße bei x = ±700 nach Süden bis zur Werkstattstraße fehlen nicht:
+	-- sie gehören zum großen Rundkurs (siehe buildRoads).
+end
+
+-- Steg mit Ruderboot am See
+local function buildPier()
+	local wood = Color3.fromRGB(125, 95, 65)
+	local base = Vector3.new(650, 0, 335)
+	for i = 0, 7 do
+		part({ Name = "Stegbrett", Size = Vector3.new(6, 0.4, 3.2), CFrame = CFrame.new(base + Vector3.new(0, 0.6, 2 + i * 3.3)), Color = wood, Material = Enum.Material.WoodPlanks, Parent = folder })
+		if i % 2 == 0 then
+			for _, sx in ipairs({ -2.8, 2.8 }) do
+				part({ Name = "Stegpfahl", Size = Vector3.new(0.5, 6, 0.5), CFrame = CFrame.new(base + Vector3.new(sx, -1.8, 2 + i * 3.3)), Color = Color3.fromRGB(90, 70, 50), Material = Enum.Material.Wood, Parent = folder })
+			end
+		end
+	end
+	local boat = CFrame.new(base + Vector3.new(6.5, -1.6, 22))
+	part({ Name = "Bootsrumpf", Size = Vector3.new(3.5, 1.2, 9), CFrame = boat, Color = Color3.fromRGB(240, 240, 240), Material = Enum.Material.SmoothPlastic, Parent = folder })
+	part({ Name = "Bootsinneres", Size = Vector3.new(2.9, 0.2, 8.2), CFrame = boat * CFrame.new(0, 0.45, 0), Color = Color3.fromRGB(150, 110, 70), Material = Enum.Material.WoodPlanks, Parent = folder })
+	part({ Name = "Bootsbank", Size = Vector3.new(2.9, 0.3, 0.9), CFrame = boat * CFrame.new(0, 0.7, 0.5), Color = Color3.fromRGB(150, 110, 70), Material = Enum.Material.WoodPlanks, Parent = folder })
+end
+
+
+------------------------------------------------------------------------
+-- Action: Stuntpark, Slalom, Blitzer, Rekordtafeln
+------------------------------------------------------------------------
+local ORANGE = Color3.fromRGB(255, 140, 0)
+
+local function tagPart(p, tag, attrs)
+	for k, v in pairs(attrs or {}) do
+		p:SetAttribute(k, v)
+	end
+	CollectionService:AddTag(p, tag)
+	return p
+end
+
+-- Schanze in Fahrtrichtung -Z: niedrig bei zLow, hoch bei zLow - length
+local function ramp(x, zLow, length, height, width, boost, name)
+	local r = Util.wedge({
+		Name = name or "Schanze",
+		Size = Vector3.new(width, height, length),
+		CFrame = CFrame.new(x, 0.07 + height / 2, zLow - length / 2) * CFrame.Angles(0, math.pi, 0),
+		Color = Color3.fromRGB(200, 205, 215),
+		Material = Enum.Material.DiamondPlate,
+		Parent = folder,
+	})
+	-- Warnstreifen an der Kante
+	for k = 0, math.floor(width / 2) - 1 do
+		part({
+			Name = "Kante",
+			Size = Vector3.new(2, 0.3, 0.8),
+			CFrame = CFrame.new(x - width / 2 + 1 + k * 2, 0.07 + height + 0.05, zLow - length + 0.4),
+			Color = (k % 2 == 0) and ORANGE or Color3.fromRGB(20, 20, 20),
+			CanCollide = false,
+			Parent = folder,
+		})
+	end
+	local kicker = part({
+		Name = "Sprungkante",
+		Size = Vector3.new(width, 3, 3),
+		CFrame = CFrame.new(x, 0.07 + height + 1.5, zLow - length + 1),
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+		Parent = folder,
+	})
+	tagPart(kicker, "Kicker", { Boost = boost })
+	return r
+end
+
+local function landing(x, zHigh, length, height, width)
+	Util.wedge({
+		Name = "Landerampe",
+		Size = Vector3.new(width, height, length),
+		CFrame = CFrame.new(x, 0.07 + height / 2, zHigh - length / 2),
+		Color = Color3.fromRGB(200, 205, 215),
+		Material = Enum.Material.DiamondPlate,
+		Parent = folder,
+	})
+end
+
+local function sign(pos, facing, text, w, h)
+	local cf = CFrame.lookAt(pos, pos + facing)
+	for _, dx in ipairs({ -w / 2 + 1, w / 2 - 1 }) do
+		local foot = (cf * CFrame.new(dx, 0, 0.5)).Position
+		part({ Name = "Schildpfosten", Size = Vector3.new(0.6, pos.Y, 0.6), CFrame = CFrame.new(foot.X, pos.Y / 2, foot.Z), Color = Color3.fromRGB(60, 60, 66), Material = Enum.Material.Metal, Parent = folder })
+	end
+	local panel = part({ Name = "Schild", Size = Vector3.new(w, h, 0.4), CFrame = cf, Color = Color3.fromRGB(20, 20, 25), Parent = folder })
+	return Util.textGui(panel, Enum.NormalId.Front, text, ORANGE, Color3.fromRGB(20, 20, 25))
+end
+
+local function buildStuntPark()
+	-- Stuntpark im Innenfeld der Teststrecke (Ostseite)
+	World.Slab(CFrame.new(160, 0, -450), 170, 250, 0.07, Color3.fromRGB(58, 60, 66), Enum.Material.Asphalt, "Stuntpark")
+	sign(Vector3.new(160, 14, -330), Vector3.zAxis, "🚀 STUNTPARK", 40, 6)
+	-- klein, mittel, Mega-Schanze mit Bus
+	ramp(105, -345, 14, 3, 14, 55, "SchanzeKlein")
+	ramp(155, -345, 24, 5, 14, 72, "SchanzeMittel")
+	landing(155, -395, 24, 5, 14)
+	ramp(210, -345, 38, 8, 16, 95, "SchanzeMega")
+	landing(210, -429, 45, 8, 16)
+	-- Bus in der Lücke der Mega-Schanze
+	local bus = CFrame.new(210, 0.07, -406)
+	part({ Name = "Bus", Size = Vector3.new(30, 8, 8), CFrame = bus * CFrame.new(0, 4.6, 0), Color = Color3.fromRGB(240, 200, 20), Material = Enum.Material.SmoothPlastic, Parent = folder })
+	part({ Name = "Busfenster", Size = Vector3.new(26, 2.6, 8.1), CFrame = bus * CFrame.new(0, 6.2, 0), Color = Color3.fromRGB(30, 40, 55), Material = Enum.Material.Glass, Parent = folder })
+	for _, dx in ipairs({ -10, 10 }) do
+		for _, dz in ipairs({ -4, 4 }) do
+			part({ Name = "Busrad", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1, 3, 3), CFrame = bus * CFrame.new(dx, 1.4, dz) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(25, 25, 25), Parent = folder })
+		end
+	end
+	-- Steilwand-Rampen zum Hin-und-her-Springen
+	ramp(120, -470, 20, 4, 12, 60, "Kicker1")
+	ramp(120, -520, 20, 4, 12, 60, "Kicker2")
+
+	-- Slalom auf der Westseite
+	World.Slab(CFrame.new(-155, 0, -450), 150, 250, 0.07, Color3.fromRGB(58, 60, 66), Enum.Material.Asphalt, "Slalomplatz")
+	sign(Vector3.new(-155, 14, -330), Vector3.zAxis, "🏁 SLALOM", 36, 6)
+	local function gate(z, text, tag)
+		for _, dx in ipairs({ -12, 12 }) do
+			part({ Name = "Torpfosten", Size = Vector3.new(1, 10, 1), CFrame = CFrame.new(-155 + dx, 5, z), Color = Color3.fromRGB(240, 240, 240), Material = Enum.Material.Metal, Parent = folder })
+		end
+		local banner = part({ Name = "Torbanner", Size = Vector3.new(25, 3, 0.4), CFrame = CFrame.new(-155, 9.5, z), Color = Color3.fromRGB(20, 20, 25), Parent = folder })
+		Util.textGui(banner, Enum.NormalId.Back, text, ORANGE, Color3.fromRGB(20, 20, 25))
+		Util.textGui(banner, Enum.NormalId.Front, text, ORANGE, Color3.fromRGB(20, 20, 25))
+		tagPart(part({ Name = tag, Size = Vector3.new(24, 6, 2), CFrame = CFrame.new(-155, 3, z), Transparency = 1, CanCollide = false, CanQuery = false, Parent = folder }), tag)
+	end
+	gate(-345, "START", "SlalomStart")
+	gate(-555, "ZIEL", "SlalomZiel")
+	local k = 0
+	for z = -365, -535, -17 do
+		k += 1
+		local x = -155 + ((k % 2 == 0) and 6 or -6)
+		local cone = part({ Name = "Pylone", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.4, 1.4, 1.4), CFrame = CFrame.new(x, 1.3, z) * CFrame.Angles(0, 0, math.rad(90)), Color = ORANGE, CanCollide = false, Parent = folder })
+		part({ Name = "Pylonenring", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 1.45, 1.45), CFrame = CFrame.new(x, 1.5, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.new(1, 1, 1), CanCollide = false, Parent = folder })
+		tagPart(cone, "Pylone")
+	end
+end
+
+local function blitzer(pos, facing)
+	part({ Name = "Blitzersaeule", Size = Vector3.new(1.2, 6, 1.2), CFrame = CFrame.new(pos + Vector3.new(0, 3, 0)), Color = Color3.fromRGB(230, 230, 230), Material = Enum.Material.Metal, Parent = folder })
+	local cam = part({ Name = "Blitzer", Size = Vector3.new(1.6, 1.6, 2.2), CFrame = CFrame.lookAt(pos + Vector3.new(0, 6.6, 0), pos + Vector3.new(0, 6.6, 0) + facing), Color = Color3.fromRGB(40, 40, 44), Parent = folder })
+	part({ Name = "Blitzerlinse", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.2, 0.9, 0.9), CFrame = cam.CFrame * CFrame.new(0, 0, -1.15) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(10, 10, 10), Material = Enum.Material.Glass, Parent = folder })
+	Util.light(cam, "PointLight", { Range = 30, Brightness = 0, Color = Color3.new(1, 1, 1) })
+	tagPart(cam, "Blitzer")
+end
+
+World.RecordBoards = {}
+local function recordBoard(pos, facing)
+	local cf = CFrame.lookAt(pos, pos + facing)
+	for _, dx in ipairs({ -7, 7 }) do
+		part({ Name = "Tafelfuss", Size = Vector3.new(0.8, pos.Y, 0.8), CFrame = CFrame.new((cf * CFrame.new(dx, 0, 0.5)).Position.X, pos.Y / 2, (cf * CFrame.new(dx, 0, 0.5)).Position.Z), Color = Color3.fromRGB(50, 52, 58), Material = Enum.Material.Metal, Parent = folder })
+	end
+	local board = part({ Name = "Rekordtafel", Size = Vector3.new(16, 11, 0.5), CFrame = cf, Color = Color3.fromRGB(15, 16, 20), Parent = folder })
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 40
+	sg.LightInfluence = 0
+	sg.Parent = board
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = 1
+	tl.TextColor3 = Color3.new(1, 1, 1)
+	tl.Font = Enum.Font.GothamBold
+	tl.TextScaled = true
+	tl.TextXAlignment = Enum.TextXAlignment.Left
+	tl.TextYAlignment = Enum.TextYAlignment.Top
+	tl.Text = "🏆 REKORDE\n(werden geladen …)"
+	tl.Parent = sg
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0.04, 0)
+	pad.PaddingTop = UDim.new(0.04, 0)
+	pad.PaddingRight = UDim.new(0.04, 0)
+	pad.PaddingBottom = UDim.new(0.04, 0)
+	pad.Parent = tl
+	table.insert(World.RecordBoards, tl)
+end
+
+local function buildAction()
+	buildStuntPark()
+	-- Blitzer: Landstraße Nord (lange Gerade) und Werkstattstraße West
+	blitzer(Vector3.new(0, 0.25, -767), Vector3.xAxis)
+	blitzer(Vector3.new(-500, 0.25, World.ROAD_Z + 13), -Vector3.xAxis)
+	recordBoard(Vector3.new(110, 9, -330), Vector3.zAxis)
+	recordBoard(Vector3.new(22, 9, World.ROAD_Z + 42), -Vector3.zAxis)
 end
 
 ------------------------------------------------------------------------
@@ -898,6 +1177,9 @@ function World.Build()
 	buildTrees()
 	buildNatureDetails()
 	buildParkedCars()
+	buildTrafficLights()
+	buildPier()
+	buildAction()
 
 	local spawnLoc = Instance.new("SpawnLocation")
 	spawnLoc.Name = "Spawn"

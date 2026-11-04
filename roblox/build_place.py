@@ -66,6 +66,14 @@ xml = (
     + container("ServerScriptService", scripts_in("src/server"))
     + container("StarterPlayer", [container("StarterPlayerScripts", scripts_in("src/client"))])
     + container("Lighting", [], f'<token name="Technology">{TECHNOLOGY_FUTURE}</token>')
+    # Streaming: Spieler laden nur ihre Umgebung -> läuft flüssiger auf großen Karten
+    + container(
+        "Workspace",
+        [],
+        '<bool name="StreamingEnabled">true</bool>'
+        '<int name="StreamingMinRadius">128</int>'
+        '<int name="StreamingTargetRadius">768</int>',
+    )
     + "</roblox>\n"
 )
 

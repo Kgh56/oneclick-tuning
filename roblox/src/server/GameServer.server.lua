@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local Lighting = game:GetService("Lighting")
+local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
@@ -34,6 +35,8 @@ local RequestTestDrive = newRemote("RequestTestDrive") -- Client -> Server
 local RequestCompanyCar = newRemote("RequestCompanyCar") -- Client -> Server
 local EndDrive = newRemote("EndDrive") -- Client -> Server
 local AdminAction = newRemote("AdminAction") -- Client -> Server (nur Admins)
+local Honk = newRemote("Honk") -- Client -> Server: Hupe
+local ReportRecord = newRemote("ReportRecord") -- Client -> Server: Rekordversuch
 remotes.Parent = ReplicatedStorage
 
 local function notify(player, text, kind)
@@ -105,7 +108,7 @@ local usedPlots = {} -- [index] = player
 local jobCounter = 0
 
 local function defaultData()
-	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {}, Receipts = {} }
+	return { Money = Config.StartMoney, Rep = 0, Tunes = 0, Upgrades = {}, Receipts = {}, Records = {}, Found = {} }
 end
 
 local function loadData(player)
@@ -128,6 +131,20 @@ local function loadData(player)
 			for id, owned in pairs(res.Upgrades) do
 				if owned == true and Config.GetUpgrade(id) then
 					data.Upgrades[id] = true
+				end
+			end
+		end
+		if type(res.Records) == "table" then
+			for k, v in pairs(res.Records) do
+				if Config.Records[k] and tonumber(v) then
+					data.Records[k] = tonumber(v)
+				end
+			end
+		end
+		if type(res.Found) == "table" then
+			for _, id in ipairs(res.Found) do
+				if type(id) == "number" then
+					table.insert(data.Found, id)
 				end
 			end
 		end
@@ -154,6 +171,8 @@ local function saveData(player, st)
 			Tunes = st.Data.Tunes,
 			Upgrades = st.Data.Upgrades,
 			Receipts = st.Data.Receipts,
+			Records = st.Data.Records,
+			Found = st.Data.Found,
 		})
 	end)
 	if not ok then
@@ -658,7 +677,8 @@ local function spawnCustomer(player, st, bay)
 	if customer then
 		Npc.SeatInCar(customer, car)
 	end
-	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false, Customer = customer }
+	local popBang = hasUpgrade(st, "PopBang") and math.random() < Config.PopBangChance
+	local carInfo = { Def = def, Stage = stage, Model = car, Ready = false, Busy = false, Customer = customer, PopBang = popBang }
 	bay.Car = carInfo
 
 	local plot = st.Plot
@@ -678,7 +698,7 @@ local function spawnCustomer(player, st, bay)
 			return
 		end
 		local stageDef = Config.Stages[stage]
-		carInfo.Label = billboard(car.PrimaryPart, ("🚗 %s\nWunsch: %s · %d PS"):format(def.Name, stageDef.Name, def.Hp), 5)
+		carInfo.Label = billboard(car.PrimaryPart, ("🚗 %s\nWunsch: %s%s · %d PS"):format(def.Name, stageDef.Name, popBang and " + Pop & Bang" or "", def.Hp), 5)
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Chiptuning starten"
@@ -773,6 +793,10 @@ local function carLeave(st, bay, carInfo, oldHp, newHp)
 			if a >= 1 and not backfired then
 				backfired = true
 				backfire(car, 0.8)
+				if carInfo.PopBang then
+					task.delay(0.5, backfire, car, 0.6)
+					task.delay(1.0, backfire, car, 0.6)
+				end
 			end
 			RunService.Heartbeat:Wait()
 		end
@@ -814,6 +838,15 @@ local function completeCar(player, st, bay, score, byAzubi)
 	end
 	if carInfo.Model.PrimaryPart then
 		sparkle(carInfo.Model.PrimaryPart)
+		local customer = carInfo.Customer
+		if customer and customer:GetAttribute("Pose") == "stand" then
+			customer:SetAttribute("Pose", score >= 0.55 and "cheer" or "stand")
+			task.delay(3, function()
+				if customer.Parent and customer:GetAttribute("Pose") == "cheer" then
+					customer:SetAttribute("Pose", "stand")
+				end
+			end)
+		end
 	end
 	backfire(carInfo.Model, 1.2)
 	if carInfo.Prompt then
@@ -837,6 +870,9 @@ local function completeCar(player, st, bay, score, byAzubi)
 	if hasPass(st, "VIP") then
 		mult *= Config.VipMult
 	end
+	if carInfo.PopBang then
+		mult *= Config.PopBangPay
+	end
 	local pay = math.floor(stageDef.BasePay * mult)
 
 	local repDelta
@@ -859,7 +895,7 @@ local function completeCar(player, st, bay, score, byAzubi)
 		notify(player, ("🧑‍🔧 Azubi hat den %s getunt: +%s €"):format(def.Name, Config.Format(pay)), "good")
 	else
 		local tip = math.floor(pay * Config.TestDriveTip)
-		st.LastTuned = { Def = def, Hp = newHp, Tip = tip, Expires = os.clock() + 120, Used = false }
+		st.LastTuned = { Def = def, Hp = newHp, Tip = tip, Expires = os.clock() + 120, Used = false, PopBang = carInfo.PopBang }
 		TuneResult:FireClient(player, {
 			CanTestDrive = true,
 			Tip = tip,
@@ -888,13 +924,40 @@ startJob = function(player, st, bay, carInfo)
 	end
 	local stageDef = Config.Stages[carInfo.Stage]
 	local width = hasUpgrade(st, "Laptop") and Config.ZoneWidthLaptop or Config.ZoneWidth
-	local zones, speeds = {}, {}
-	for r = 1, #Config.MapNames do
-		zones[r] = 0.15 + math.random() * 0.7
-		speeds[r] = (0.55 + 0.15 * (r - 1)) * stageDef.SpeedMult
+	-- Drei von vier Minispielen in zufälliger Reihenfolge
+	local pool = { "needle", "hold", "memory", "shift" }
+	for i = #pool, 2, -1 do
+		local j = math.random(1, i)
+		pool[i], pool[j] = pool[j], pool[i]
+	end
+	local hard = stageDef.SpeedMult
+	local games = {}
+	for r = 1, 3 do
+		local kind = pool[r]
+		local g = { Type = kind, Width = width }
+		if kind == "needle" then
+			g.Name = "Zündzeitpunkt"
+			g.Zone = 0.15 + math.random() * 0.7
+			g.Speed = (0.6 + 0.12 * r) * hard
+		elseif kind == "hold" then
+			g.Name = "Ladedruck halten"
+			g.Speed = 0.9 * hard
+			g.Duration = 4
+		elseif kind == "memory" then
+			g.Name = "Fehlercodes löschen"
+			g.Length = 3 + carInfo.Stage
+			g.Seq = {}
+			for k = 1, g.Length do
+				g.Seq[k] = math.random(1, 4)
+			end
+		else
+			g.Name = "Prüfstandslauf"
+			g.Speed = 0.9 * hard
+		end
+		games[r] = g
 	end
 	jobCounter += 1
-	st.Job = { Id = jobCounter, Bay = bay, Car = carInfo, Zones = zones, Width = width, Started = os.clock() }
+	st.Job = { Id = jobCounter, Bay = bay, Car = carInfo, Rounds = #games, Started = os.clock() }
 	carInfo.Busy = true
 	-- Bühne hoch, Diagnosekabel anschließen
 	connectCable(bay, carInfo)
@@ -910,10 +973,7 @@ startJob = function(player, st, bay, carInfo)
 		Nm = def.Nm,
 		TargetHp = math.floor(def.Hp * (1 + stageDef.PowerGain) + 0.5),
 		TargetNm = math.floor(def.Nm * (1 + stageDef.TorqueGain) + 0.5),
-		Zones = zones,
-		Width = width,
-		Speeds = speeds,
-		MapNames = Config.MapNames,
+		Games = games,
 	})
 end
 
@@ -930,16 +990,18 @@ FinishTuning.OnServerEvent:Connect(function(player, jobId, positions)
 		task.spawn(animateLift, job.Bay, 0, 2)
 		return
 	end
+	-- Jede Runde liefert 0..1; daraus wird Perfekt / Gut / Schlecht
 	local total = 0
-	for r = 1, #job.Zones do
-		local p = tonumber(positions[r])
-		if p == nil or p ~= p then
-			p = -1
+	for r = 1, job.Rounds do
+		local sc = tonumber(positions[r])
+		if sc == nil or sc ~= sc then
+			sc = 0
 		end
-		p = math.clamp(p, -1, 2)
-		total += Config.Score[Config.Rate(p, job.Zones[r], job.Width)]
+		sc = math.clamp(sc, 0, 1)
+		local rating = (sc >= 0.8 and "Perfect") or (sc >= 0.45 and "Good") or "Bad"
+		total += Config.Score[rating]
 	end
-	completeCar(player, st, job.Bay, total / #job.Zones, false)
+	completeCar(player, st, job.Bay, total / job.Rounds, false)
 end)
 
 CancelTuning.OnServerEvent:Connect(function(player, jobId)
@@ -1037,10 +1099,14 @@ local function endDrive(player, st, reason)
 	end
 end
 
-local function spawnDrivable(player, st, def, hp, cf, mode)
+local function spawnDrivable(player, st, def, hp, cf, mode, popBang)
 	endDrive(player, st, "silent")
+	pcall(function()
+		player:RequestStreamAroundAsync(cf.Position, 3) -- Umgebung vorladen (Streaming)
+	end)
 	local car, seat = Cars.MakeDrivable(def)
 	car:PivotTo(cf)
+	seat:SetAttribute("PopBang", popBang == true)
 	seat:SetAttribute("Drivable", true)
 	seat:SetAttribute("Hp", hp)
 	seat:SetAttribute("Owner", player.UserId)
@@ -1113,7 +1179,7 @@ RequestTestDrive.OnServerEvent:Connect(function(player)
 	end
 	lt.Used = true
 	notify(player, "🏁 Probefahrt! Fahr eine Runde auf der Teststrecke (W/A/S/D).", "good")
-	local drive = spawnDrivable(player, st, lt.Def, lt.Hp, World.TrackStart(st.Plot.Index), "test")
+	local drive = spawnDrivable(player, st, lt.Def, lt.Hp, World.TrackStart(st.Plot.Index), "test", lt.PopBang)
 	drive.Tip = lt.Tip
 end)
 
@@ -1132,7 +1198,7 @@ RequestCompanyCar.OnServerEvent:Connect(function(player)
 	end
 	st.LastCarRequest = now
 	local hp = Config.CompanyCar.Hp + 120 * (maxStage(st) - 1)
-	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company")
+	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company", hasUpgrade(st, "PopBang"))
 end)
 
 ------------------------------------------------------------------------
@@ -1160,6 +1226,20 @@ AdminAction.OnServerEvent:Connect(function(player, action)
 		setRep(st, st.Data.Rep + Config.AdminRepStep)
 		notify(player, "🧪 Ruf +" .. Config.AdminRepStep .. " (teurere Kundenautos)", "good")
 	end
+end)
+
+Honk.OnServerEvent:Connect(function(player)
+	local st = States[player]
+	if not st or not st.Drive then
+		return
+	end
+	local now = os.clock()
+	if st.LastHonk and now - st.LastHonk < 0.6 then
+		return
+	end
+	st.LastHonk = now
+	playSound(st.Drive.Car.PrimaryPart, "Hupe", 0.9)
+	player:SetAttribute("HonkAt", workspace:GetServerTimeNow())
 end)
 
 EndDrive.OnServerEvent:Connect(function(player)
@@ -1298,6 +1378,224 @@ MarketplaceService.ProcessReceipt = function(info)
 end
 
 ------------------------------------------------------------------------
+-- Rekorde (Bestenliste über alle Server) und Schraubenschlüssel-Jagd
+------------------------------------------------------------------------
+local recordStores = {}
+for kind in pairs(Config.Records) do
+	pcall(function()
+		recordStores[kind] = DataStoreService:GetOrderedDataStore("Rekord_" .. kind)
+	end)
+end
+local sessionBest = {} -- [kind] = { {UserId, Name, Value}, ... }
+local nameCache = {}
+local boardDirty = true
+
+-- Werte werden als ganze Zahlen gespeichert (Zehntel)
+local function encode(_kind, v)
+	return math.floor(v * 10 + 0.5)
+end
+
+local function formatValue(kind, v)
+	local def = Config.Records[kind]
+	if def.Unit == "s" then
+		return ("%.2f s"):format(v)
+	end
+	return ("%d %s"):format(math.floor(v + 0.5), def.Unit)
+end
+
+local function better(kind, a, b)
+	if b == nil then
+		return true
+	end
+	if Config.Records[kind].Lower then
+		return a < b
+	end
+	return a > b
+end
+
+local function updateBoards()
+	local lines = { "🏆 REKORDE" }
+	for _, kind in ipairs(Config.RecordOrder) do
+		local def = Config.Records[kind]
+		local top = {}
+		local rstore = recordStores[kind]
+		local ok = rstore and pcall(function()
+			local pages = rstore:GetSortedAsync(def.Lower, 3)
+			for _, entry in ipairs(pages:GetCurrentPage()) do
+				local uid = tonumber(entry.key)
+				local name = nameCache[uid]
+				if not name then
+					local okName, n = pcall(function()
+						return Players:GetNameFromUserIdAsync(uid)
+					end)
+					name = okName and n or ("#" .. tostring(uid))
+					nameCache[uid] = name
+				end
+				table.insert(top, { Name = name, Value = entry.value / 10 })
+			end
+		end)
+		if not ok or #top == 0 then
+			top = {}
+			for i, e in ipairs(sessionBest[kind] or {}) do
+				if i > 3 then
+					break
+				end
+				table.insert(top, e)
+			end
+		end
+		table.insert(lines, "")
+		table.insert(lines, def.Name .. ":")
+		if #top == 0 then
+			table.insert(lines, "   – noch frei –")
+		end
+		for i, e in ipairs(top) do
+			table.insert(lines, ("   %d. %s  %s"):format(i, e.Name, formatValue(kind, e.Value)))
+		end
+	end
+	local text = table.concat(lines, "\n")
+	for _, tl in ipairs(World.RecordBoards or {}) do
+		tl.Text = text
+	end
+end
+
+task.spawn(function()
+	while true do
+		if boardDirty then
+			boardDirty = false
+			updateBoards()
+		end
+		task.wait(15)
+		boardDirty = boardDirty or (os.clock() % 120 < 15)
+	end
+end)
+
+local LIMITS = { speed = { 20, 700 }, jump = { 3, 400 }, slalom = { 6, 300 }, lap = { 12, 600 } }
+
+ReportRecord.OnServerEvent:Connect(function(player, kind, value)
+	local st = States[player]
+	value = tonumber(value)
+	local lim = LIMITS[kind]
+	if not st or not lim or not value or value ~= value or value < lim[1] or value > lim[2] then
+		return
+	end
+	if not st.Drive then
+		return -- nur aus dem Auto heraus
+	end
+	local def = Config.Records[kind]
+	-- Bestenliste dieser Sitzung
+	local list = sessionBest[kind] or {}
+	sessionBest[kind] = list
+	local found = false
+	for _, e in ipairs(list) do
+		if e.UserId == player.UserId then
+			found = true
+			if better(kind, value, e.Value) then
+				e.Value = value
+			end
+		end
+	end
+	if not found then
+		table.insert(list, { UserId = player.UserId, Name = player.DisplayName, Value = value })
+	end
+	table.sort(list, function(a, b)
+		return better(kind, a.Value, b.Value)
+	end)
+	-- Persönlicher Rekord?
+	local old = st.Data.Records[kind]
+	if better(kind, value, old) then
+		st.Data.Records[kind] = value
+		local now = os.clock()
+		st.RecordRewardAt = st.RecordRewardAt or {}
+		if not st.RecordRewardAt[kind] or now - st.RecordRewardAt[kind] > 30 then
+			st.RecordRewardAt[kind] = now
+			setMoney(st, st.Data.Money + def.Reward)
+			notify(player, ("🏆 Neuer persönlicher Rekord – %s: %s (+%s €)"):format(def.Name, formatValue(kind, value), Config.Format(def.Reward)), "good")
+		end
+		local rstore = recordStores[kind]
+		if rstore and st.CanSave then
+			task.spawn(pcall, function()
+				rstore:SetAsync(tostring(player.UserId), encode(kind, value))
+			end)
+		end
+		boardDirty = true
+	end
+end)
+
+-- Goldene Schraubenschlüssel
+local WRENCH_SPOTS = {
+	Vector3.new(210, 0, -383), -- auf der Mega-Schanze
+	Vector3.new(650, 0, 360), -- Steg am See
+	Vector3.new(-120, 0, -205), -- Boxengasse
+	Vector3.new(0, 0, -357), -- Tribüne
+	Vector3.new(0, 0, 200), -- hinter den Läden
+	Vector3.new(690, 0, -770), -- Landstraße Nordost
+	Vector3.new(-690, 0, 250), -- Landstraße Südwest
+	Vector3.new(-880, 0, -100), -- Feld West
+	Vector3.new(880, 0, -300), -- Feld Ost
+	Vector3.new(-400, 0, -700), -- Wiese Nordwest
+	Vector3.new(300, 0, 500), -- Wiese Süd
+	Vector3.new(-155, 0, -560), -- Slalom-Ziel
+}
+local wrenches = {}
+do
+	local wf = Instance.new("Folder")
+	wf.Name = "Schraubenschluessel"
+	wf.Parent = workspace
+	for i, spot in ipairs(WRENCH_SPOTS) do
+		local y = World.GroundY(spot.X, spot.Z)
+		if i == 1 then
+			y = 8.1 -- obere Kante der Mega-Schanze
+		elseif i == 4 then
+			y = 9 -- oberste Tribünenstufe
+		end
+		local pos = Vector3.new(spot.X, y + 3, spot.Z)
+		local m = Instance.new("Model")
+		m.Name = "Schluessel" .. i
+		local handle = part({ Name = "Griff", Size = Vector3.new(0.6, 3.2, 0.3), CFrame = CFrame.new(pos), Color = Color3.fromRGB(255, 200, 40), Material = Enum.Material.Neon, CanCollide = false, Parent = m })
+		part({ Name = "Maul", Size = Vector3.new(1.6, 0.9, 0.3), CFrame = CFrame.new(pos + Vector3.new(0, 1.8, 0)), Color = Color3.fromRGB(255, 200, 40), Material = Enum.Material.Neon, CanCollide = false, Parent = m })
+		Util.light(handle, "PointLight", { Range = 14, Brightness = 2, Color = Color3.fromRGB(255, 200, 60) })
+		m.PrimaryPart = handle
+		m:SetAttribute("Id", i)
+		m.Parent = wf
+		CollectionService:AddTag(m, "Schluessel")
+		wrenches[i] = pos
+	end
+end
+
+local function syncFound(player, st)
+	local ids = {}
+	for _, id in ipairs(st.Data.Found) do
+		table.insert(ids, tostring(id))
+	end
+	player:SetAttribute("Found", table.concat(ids, ","))
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.3)
+		for player, st in pairs(States) do
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				for id, pos in pairs(wrenches) do
+					if (hrp.Position - pos).Magnitude < 9 and not table.find(st.Data.Found, id) then
+						table.insert(st.Data.Found, id)
+						syncFound(player, st)
+						local n = #st.Data.Found
+						setMoney(st, st.Data.Money + Config.WrenchReward)
+						notify(player, ("🔧 Goldener Schraubenschlüssel %d/%d gefunden! +%s €"):format(n, #WRENCH_SPOTS, Config.Format(Config.WrenchReward)), "good")
+						if n == #WRENCH_SPOTS then
+							setMoney(st, st.Data.Money + Config.WrenchBonus)
+							notify(player, ("🏆 Alle Schraubenschlüssel gefunden! Bonus +%s €"):format(Config.Format(Config.WrenchBonus)), "good")
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+------------------------------------------------------------------------
 -- Spieler betreten / verlassen
 ------------------------------------------------------------------------
 local function placeCharacter(player, char)
@@ -1401,6 +1699,7 @@ local function onPlayerAdded(player)
 	end
 	st.Plot = buildPlot(player, st, index)
 	States[player] = st
+	syncFound(player, st)
 	task.spawn(checkPasses, player, st)
 
 	if player.Character then
@@ -1497,7 +1796,18 @@ task.spawn(function()
 	while true do
 		local dt = task.wait(0.1)
 		local t = Lighting.ClockTime
-		local rate = (t < 6 or t > 19.5) and perSecond * 2 or perSecond -- Nächte gehen schneller vorbei
+		local night = t < 6 or t > 19.5
+		local rate = night and perSecond * 3 or perSecond -- Nächte gehen schneller vorbei
 		Lighting.ClockTime = (t + rate * dt) % 24
+		-- Nachts heller (Mondlicht), damit man noch gut sieht
+		local dark = 0
+		if t > 18.5 then
+			dark = math.clamp((t - 18.5) / 1.5, 0, 1)
+		elseif t < 6.5 then
+			dark = math.clamp((6.5 - t) / 1.5, 0, 1)
+		end
+		Lighting.OutdoorAmbient = Color3.fromRGB(125, 125, 135):Lerp(Color3.fromRGB(95, 105, 140), dark)
+		Lighting.Ambient = Color3.fromRGB(45, 45, 52):Lerp(Color3.fromRGB(60, 65, 85), dark)
+		Lighting.ExposureCompensation = 0.1 + 0.5 * dark
 	end
 end)

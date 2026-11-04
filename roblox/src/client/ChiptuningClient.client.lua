@@ -177,7 +177,7 @@ label({
 local shopClose = button({
 	Size = UDim2.fromOffset(40, 40),
 	Position = UDim2.new(1, -50, 0, 10),
-	Text = "✕",
+	Text = "X",
 	BackgroundColor3 = C.Gray,
 	Parent = shopWin,
 })
@@ -428,6 +428,28 @@ local hud = make("Frame", {
 }, { corner(12) })
 local moneyLabel = label({ Size = UDim2.new(0.55, 0, 1, 0), Text = "💰 0 €", TextSize = 22, TextColor3 = C.Green, Parent = hud })
 local repLabel = label({ Size = UDim2.new(0.45, 0, 1, 0), Position = UDim2.fromScale(0.55, 0), Text = "⭐ Ruf 0", TextSize = 20, TextColor3 = C.Yellow, Parent = hud })
+local wrenchLabel = label({
+	Size = UDim2.fromOffset(150, 26),
+	Position = UDim2.new(0.5, 0, 0, 58),
+	AnchorPoint = Vector2.new(0.5, 0),
+	BackgroundColor3 = C.Bg,
+	BackgroundTransparency = 0.3,
+	Text = "🔧 0/12",
+	TextSize = 16,
+	TextColor3 = Color3.fromRGB(255, 200, 40),
+	Parent = gui,
+})
+corner(8).Parent = wrenchLabel
+local function updateWrenchLabel()
+	local found = player:GetAttribute("Found") or ""
+	local n = 0
+	for _ in found:gmatch("%d+") do
+		n += 1
+	end
+	wrenchLabel.Text = ("🔧 %d/12 Schlüssel"):format(n)
+end
+player:GetAttributeChangedSignal("Found"):Connect(updateWrenchLabel)
+updateWrenchLabel()
 
 local shopButton = button({
 	Size = UDim2.fromOffset(120, 46),
@@ -558,7 +580,7 @@ local infoLabel = label({
 local cancelBtn = button({
 	Size = UDim2.fromOffset(40, 40),
 	Position = UDim2.new(1, -50, 0, 10),
-	Text = "✕",
+	Text = "X",
 	BackgroundColor3 = C.Gray,
 	Parent = playFrame,
 })
@@ -612,15 +634,53 @@ local stopBtn = button({
 	TextSize = 24,
 	Parent = playFrame,
 })
-label({
+local helpLabel = label({
 	Size = UDim2.new(1, -40, 0, 30),
 	Position = UDim2.fromOffset(20, 348),
 	Font = Enum.Font.Gotham,
 	TextSize = 14,
 	TextColor3 = C.Muted,
-	Text = "Stoppe die Nadel im grünen Bereich. Gelb ist okay, Rot lässt den Motor klopfen.",
+	TextWrapped = true,
+	Text = "",
 	Parent = playFrame,
 })
+
+-- Memory: vier Steuergeräte-Felder
+local PAD_COLORS = { Color3.fromRGB(220, 60, 60), Color3.fromRGB(60, 160, 230), Color3.fromRGB(60, 200, 100), Color3.fromRGB(240, 190, 40) }
+local PAD_CODES = { "P0300", "P0171", "P0234", "P0420" }
+local padFrame = make("Frame", {
+	Size = UDim2.new(1, -60, 0, 70),
+	Position = UDim2.fromOffset(30, 152),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = playFrame,
+}, { make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), HorizontalAlignment = Enum.HorizontalAlignment.Center }) })
+local pads = {}
+for i = 1, 4 do
+	local pad = button({
+		Size = UDim2.new(0.25, -8, 1, 0),
+		Text = PAD_CODES[i] .. "\n[" .. i .. "]",
+		TextSize = 17,
+		BackgroundColor3 = PAD_COLORS[i]:Lerp(Color3.new(0, 0, 0), 0.6),
+		LayoutOrder = i,
+		Parent = padFrame,
+	})
+	pads[i] = pad
+end
+
+-- Schaltblitze für den Prüfstandslauf
+local ledFrame = make("Frame", {
+	Size = UDim2.fromOffset(200, 14),
+	Position = UDim2.new(0.5, 0, 0, 142),
+	AnchorPoint = Vector2.new(0.5, 0),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = playFrame,
+}, { make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Center }) })
+local leds = {}
+for i = 1, 6 do
+	leds[i] = make("Frame", { Size = UDim2.fromOffset(24, 12), BackgroundColor3 = C.Gray, LayoutOrder = i, Parent = ledFrame }, { corner(6) })
+end
 
 -- Ergebnisansicht
 local resultFrame = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, Parent = tuneWin })
@@ -649,20 +709,30 @@ local testDriveBtn = button({
 })
 
 ------------------------------------------------------------------------
--- Tuning-Ablauf
+-- Tuning-Ablauf: drei Minispiele pro Auftrag
 ------------------------------------------------------------------------
-local current = nil -- { Job, Round, Results, Phase, T, Pos, Stopped }
+local current = nil -- { Job, Round, Results, Phase, Game, S }
+local holding = false
 
 local function pingpong(x)
 	return 1 - math.abs((x % 2) - 1)
 end
 
 local function placeNeedle(pos)
-	needle.Position = UDim2.fromScale(pos, 0.5)
+	needle.Position = UDim2.fromScale(math.clamp(pos, 0, 1), 0.5)
+end
+
+local function setZones(center, width)
+	yellowZone.Position = UDim2.fromScale(center - width, 0)
+	yellowZone.Size = UDim2.fromScale(width * 2, 1)
+	greenZone.Position = UDim2.fromScale(center - width / 2, 0)
+	greenZone.Size = UDim2.fromScale(width, 1)
 end
 
 local function unbindStop()
 	ContextActionService:UnbindAction("ChiptuningStopp")
+	ContextActionService:UnbindAction("ChiptuningPads")
+	holding = false
 end
 
 local function closeTuning()
@@ -671,39 +741,199 @@ local function closeTuning()
 	unbindStop()
 end
 
+local finishRound -- vorwärts
+
+local GAMES = {}
+
+-- 1) Nadel im grünen Bereich stoppen
+GAMES.needle = {
+	Help = "Stoppe die Nadel im grünen Bereich. Gelb ist okay, Rot lässt den Motor klopfen.",
+	Button = "STOPP  [Leertaste]",
+	Start = function(g, st)
+		setZones(g.Zone, g.Width)
+		st.T = math.random() * 2
+		st.Pos = pingpong(st.T)
+	end,
+	Update = function(g, st, dt)
+		st.T += dt * g.Speed
+		st.Pos = pingpong(st.T)
+		placeNeedle(st.Pos)
+	end,
+	Press = function(g, st)
+		finishRound(Config.Score[Config.Rate(st.Pos, g.Zone, g.Width)])
+	end,
+}
+
+-- 2) Ladedruck halten: gedrückt halten, Druck in der wandernden Zone halten
+GAMES.hold = {
+	Help = "Halte die Taste gedrückt, um Ladedruck aufzubauen. Bleib in der grünen Zone, bis die Zeit abläuft!",
+	Button = "GAS HALTEN  [Leertaste]",
+	Start = function(_g, st)
+		st.T = 0
+		st.P = 0.15
+		st.Good = 0
+		flashFill.Visible = true
+		flashFill.Size = UDim2.fromScale(st.P, 1)
+	end,
+	Update = function(g, st, dt)
+		st.T += dt
+		local c = 0.5 + 0.28 * math.sin(st.T * g.Speed * 1.3) + 0.08 * math.sin(st.T * g.Speed * 3.1)
+		local w = g.Width * 1.3
+		setZones(c, w)
+		st.P = math.clamp(st.P + (holding and 0.95 or -0.75) * dt, 0, 1)
+		flashFill.Size = UDim2.fromScale(st.P, 1)
+		placeNeedle(st.P)
+		local d = math.abs(st.P - c)
+		if d <= w / 2 then
+			st.Good += dt
+		elseif d <= w then
+			st.Good += dt * 0.5
+		end
+		feedback.TextColor3 = C.Text
+		feedback.Text = ("⏱ %.1f s"):format(math.max(0, g.Duration - st.T))
+		if st.T >= g.Duration then
+			finishRound(math.min(1, st.Good / (g.Duration * 0.75)))
+		end
+	end,
+}
+
+-- 3) Fehlercodes: Reihenfolge merken und nachdrücken
+GAMES.memory = {
+	Help = "Merke dir die Reihenfolge der aufleuchtenden Fehlercodes und drücke sie nach (Klick oder Tasten 1–4).",
+	Start = function(_g, st)
+		st.T = 0
+		st.Showing = true
+		st.Input = 0
+		for i, pad in ipairs(pads) do
+			pad.BackgroundColor3 = PAD_COLORS[i]:Lerp(Color3.new(0, 0, 0), 0.6)
+		end
+		feedback.TextColor3 = C.Text
+		feedback.Text = "👀 Merken …"
+	end,
+	Update = function(g, st, dt)
+		if not st.Showing then
+			return
+		end
+		st.T += dt
+		local step = 0.65
+		local idx = math.floor(st.T / step) + 1
+		local lit = (st.T % step) < 0.45 and g.Seq[idx] or nil
+		for i, pad in ipairs(pads) do
+			pad.BackgroundColor3 = (i == lit) and PAD_COLORS[i] or PAD_COLORS[i]:Lerp(Color3.new(0, 0, 0), 0.6)
+		end
+		if idx > #g.Seq then
+			st.Showing = false
+			feedback.Text = "👉 Jetzt du!"
+		end
+	end,
+	Pad = function(g, st, i)
+		if st.Showing then
+			return
+		end
+		local pad = pads[i]
+		pad.BackgroundColor3 = PAD_COLORS[i]
+		task.delay(0.15, function()
+			pad.BackgroundColor3 = PAD_COLORS[i]:Lerp(Color3.new(0, 0, 0), 0.6)
+		end)
+		if g.Seq[st.Input + 1] == i then
+			st.Input += 1
+			if st.Input >= #g.Seq then
+				finishRound(1)
+			end
+		else
+			finishRound(st.Input / #g.Seq * 0.9)
+		end
+	end,
+}
+
+-- 4) Prüfstandslauf: im grünen Drehzahlbereich hochschalten
+GAMES.shift = {
+	Help = "Die Drehzahl steigt: Schalte hoch, wenn die Schaltblitze grün sind! Zu spät = Begrenzer.",
+	Button = "SCHALTEN  [Leertaste]",
+	Start = function(_g, st)
+		st.Pos = 0.05
+		st.Gear = 1
+		st.Scores = {}
+		setZones(0.875, 0.1)
+		ledFrame.Visible = true
+	end,
+	Update = function(g, st, dt)
+		st.Pos += dt * (0.25 + st.Pos * 0.85) * g.Speed * (1 + st.Gear * 0.12)
+		placeNeedle(st.Pos)
+		local litCount = math.clamp(math.floor((st.Pos - 0.55) / 0.05), 0, 6)
+		for i, led in ipairs(leds) do
+			local on = i <= litCount
+			local col = (i <= 2 and C.Green) or (i <= 4 and C.Yellow) or C.Red
+			if st.Pos >= 0.825 and st.Pos <= 0.925 then
+				col = C.Green -- Schaltpunkt: alle grün
+			end
+			led.BackgroundColor3 = on and col or C.Gray
+		end
+		feedback.TextColor3 = C.Text
+		feedback.Text = ("Gang %d"):format(st.Gear)
+		if st.Pos >= 1 then
+			st.Scores[#st.Scores + 1] = 0
+			feedback.Text = "💥 Begrenzer!"
+			GAMES.shift.Next(g, st)
+		end
+	end,
+	Press = function(g, st)
+		local pos = st.Pos
+		local sc = (math.abs(pos - 0.875) <= 0.05 and 1) or (math.abs(pos - 0.875) <= 0.1 and 0.6) or 0.2
+		st.Scores[#st.Scores + 1] = sc
+		GAMES.shift.Next(g, st)
+	end,
+	Next = function(_g, st)
+		if #st.Scores >= 3 then
+			local sum = 0
+			for _, v in ipairs(st.Scores) do
+				sum += v
+			end
+			finishRound(sum / #st.Scores)
+		else
+			st.Gear += 1
+			st.Pos = 0.35 -- Drehzahl fällt nach dem Schalten
+		end
+	end,
+}
+
 local function setupRound()
 	local job = current.Job
 	local r = current.Round
-	mapLabel.Text = ("Kennfeld %d/%d: %s"):format(r, #job.Zones, job.MapNames[r] or "?")
-	local c, w = job.Zones[r], job.Width
-	yellowZone.Position = UDim2.fromScale(c - w, 0)
-	yellowZone.Size = UDim2.fromScale(w * 2, 1)
-	greenZone.Position = UDim2.fromScale(c - w / 2, 0)
-	greenZone.Size = UDim2.fromScale(w, 1)
+	local g = job.Games[r]
+	local game = GAMES[g.Type]
+	current.Game = g
+	current.S = {}
+	current.Stopped = false
+	mapLabel.Text = ("Schritt %d/%d: %s"):format(r, #job.Games, g.Name)
+	helpLabel.Text = game.Help
+	feedback.Text = ""
+	local usesBar = g.Type ~= "memory"
+	bar.Visible = usesBar
+	needleTrack.Visible = usesBar
+	needle.Visible = usesBar
 	yellowZone.Visible = true
 	greenZone.Visible = true
 	flashFill.Visible = false
-	current.T = math.random() * 2
-	current.Pos = pingpong(current.T)
-	current.Stopped = false
-	feedback.Text = ""
-	stopBtn.Visible = true
-	placeNeedle(current.Pos)
+	padFrame.Visible = g.Type == "memory"
+	ledFrame.Visible = false
+	stopBtn.Visible = game.Button ~= nil
+	stopBtn.Text = game.Button or ""
+	holding = false
+	game.Start(g, current.S)
 end
 
-local function stop()
-	if not current or current.Phase ~= "play" or current.Stopped then
+finishRound = function(score)
+	if not current or current.Stopped then
 		return
 	end
 	current.Stopped = true
 	local job, r = current.Job, current.Round
-	local pos = current.Pos
-	current.Results[r] = pos
-	local rating = Config.Rate(pos, job.Zones[r], job.Width)
-	if rating == "Perfect" then
+	current.Results[r] = score
+	if score >= 0.8 then
 		feedback.Text = "PERFEKT! 🔥"
 		feedback.TextColor3 = C.Green
-	elseif rating == "Good" then
+	elseif score >= 0.45 then
 		feedback.Text = "Okay 👍"
 		feedback.TextColor3 = C.Yellow
 	else
@@ -711,23 +941,27 @@ local function stop()
 		feedback.TextColor3 = C.Red
 	end
 
-	task.delay(0.8, function()
+	task.delay(0.9, function()
 		if not current or current.Job ~= job then
 			return
 		end
-		if r < #job.Zones then
+		if r < #job.Games then
 			current.Round = r + 1
 			setupRound()
 			return
 		end
-		-- Alle Kennfelder fertig: "Software aufspielen"
+		-- Alles fertig: "Software aufspielen"
 		current.Phase = "flash"
 		stopBtn.Visible = false
+		padFrame.Visible = false
+		ledFrame.Visible = false
+		bar.Visible = true
+		needleTrack.Visible = false
 		feedback.Text = ""
+		helpLabel.Text = ""
 		mapLabel.Text = "Software wird aufs Steuergerät geschrieben …"
 		yellowZone.Visible = false
 		greenZone.Visible = false
-		needle.Visible = false
 		flashFill.Size = UDim2.fromScale(0, 1)
 		flashFill.Visible = true
 		TweenService:Create(flashFill, TweenInfo.new(1.3, Enum.EasingStyle.Linear), { Size = UDim2.fromScale(1, 1) }):Play()
@@ -739,7 +973,42 @@ local function stop()
 	end)
 end
 
-stopBtn.Activated:Connect(stop)
+local function press()
+	if not current or current.Phase ~= "play" or current.Stopped then
+		return
+	end
+	local game = GAMES[current.Game.Type]
+	if game.Press then
+		game.Press(current.Game, current.S)
+	end
+end
+
+local function padPressed(i)
+	if not current or current.Phase ~= "play" or current.Stopped then
+		return
+	end
+	local game = GAMES[current.Game.Type]
+	if game.Pad then
+		game.Pad(current.Game, current.S, i)
+	end
+end
+
+stopBtn.Activated:Connect(press)
+stopBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		holding = true
+	end
+end)
+stopBtn.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		holding = false
+	end
+end)
+for i, pad in ipairs(pads) do
+	pad.Activated:Connect(function()
+		padPressed(i)
+	end)
+end
 
 cancelBtn.Activated:Connect(function()
 	if current and current.Phase == "play" then
@@ -755,16 +1024,14 @@ testDriveBtn.Activated:Connect(function()
 end)
 
 RunService.RenderStepped:Connect(function(dt)
-	if current and current.Phase == "play" and not current.Stopped then
-		current.T += dt * current.Job.Speeds[current.Round]
-		current.Pos = pingpong(current.T)
-		placeNeedle(current.Pos)
+	if current and current.Phase == "play" and not current.Stopped and current.Game then
+		GAMES[current.Game.Type].Update(current.Game, current.S, dt)
 	end
 end)
 
 OpenTuning.OnClientEvent:Connect(function(job)
 	shopWin.Visible = false
-	current = { Job = job, Round = 1, Results = {}, Phase = "play", T = 0, Pos = 0, Stopped = false }
+	current = { Job = job, Round = 1, Results = {}, Phase = "play" }
 	titleLabel.Text = "💻 ECU-Tuning · " .. job.StageName
 	infoLabel.Text = ("%s – Serie: %d PS / %d Nm  →  Ziel: bis %d PS / %d Nm"):format(
 		job.CarName,
@@ -775,14 +1042,26 @@ OpenTuning.OnClientEvent:Connect(function(job)
 	)
 	playFrame.Visible = true
 	resultFrame.Visible = false
-	needle.Visible = true
 	tuneWin.Visible = true
 	ContextActionService:BindActionAtPriority("ChiptuningStopp", function(_, state)
 		if state == Enum.UserInputState.Begin then
-			stop()
+			holding = true
+			press()
+		elseif state == Enum.UserInputState.End then
+			holding = false
 		end
 		return Enum.ContextActionResult.Sink
 	end, false, 3000, Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+	ContextActionService:BindActionAtPriority("ChiptuningPads", function(_, state, input)
+		if state == Enum.UserInputState.Begin then
+			local map = { [Enum.KeyCode.One] = 1, [Enum.KeyCode.Two] = 2, [Enum.KeyCode.Three] = 3, [Enum.KeyCode.Four] = 4 }
+			local i = map[input.KeyCode]
+			if i then
+				padPressed(i)
+			end
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, 3000, Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four)
 	setupRound()
 end)
 

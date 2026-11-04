@@ -39,6 +39,7 @@ Config.Upgrades = {
 	{ Id = "Azubi", Name = "Azubi einstellen", Price = 9000, Desc = "Tunt wartende Autos automatisch (Ergebnis: okay)." },
 	{ Id = "Bay4", Name = "4. Hebebühne", Price = 12000, Requires = "Bay3", Desc = "Vier Kunden gleichzeitig." },
 	{ Id = "Stage3", Name = "Stage-3-Software", Price = 15000, Requires = "Stage2", Desc = "Die großen Aufträge: Stage 3 mit Top-Bezahlung." },
+	{ Id = "PopBang", Name = "Pop & Bang Software", Price = 5000, Desc = "Kunden buchen Pop & Bang (+40 % Geld). Dein Firmenwagen knallt beim Gaswegnehmen." },
 }
 
 ------------------------------------------------------------------------
@@ -93,6 +94,14 @@ end
 -- Studs/s -> km/h (gefühlt passend zur Roblox-Größe)
 Config.KmhFactor = 1.25
 
+-- Extras beim Fahren
+Config.PopBangChance = 0.35 -- Anteil Kunden, die Pop & Bang wollen (wenn freigeschaltet)
+Config.PopBangPay = 1.4
+Config.NitroSeconds = 3
+Config.NitroCooldown = 12
+Config.NitroBoost = 1.3 -- Höchstgeschwindigkeit x
+Config.LaunchRpm = 4800
+
 ------------------------------------------------------------------------
 -- SOUNDS
 -- Die Dateien aus dem Ordner roblox/sounds bei Roblox hochladen
@@ -108,6 +117,7 @@ Config.Sounds = {
 	Reifen = "", -- reifen.ogg          (Reifenquietschen)
 	Hydraulik = "", -- hydraulik.ogg    (Hebebühne)
 	Umgebung = "", -- umgebung.ogg      (Wind und Vögel)
+	Hupe = "", -- hupe.ogg              (Hupe, Taste H)
 }
 Config.SoundVolume = 1 -- Gesamtlautstärke der Fahrzeuge
 
@@ -134,6 +144,19 @@ Config.StudioMoney = 1000000
 Config.AdminUserIds = {} -- z. B. { 123456789 }
 Config.AdminMoneyStep = 100000
 Config.AdminRepStep = 50
+
+------------------------------------------------------------------------
+-- ACTION
+------------------------------------------------------------------------
+Config.Records = {
+	speed = { Name = "Höchstgeschwindigkeit", Unit = "km/h", Lower = false, Reward = 500 },
+	jump = { Name = "Weitester Sprung", Unit = "m", Lower = false, Reward = 500 },
+	slalom = { Name = "Slalom", Unit = "s", Lower = true, Reward = 500 },
+	lap = { Name = "Runde Teststrecke", Unit = "s", Lower = true, Reward = 500 },
+}
+Config.RecordOrder = { "speed", "jump", "slalom", "lap" }
+Config.WrenchReward = 1000 -- pro goldenem Schraubenschlüssel
+Config.WrenchBonus = 25000 -- wenn alle gefunden sind
 
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung

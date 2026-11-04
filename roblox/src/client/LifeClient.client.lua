@@ -216,6 +216,7 @@ local function myCar()
 end
 
 local SOUND_DISTANCE = 170
+local lightOverride = setmetatable({}, { __mode = "k" }) -- Verkehr setzt Blinker/Bremse selbst
 
 local function dropSound(st)
 	if st and st.Sound then
@@ -279,6 +280,22 @@ local function animateCar(car, dt, now, camPos, mine)
 	if st.Steering then
 		st.Steering.Transform = A(-st.Steer * 4, 0, 0)
 	end
+	-- Brems- und Blinklichter
+	if car.Name ~= "Geparkt" then
+		st.Lights = st.Lights or Cars.LightParts(car)
+		st.Acc = (st.Acc or 0) + (((v - (st.LastVL or v)) / math.max(dt, 1e-3)) - (st.Acc or 0)) * math.min(1, dt * 5)
+		st.LastVL = v
+		local ov = lightOverride[car]
+		local braking, blink
+		if ov then
+			braking, blink = ov.Braking, ov.Blink
+		else
+			braking = st.Acc < -3 or (math.abs(v) < 0.3 and (st.Still or 0) < 1.2)
+			blink = (math.abs(st.Steer) > 0.2 and math.abs(v) < 25) and (st.Steer > 0 and -1 or 1) or 0
+		end
+		Cars.SetLights(st.Lights, braking, blink, now)
+	end
+
 	local driver = car:FindFirstChild("Fahrer")
 	if driver then
 		local cache = trackCache[driver]
@@ -373,9 +390,13 @@ do
 				Car = car,
 				Root = car.PrimaryPart,
 				Path = loop,
-				Offset = (i - 1) / n * loop.Length + li * 37,
-				Speed = Config.TrafficSpeed * rng:NextNumber(0.9, 1.05),
-				Delay = 0,
+				S = (i - 1) / n * loop.Length + li * 37,
+				V = 0,
+				LastV = 0,
+				Acc = 0,
+				Cruise = Config.TrafficSpeed * rng:NextNumber(0.85, 1.1),
+				Blink = 0,
+				Braking = false,
 			})
 		end
 	end
@@ -499,66 +520,257 @@ local function referencePos()
 	return hrp and hrp.Position or nil, nil
 end
 
-RunService.RenderStepped:Connect(function(dt)
+-- Richtung entlang des Weges (geglättet)
+local function sampleDir(path, s)
+	local pos = Paths.Sample(path, s)
+	local a = Paths.Sample(path, s + 4)
+	local b = Paths.Sample(path, s - 4)
+	local d = a - b
+	return pos, (d.Magnitude > 0.01) and d.Unit or Vector3.xAxis
+end
+
+-- Bodenhöhe unter einem Punkt messen (Gelände, Gehwege, Straßen)
+local groundParams = RaycastParams.new()
+groundParams.FilterType = Enum.RaycastFilterType.Exclude
+local function groundAt(pos, fallback)
+	local ignore = { lifeFolder }
+	if player.Character then
+		table.insert(ignore, player.Character)
+	end
+	local vehicles = workspace:FindFirstChild("Fahrzeuge")
+	if vehicles then
+		table.insert(ignore, vehicles)
+	end
+	groundParams.FilterDescendantsInstances = ignore
+	local hit = workspace:Raycast(Vector3.new(pos.X, pos.Y + 25, pos.Z), Vector3.new(0, -60, 0), groundParams)
+	return hit and hit.Position.Y or fallback
+end
+
+local BRAKE = 24 -- Bremsverzögerung Verkehr
+local ACCEL = 9 -- Anfahren Verkehr
+local obstacles = {}
+
+local function updateTraffic(dt, now, me)
+	-- Hindernisse sammeln: Verkehr, andere Autos, der Spieler
+	table.clear(obstacles)
+	for _, tc in ipairs(traffic) do
+		table.insert(obstacles, { Pos = tc.Root.Position, Car = tc.Car })
+	end
+	for _, car in ipairs(CollectionService:GetTagged(Cars.TAG)) do
+		if car.Name ~= "Verkehr" and car.PrimaryPart and car:IsDescendantOf(workspace) then
+			table.insert(obstacles, { Pos = car.PrimaryPart.Position, Car = car })
+		end
+	end
+	if me then
+		-- Spieler: etwas mehr Abstand halten
+		table.insert(obstacles, { Pos = me, Extra = 4 })
+	end
+
+	for _, tc in ipairs(traffic) do
+		local pos, dir = sampleDir(tc.Path, tc.S)
+		local target = tc.Cruise
+
+		-- Kurve voraus: langsamer und blinken
+		local _, dirAhead = sampleDir(tc.Path, tc.S + 28)
+		local angle = math.acos(math.clamp(dir:Dot(dirAhead), -1, 1))
+		if angle > 0.35 then
+			target = math.min(target, 15)
+			tc.Blink = (dir:Cross(dirAhead).Y > 0) and -1 or 1
+		else
+			local _, dirFar = sampleDir(tc.Path, tc.S + 60)
+			local far = math.acos(math.clamp(dir:Dot(dirFar), -1, 1))
+			tc.Blink = (far > 0.35) and ((dir:Cross(dirFar).Y > 0) and -1 or 1) or 0
+		end
+
+		-- Abstand zum Vordermann halten
+		local nearest = math.huge
+		for _, ob in ipairs(obstacles) do
+			if ob.Car ~= tc.Car then
+				local to = ob.Pos - pos
+				local fwd = to:Dot(dir)
+				if fwd > 0 and fwd < 50 and math.abs(to.Y) < 8 then
+					local side = (to - dir * fwd).Magnitude
+					if side < 3.6 and fwd - (ob.Extra or 0) < nearest then
+						nearest = fwd - (ob.Extra or 0)
+					end
+				end
+			end
+		end
+		if nearest < math.huge then
+			local free = nearest - 13
+			target = math.min(target, math.sqrt(math.max(0, 2 * BRAKE * 0.7 * free)))
+		end
+
+		-- Ampeln
+		for _, c in ipairs(Paths.Intersections) do
+			local to = c - pos
+			local along = to:Dot(dir)
+			local lateral = (to - dir * along).Magnitude
+			if along > 13 and along < 70 and lateral < 14 then
+				local axis = math.abs(dir.X) > math.abs(dir.Z) and "EW" or "NS"
+				local state = Paths.LightState(axis, now)
+				if state ~= "green" then
+					local stopDist = along - 16
+					local canStop = tc.V * tc.V / (2 * BRAKE) < stopDist + 2
+					if state == "red" or canStop then
+						target = math.min(target, math.sqrt(math.max(0, 2 * BRAKE * 0.6 * math.max(0, stopDist))))
+					end
+				end
+			end
+		end
+
+		-- Gas geben / bremsen
+		if tc.V < target then
+			tc.V = math.min(target, tc.V + ACCEL * dt)
+		else
+			tc.V = math.max(target, tc.V - BRAKE * dt)
+		end
+		tc.Braking = (target < tc.V + 0.2 and tc.V < tc.Cruise - 1) or tc.V < 0.5
+		tc.S += tc.V * dt
+
+		-- Karosserie neigt sich beim Bremsen und in Kurven
+		local acc = (tc.V - tc.LastV) / math.max(dt, 1e-3)
+		tc.LastV = tc.V
+		tc.Acc += (acc - tc.Acc) * math.min(1, dt * 4)
+		local newPos, newDir = sampleDir(tc.Path, tc.S)
+		local yawRate = dir:Cross(newDir).Y / math.max(dt, 1e-3)
+		tc.Yaw = (tc.Yaw or 0) + (yawRate - (tc.Yaw or 0)) * math.min(1, dt * 4)
+		local pitch = math.clamp(tc.Acc * 0.004, -0.05, 0.035)
+		local roll = -math.clamp(tc.Yaw * tc.V * 0.0016, -0.05, 0.05)
+		local p = newPos + Vector3.new(0, Cars.BODY_HEIGHT + 0.06, 0)
+		tc.Root.CFrame = CFrame.lookAt(p, p + newDir) * A(pitch, 0, roll)
+		lightOverride[tc.Car] = { Braking = tc.Braking, Blink = tc.Blink }
+	end
+end
+
+-- Ampel-Lichter (alle Spieler sehen dieselbe Phase)
+local LAMP = {
+	Rot = { On = Color3.fromRGB(255, 40, 30), Off = Color3.fromRGB(60, 10, 10) },
+	Gelb = { On = Color3.fromRGB(255, 190, 20), Off = Color3.fromRGB(60, 45, 10) },
+	Gruen = { On = Color3.fromRGB(40, 255, 90), Off = Color3.fromRGB(10, 50, 20) },
+}
+local lastLights = 0
+local updateWrenches
+local function updateTrafficLights(now)
+	if now - lastLights < 0.2 then
+		return
+	end
+	lastLights = now
+	for _, m in ipairs(CollectionService:GetTagged("Ampel")) do
+		local state = Paths.LightState(m:GetAttribute("Axis") or "EW", now)
+		local active = (state == "green" and "Gruen") or (state == "yellow" and "Gelb") or "Rot"
+		for name, cols in pairs(LAMP) do
+			local lamp = m:FindFirstChild(name)
+			if lamp then
+				lamp.Color = (name == active) and cols.On or cols.Off
+			end
+		end
+	end
+end
+
+-- Goldene Schraubenschlüssel drehen sich; gefundene werden ausgeblendet
+local wrenchBase = setmetatable({}, { __mode = "k" })
+function updateWrenches(now)
+	local found = "," .. (player:GetAttribute("Found") or "") .. ","
+	for _, m in ipairs(CollectionService:GetTagged("Schluessel")) do
+		local root = m.PrimaryPart
+		if root then
+			local base = wrenchBase[m]
+			if not base then
+				base = {}
+				for _, p in ipairs(m:GetChildren()) do
+					if p:IsA("BasePart") then
+						base[p] = root.CFrame:ToObjectSpace(p.CFrame)
+					end
+				end
+				base.Origin = root.CFrame
+				wrenchBase[m] = base
+			end
+			local isFound = found:find("," .. tostring(m:GetAttribute("Id")) .. ",", 1, true) ~= nil
+			local cf = base.Origin * CFrame.new(0, math.sin(now * 2) * 0.5, 0) * CFrame.Angles(0, now * 2, 0)
+			for p, rel in pairs(base) do
+				if typeof(p) == "Instance" then
+					p.CFrame = cf * rel
+					p.Transparency = isFound and 1 or 0
+					local l = p:FindFirstChildOfClass("PointLight")
+					if l then
+						l.Enabled = not isFound
+					end
+				end
+			end
+		end
+	end
+end
+
+RunService.Heartbeat:Connect(function(dt)
 	local now = workspace:GetServerTimeNow()
 	local cam = workspace.CurrentCamera
 	local camPos = cam and cam.CFrame.Position or Vector3.zero
 	local me, mine = referencePos()
 
-	-- Verkehr bewegen
-	for _, tc in ipairs(traffic) do
-		local s = now * tc.Speed + tc.Offset + tc.Delay
-		local pos, _ = Paths.Sample(tc.Path, s)
-		local ahead = Paths.Sample(tc.Path, s + 4)
-		local behind = Paths.Sample(tc.Path, s - 4)
-		local dir = ahead - behind
-		dir = dir.Magnitude > 0.01 and dir.Unit or Vector3.xAxis
-		-- Vor dem Spieler anhalten
-		if me then
-			local to = me - pos
-			local fwd = to:Dot(dir)
-			local side = (to - dir * fwd).Magnitude
-			if fwd > 0 and fwd < 20 and side < 4.5 and math.abs(to.Y) < 8 then
-				tc.Delay -= tc.Speed * dt
-				pos = Paths.Sample(tc.Path, now * tc.Speed + tc.Offset + tc.Delay)
-			end
-		end
-		local p = pos + Vector3.new(0, Cars.BODY_HEIGHT + 0.06, 0)
-		tc.Root.CFrame = CFrame.lookAt(p, p + dir)
-	end
+	updateTraffic(dt, now, me)
+	updateTrafficLights(now)
+	updateWrenches(now)
 
-	-- Räder und Fahrer aller Autos
+	-- Räder, Lichter, Fahrer und Sound aller Autos
 	for _, car in ipairs(CollectionService:GetTagged(Cars.TAG)) do
 		if car:IsDescendantOf(workspace) then
 			animateCar(car, dt, now, camPos, mine)
 		end
 	end
 
+	-- Hat der Spieler gerade gehupt?
+	local honkAt = player:GetAttribute("HonkAt")
+	local honked = honkAt and (now - honkAt) < 2.5
+
 	-- Fußgänger
 	for _, w in ipairs(walkers) do
 		local path = w.Way.Path
+		w.Delay = w.Delay or 0
+		local base = now * w.Speed + w.Phase + w.Delay
 		local s, dirSign
 		if path.Closed then
-			s = now * w.Speed + w.Phase
+			s = base
 			dirSign = 1
 		else
 			local u
-			u, dirSign = pingpong((now * w.Speed + w.Phase) / path.Length)
+			u, dirSign = pingpong(base / path.Length)
 			s = u * path.Length
 		end
 		local pos, dir = Paths.Sample(path, s)
 		dir *= dirSign
-		local p = pos + Vector3.new(0, w.Way.Ground + w.Foot, 0)
-		w.Root.CFrame = CFrame.lookAt(p, p + dir)
-		if (p - camPos).Magnitude < ANIM_DISTANCE then
-			-- Laufanimation wie beim Spieler; Tempo passend zur Gehgeschwindigkeit
-			if not playAnim(w.Person, "walk", w.Speed / 8) then
-				poseWalk(w.Person, (now * w.Speed + w.Phase) * 1.15)
+		-- Boden unter den Füßen alle 0,25 s neu messen
+		w.NextGround = w.NextGround or 0
+		if now >= w.NextGround or not w.GroundY then
+			w.NextGround = now + 0.25 + math.random() * 0.1
+			w.GroundY = groundAt(pos, w.Way.Ground)
+		end
+		local p = Vector3.new(pos.X, w.GroundY + w.Foot, pos.Z)
+		local near = me and (me - p).Magnitude
+		local close = near and near < 9 and not mine -- Spieler zu Fuß direkt daneben
+		local heard = honked and near and near < 45
+		if close or heard then
+			-- stehen bleiben, zum Spieler schauen und winken
+			w.Delay -= w.Speed * dt
+			local look = Vector3.new(me.X, p.Y, me.Z)
+			if (look - p).Magnitude > 0.5 then
+				w.Root.CFrame = CFrame.lookAt(p, look)
+			end
+			if (p - camPos).Magnitude < ANIM_DISTANCE then
+				playAnim(w.Person, "wave")
+			end
+		else
+			w.Root.CFrame = CFrame.lookAt(p, p + dir)
+			if (p - camPos).Magnitude < ANIM_DISTANCE then
+				-- Laufanimation wie beim Spieler; Tempo passend zur Gehgeschwindigkeit
+				if not playAnim(w.Person, "walk", w.Speed / 8) then
+					poseWalk(w.Person, (now * w.Speed + w.Phase) * 1.15)
+				end
 			end
 		end
 	end
 
-	-- Zuschauer und wartende Kunden
+	-- Zuschauer
 	for _, sp in ipairs(spectators) do
 		if (sp.Person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
 			local kinds = { "cheer", "wave", "idle" }
@@ -568,11 +780,18 @@ RunService.RenderStepped:Connect(function(dt)
 			end
 		end
 	end
+
+	-- Wartende und jubelnde Kunden
 	for _, person in ipairs(CollectionService:GetTagged(Npc.TAG)) do
-		if person:GetAttribute("Pose") == "stand" and person.PrimaryPart and person:IsDescendantOf(workspace) then
+		local pose = person:GetAttribute("Pose")
+		if (pose == "stand" or pose == "cheer") and person.PrimaryPart and person:IsDescendantOf(workspace) then
 			if (person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
-				if not playAnim(person, "idle") then
-					poseStand(person, now, (person.PrimaryPart.Position.X % 7))
+				if not playAnim(person, pose == "cheer" and "cheer" or "idle") then
+					if pose == "cheer" then
+						poseCheer(person, now, 1)
+					else
+						poseStand(person, now, (person.PrimaryPart.Position.X % 7))
+					end
 				end
 			end
 		end

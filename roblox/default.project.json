@@ -17,6 +17,13 @@
       "$properties": {
         "Technology": "Future"
       }
+    },
+    "Workspace": {
+      "$properties": {
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 128,
+        "StreamingTargetRadius": 768
+      }
     }
   }
 }

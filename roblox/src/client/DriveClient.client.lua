@@ -7,6 +7,7 @@
 -- übertragen. Funktioniert mit Tastatur (WASD/Pfeile), Gamepad und Handy.
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -15,6 +16,10 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local EndDrive = Remotes:WaitForChild("EndDrive")
 local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
+local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
+local Honk = Remotes:WaitForChild("Honk")
+local ReportRecord = Remotes:WaitForChild("ReportRecord")
+local CollectionService = game:GetService("CollectionService")
 
 local BRAKE = 95
 local COAST = 14
@@ -127,6 +132,41 @@ exitBtn.Activated:Connect(function()
 	EndDrive:FireServer()
 end)
 
+local function smallBtn(text, y, color)
+	local b = make("TextButton", {
+		Size = UDim2.fromOffset(150, 40),
+		Position = UDim2.new(1, -16, 1, y),
+		AnchorPoint = Vector2.new(1, 1),
+		BackgroundColor3 = color,
+		Font = Enum.Font.GothamBlack,
+		TextSize = 16,
+		TextColor3 = Color3.new(1, 1, 1),
+		Text = text,
+	}, gui)
+	make("UICorner", { CornerRadius = UDim.new(0, 10) }, b)
+	return b
+end
+local nitroBtn = smallBtn("🔥 Nitro [N]", -66, Color3.fromRGB(40, 110, 230))
+local honkBtn = smallBtn("📯 Hupe [H]", -112, Color3.fromRGB(90, 90, 100))
+local keysLabel = make("TextLabel", {
+	Size = UDim2.fromOffset(300, 18),
+	Position = UDim2.new(0.5, 0, 1, -160),
+	AnchorPoint = Vector2.new(0.5, 1),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.Gotham,
+	TextSize = 13,
+	TextColor3 = Color3.fromRGB(220, 220, 225),
+	TextStrokeTransparency = 0.5,
+	Text = "Shift halten + W im Stand = Launch Control",
+}, gui)
+keysLabel.Visible = UserInputService.KeyboardEnabled
+local nitroBar = make("Frame", {
+	Size = UDim2.new(1, -24, 0, 4),
+	Position = UDim2.new(0, 12, 1, -6),
+	BackgroundColor3 = Color3.fromRGB(40, 110, 230),
+	BorderSizePixel = 0,
+}, panel)
+
 ------------------------------------------------------------------------
 -- Rundenzeit auf der Teststrecke
 ------------------------------------------------------------------------
@@ -154,6 +194,7 @@ local function updateLap(pos)
 		local now = os.clock()
 		if lap.Start and lap.Checkpoint then
 			lap.Last = now - lap.Start
+			ReportRecord:FireServer("lap", lap.Last)
 			if not lap.Best or lap.Last < lap.Best then
 				lap.Best = lap.Last
 			end
@@ -174,6 +215,132 @@ local function lapText()
 		table.insert(parts, "Beste " .. fmtTime(lap.Best))
 	end
 	return table.concat(parts, "   ")
+end
+
+------------------------------------------------------------------------
+-- Stunts: Sprünge, Kicker, Slalom, Blitzer
+------------------------------------------------------------------------
+local stuntLabel = make("TextLabel", {
+	Size = UDim2.fromOffset(520, 60),
+	Position = UDim2.new(0.5, 0, 0, 120),
+	AnchorPoint = Vector2.new(0.5, 0),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBlack,
+	TextSize = 34,
+	TextColor3 = Color3.fromRGB(255, 200, 40),
+	TextStrokeTransparency = 0.2,
+	Text = "",
+}, gui)
+local stuntToken = 0
+local function showStunt(text, color)
+	stuntToken += 1
+	local token = stuntToken
+	stuntLabel.Text = text
+	stuntLabel.TextColor3 = color or Color3.fromRGB(255, 200, 40)
+	task.delay(2.5, function()
+		if stuntToken == token then
+			stuntLabel.Text = ""
+		end
+	end)
+end
+
+local stunt = { Air = false, AirStart = 0, AirPos = nil, KickerAt = 0, Slalom = nil, BlitzAt = 0 }
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function nearTagged(tag, pos)
+	for _, p in ipairs(CollectionService:GetTagged(tag)) do
+		local rel = p.CFrame:PointToObjectSpace(pos)
+		local half = p.Size / 2
+		if math.abs(rel.X) <= half.X and math.abs(rel.Y) <= half.Y + 2 and math.abs(rel.Z) <= half.Z then
+			return p
+		end
+	end
+	return nil
+end
+
+local function updateStunts(a, _dt, speed)
+	local chassis = a.Chassis
+	local pos = chassis.Position
+	local clock = os.clock()
+
+	-- Kicker an der Schanzenkante: Schub nach oben
+	if clock - stunt.KickerAt > 1 and speed > 25 then
+		local k = nearTagged("Kicker", pos)
+		if k then
+			stunt.KickerAt = clock
+			local v = chassis.AssemblyLinearVelocity
+			chassis.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, 0) + (k:GetAttribute("Boost") or 50) * math.clamp(speed / 90, 0.5, 1.3), v.Z)
+			EngineSound.OneShot(chassis, "Abblasen", 0.7, 0.8)
+		end
+	end
+
+	-- Flugphase messen
+	local ignore = { a.Seat.Parent }
+	if player.Character then
+		table.insert(ignore, player.Character)
+	end
+	rayParams.FilterDescendantsInstances = ignore
+	local hit = workspace:Raycast(pos, Vector3.new(0, -3.2, 0), rayParams)
+	if not hit and not stunt.Air then
+		stunt.Air = true
+		stunt.AirStart = clock
+		stunt.AirPos = pos
+	elseif hit and stunt.Air then
+		stunt.Air = false
+		local air = clock - stunt.AirStart
+		if air > 0.45 and stunt.AirPos then
+			local dist = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(stunt.AirPos.X, 0, stunt.AirPos.Z)).Magnitude * 0.28
+			showStunt(("✈️ %.1f s Flug · %d m"):format(air, math.floor(dist + 0.5)))
+			if dist >= 3 then
+				ReportRecord:FireServer("jump", dist)
+			end
+		end
+	end
+
+	-- Slalom: Start- und Zieltor, Strafe für berührte Pylonen
+	if nearTagged("SlalomStart", pos) and (not stunt.Slalom or clock - stunt.Slalom.Start > 3) then
+		stunt.Slalom = { Start = clock, Penalty = 0, Hit = {} }
+		showStunt("🏁 Slalom gestartet!", Color3.fromRGB(120, 230, 140))
+	elseif stunt.Slalom then
+		for _, cone in ipairs(CollectionService:GetTagged("Pylone")) do
+			if not stunt.Slalom.Hit[cone] and (Vector3.new(cone.Position.X, pos.Y, cone.Position.Z) - pos).Magnitude < 3.2 then
+				stunt.Slalom.Hit[cone] = true
+				stunt.Slalom.Penalty += 1
+				showStunt("⚠️ Pylone! +1 s", Color3.fromRGB(255, 120, 60))
+			end
+		end
+		if nearTagged("SlalomZiel", pos) and clock - stunt.Slalom.Start > 3 then
+			local t = clock - stunt.Slalom.Start + stunt.Slalom.Penalty
+			showStunt(("🏁 Slalom: %.2f s"):format(t), Color3.fromRGB(120, 230, 140))
+			ReportRecord:FireServer("slalom", t)
+			stunt.Slalom = nil
+		elseif clock - stunt.Slalom.Start > 90 then
+			stunt.Slalom = nil
+		end
+	end
+
+	-- Blitzer
+	if clock - stunt.BlitzAt > 3 then
+		for _, cam in ipairs(CollectionService:GetTagged("Blitzer")) do
+			local rel = pos - cam.Position
+			if math.abs(rel.X) < 8 and math.abs(rel.Z) < 30 and math.abs(rel.Y) < 20 or (math.abs(rel.Z) < 8 and math.abs(rel.X) < 30 and math.abs(rel.Y) < 20) then
+				local kmh = math.floor(math.abs(speed) * Config.KmhFactor + 0.5)
+				if kmh > 30 then
+					stunt.BlitzAt = clock
+					local light = cam:FindFirstChildOfClass("PointLight")
+					if light then
+						light.Brightness = 12
+						task.delay(0.15, function()
+							light.Brightness = 0
+						end)
+					end
+					showStunt(("📸 Geblitzt: %d km/h"):format(kmh), Color3.fromRGB(255, 255, 255))
+					ReportRecord:FireServer("speed", kmh)
+				end
+			end
+		end
+	end
 end
 
 ------------------------------------------------------------------------
@@ -216,6 +383,12 @@ local function startDriving(seat)
 		TurboAmt = hp >= 150 and 1 or 0.35,
 		Sound = EngineSound.new(chassis, 1, true),
 		Exhausts = {},
+		Lights = Cars.LightParts(car),
+		PopBang = seat:GetAttribute("PopBang") == true,
+		NitroUntil = 0,
+		NitroReady = 0,
+		LaunchBoostUntil = 0,
+		Launching = false,
 	}
 	local mass = chassis.AssemblyMass
 	lv.MaxForce = math.max(8000, mass * 220)
@@ -234,15 +407,15 @@ local function startDriving(seat)
 end
 
 -- Flammen aus dem Auspuff (nur optisch, lokal)
-local function exhaustFlame(a)
+local function exhaustFlame(a, blue, duration)
 	for _, ex in ipairs(a.Exhausts) do
 		local f = Instance.new("Fire")
-		f.Size = 2.5
-		f.Heat = 2
-		f.Color = Color3.fromRGB(255, 120, 30)
-		f.SecondaryColor = Color3.fromRGB(255, 230, 120)
+		f.Size = blue and 3.5 or 2.5
+		f.Heat = blue and 6 or 2
+		f.Color = blue and Color3.fromRGB(60, 120, 255) or Color3.fromRGB(255, 120, 30)
+		f.SecondaryColor = blue and Color3.fromRGB(180, 220, 255) or Color3.fromRGB(255, 230, 120)
 		f.Parent = ex
-		task.delay(0.25, function()
+		task.delay(duration or 0.25, function()
 			f.Enabled = false
 			task.delay(1, function()
 				f:Destroy()
@@ -251,11 +424,62 @@ local function exhaustFlame(a)
 	end
 end
 
+-- Pop & Bang: mehrere Knaller mit Flammen beim Gaswegnehmen
+local function crackle(a, count)
+	task.spawn(function()
+		for _ = 1, count do
+			if active ~= a then
+				return
+			end
+			EngineSound.OneShot(a.Chassis, "Fehlzuendung", 0.55, 0.85 + math.random() * 0.5)
+			exhaustFlame(a, false, 0.08)
+			task.wait(0.08 + math.random() * 0.17)
+		end
+	end)
+end
+
+local function nitro()
+	local a = active
+	if not a then
+		return
+	end
+	local now = os.clock()
+	if now < a.NitroReady then
+		return
+	end
+	a.NitroUntil = now + Config.NitroSeconds
+	a.NitroReady = now + Config.NitroSeconds + Config.NitroCooldown
+	exhaustFlame(a, true, Config.NitroSeconds)
+	EngineSound.OneShot(a.Chassis, "Abblasen", 0.9, 0.6)
+end
+
+local lastHonk = 0
+local function honk()
+	if active and os.clock() - lastHonk > 0.6 then
+		lastHonk = os.clock()
+		Honk:FireServer()
+	end
+end
+
+nitroBtn.Activated:Connect(nitro)
+honkBtn.Activated:Connect(honk)
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed or not active then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.N or input.KeyCode == Enum.KeyCode.ButtonY then
+		nitro()
+	elseif input.KeyCode == Enum.KeyCode.H or input.KeyCode == Enum.KeyCode.ButtonX then
+		honk()
+	end
+end)
+
 local function stopDriving()
 	if active then
 		active.LV.PlaneVelocity = Vector2.zero
 		active.AV.AngularVelocity = Vector3.zero
 		active.Sound:Destroy()
+		Cars.SetLights(active.Lights, false, 0, 0)
 	end
 	active = nil
 	gui.Enabled = false
@@ -298,13 +522,34 @@ RunService.Heartbeat:Connect(function(dt)
 	dir = dir.Unit
 	local actual = chassis.AssemblyLinearVelocity:Dot(dir)
 
+	local clock = os.clock()
+	local nitroOn = clock < a.NitroUntil
+	local top = nitroOn and a.Top * Config.NitroBoost or a.Top
+	local accel = a.Accel
+	if nitroOn then
+		accel *= 2
+	end
+	if clock < a.LaunchBoostUntil then
+		accel *= 1.8
+	end
+	-- Launch Control: Shift halten im Stand, Drehzahl wird gehalten
+	local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+	local wasLaunching = a.Launching
+	a.Launching = shift and throttle > 0 and math.abs(a.Speed) < 3
+	if wasLaunching and not a.Launching and throttle > 0 then
+		a.LaunchBoostUntil = clock + 1.6
+		exhaustFlame(a, false, 0.3)
+	end
+
 	local speed = a.Speed
-	if throttle > 0 then
+	if a.Launching then
+		speed = 0
+	elseif throttle > 0 then
 		if speed < 0 then
 			speed = math.min(0, speed + BRAKE * dt)
 		else
-			local falloff = 1 - 0.65 * (speed / a.Top) ^ 2
-			speed = math.min(a.Top, speed + a.Accel * falloff * throttle * dt)
+			local falloff = 1 - 0.65 * math.min(1, speed / top) ^ 2
+			speed = math.min(top, speed + accel * falloff * throttle * dt)
 		end
 	elseif throttle < 0 then
 		if speed > 0 then
@@ -349,24 +594,39 @@ RunService.Heartbeat:Connect(function(dt)
 	if throttle ~= 0 then
 		targetRpm = math.max(targetRpm, 1700) -- Kupplung beim Anfahren
 	end
+	if a.Launching then
+		targetRpm = Config.LaunchRpm + math.sin(clock * 30) * 150 -- Begrenzer
+		if math.random() < dt * 3 then
+			crackle(a, 1)
+		end
+	end
 	a.Rpm += (targetRpm - a.Rpm) * math.min(1, dt * 10)
 	if gear > a.Gear and throttle > 0 then
 		EngineSound.OneShot(chassis, "Abblasen", 0.45 * a.TurboAmt)
 	end
 	a.Gear = gear
-	if a.LastThrottle > 0 and throttle <= 0 and a.Rpm > 4300 then
+	if a.LastThrottle > 0 and throttle <= 0 and a.Rpm > (a.PopBang and 3000 or 4300) then
 		EngineSound.OneShot(chassis, "Abblasen", 0.6 * a.TurboAmt)
-		if a.Hp >= 300 then
+		if a.PopBang then
+			crackle(a, math.random(4, 7))
+		elseif a.Hp >= 300 then
 			EngineSound.OneShot(chassis, "Fehlzuendung", 0.8)
 			exhaustFlame(a)
 		end
 	end
+	-- Schiebebetrieb mit Pop & Bang: ab und zu ein Knall
+	if a.PopBang and throttle <= 0 and a.Rpm > 2500 and math.random() < dt * 2.5 then
+		crackle(a, 1)
+	end
+	Cars.SetLights(a.Lights, throttle < 0 and speed > 1, 0, clock)
+	nitroBar.Size = UDim2.new(math.clamp(1 - (a.NitroReady - clock) / (Config.NitroSeconds + Config.NitroCooldown), 0, 1), -24, 0, 4)
+	nitroBtn.Text = (clock >= a.NitroReady) and "🔥 Nitro [N]" or (nitroOn and "🔥 NITRO!" or ("⏳ %d s"):format(math.ceil(a.NitroReady - clock)))
 	a.LastThrottle = throttle
 	local skid = math.clamp(math.abs(steer) * (math.abs(speed) - 45) / 60, 0, 1)
 	if throttle < 0 and speed > 35 then
 		skid = math.max(skid, 0.5)
 	end
-	a.Sound:Update(a.Rpm, math.abs(throttle), a.TurboAmt, skid)
+	a.Sound:Update(a.Rpm, math.abs(throttle), nitroOn and 1.6 or a.TurboAmt, skid)
 
 	-- Anzeige
 	local kmh = math.floor(math.abs(actual) * Config.KmhFactor + 0.5)
@@ -376,6 +636,7 @@ RunService.Heartbeat:Connect(function(dt)
 	rpmBar.BackgroundColor3 = a.Rpm > 6200 and Color3.fromRGB(230, 50, 50) or Color3.fromRGB(255, 140, 0)
 
 	updateLap(chassis.Position)
+	updateStunts(a, dt, speed)
 	lapLabel.Text = lapText()
 
 	local endsAt = a.Seat:GetAttribute("EndsAt")

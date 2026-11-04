@@ -91,6 +91,32 @@ Paths.TrafficLoops = {
 	Paths.Loop({ Vector3.new(700, 0, ROAD_Z), Vector3.new(-700, 0, ROAD_Z), Vector3.new(-700, 0, -780), Vector3.new(700, 0, -780) }, LANE, 12),
 }
 
+-- Kreuzungen mit Ampel (Mittelpunkt). Phasen für alle Spieler gleich (Serverzeit).
+Paths.Intersections = {
+	Vector3.new(-700, 0, ROAD_Z),
+	Vector3.new(0, 0, ROAD_Z),
+	Vector3.new(700, 0, ROAD_Z),
+}
+Paths.LIGHT_CYCLE = 32
+-- axis: "EW" (Ost-West) oder "NS" (Nord-Süd); Ergebnis "green", "yellow" oder "red"
+function Paths.LightState(axis, t)
+	local c = t % Paths.LIGHT_CYCLE
+	if axis == "EW" then
+		if c < 12 then
+			return "green"
+		elseif c < 15 then
+			return "yellow"
+		end
+		return "red"
+	end
+	if c >= 16 and c < 28 then
+		return "green"
+	elseif c >= 28 and c < 31 then
+		return "yellow"
+	end
+	return "red"
+end
+
 -- Fußgängerwege: { Weg, Bodenhöhe, Schleife? }
 local T = Config.Track
 local SOUTH_Z = T.CenterZ + T.Radius

@@ -19,6 +19,13 @@ function Util.part(props)
 			p[k] = v
 		end
 	end
+	-- Flache Markierungen und Kleinteile werfen keine Schatten (läuft flüssiger)
+	if props.CastShadow == nil then
+		local sz = p.Size
+		if math.min(sz.X, sz.Y, sz.Z) <= 0.3 or math.max(sz.X, sz.Y, sz.Z) < 1.2 then
+			p.CastShadow = false
+		end
+	end
 	p.Parent = props.Parent
 	return p
 end

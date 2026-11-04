@@ -56,6 +56,9 @@ local function build(def, m, open)
 		for k, v in pairs(extra or {}) do
 			props[k] = v
 		end
+		if math.max(size.X, size.Y, size.Z) < 1.6 then
+			props.CastShadow = false -- Kleinteile ohne Schatten (schneller)
+		end
 		return part(props)
 	end
 	local function lack(name, size, cf)
@@ -151,10 +154,17 @@ local function build(def, m, open)
 
 	------------------------------------------------------------ Heck
 	P("Heckschuerze", Vector3.new(W + 0.1, 0.7, 0.45), CFrame.new(0, bottom + 0.35, L / 2 + 0.05), TRIM)
-	P("Rueckleuchtenband", Vector3.new(W - 1.4, 0.1, 0.08), CFrame.new(0, belt - 0.55, L / 2 + 0.03), Color3.fromRGB(200, 15, 20), Enum.Material.Neon)
+	P("Rueckleuchtenband", Vector3.new(W - 1.4, 0.1, 0.08), CFrame.new(0, belt - 0.55, L / 2 + 0.03), Color3.fromRGB(130, 8, 12), Enum.Material.Neon)
 	for _, s in ipairs({ -1, 1 }) do
-		P("Ruecklicht", Vector3.new(1.1, 0.34, 0.1), CFrame.new(s * (W / 2 - 0.75), belt - 0.6, L / 2 + 0.03), Color3.fromRGB(220, 20, 25), Enum.Material.Neon)
+		P("Ruecklicht", Vector3.new(1.1, 0.34, 0.1), CFrame.new(s * (W / 2 - 0.75), belt - 0.6, L / 2 + 0.03), Color3.fromRGB(130, 8, 12), Enum.Material.Neon)
 	end
+	-- Blinker (werden von LifeClient/DriveClient eingeschaltet)
+	for _, s in ipairs({ -1, 1 }) do
+		local side = s < 0 and "L" or "R"
+		P("BlinkerV" .. side, Vector3.new(0.35, 0.2, 0.08), CFrame.new(s * (W / 2 - 0.22), belt - 0.62, -L / 2 - 0.03), Color3.fromRGB(110, 65, 10))
+		P("BlinkerH" .. side, Vector3.new(0.35, 0.2, 0.08), CFrame.new(s * (W / 2 - 0.22), belt - 0.85, L / 2 + 0.03), Color3.fromRGB(110, 65, 10))
+	end
+	P("Bremslicht", Vector3.new(1.2, 0.08, 0.06), CFrame.new(0, (open and belt or roofTop) - 0.12, (open and L / 2 - 0.5) or (zRoofEnd + 0.2)), Color3.fromRGB(90, 5, 8), Enum.Material.Neon)
 	local nExhaust = st.Sport and 4 or 2
 	for i = 1, nExhaust do
 		local x = (nExhaust == 2) and ((i == 1) and -1.6 or 1.6) or ({ -2.0, -1.4, 1.4, 2.0 })[i]
@@ -325,6 +335,9 @@ function Cars.MakeShowCar(def)
 	assemble(m, root, info)
 	root.Anchored = true
 	m.PrimaryPart = root
+	pcall(function()
+		m.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	end)
 	m:SetAttribute("SeatX", info.SeatCF.X)
 	m:SetAttribute("SeatZ", info.SeatCF.Z)
 	m:SetAttribute("RoofInner", info.RoofInner)
@@ -410,8 +423,57 @@ function Cars.MakeDrivable(def)
 	av.Parent = chassis
 
 	m.PrimaryPart = chassis
+	pcall(function()
+		m.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	end)
 	CollectionService:AddTag(m, Cars.TAG)
 	return m, seat
+end
+
+-- Licht-Helfer (nur optisch, lokal auf dem Client)
+local BRAKE_ON = Color3.fromRGB(255, 35, 35)
+local BRAKE_OFF = Color3.fromRGB(130, 8, 12)
+local BLINK_ON = Color3.fromRGB(255, 170, 20)
+local BLINK_OFF = Color3.fromRGB(110, 65, 10)
+
+function Cars.LightParts(car)
+	local l = { Brake = {}, Left = {}, Right = {} }
+	for _, d in ipairs(car:GetDescendants()) do
+		if d:IsA("BasePart") then
+			if d.Name == "Ruecklicht" or d.Name == "Rueckleuchtenband" or d.Name == "Bremslicht" then
+				table.insert(l.Brake, d)
+			elseif d.Name == "BlinkerVL" or d.Name == "BlinkerHL" then
+				table.insert(l.Left, d)
+			elseif d.Name == "BlinkerVR" or d.Name == "BlinkerHR" then
+				table.insert(l.Right, d)
+			end
+		end
+	end
+	return l
+end
+
+function Cars.SetLights(l, braking, blink, now)
+	if l.BrakeState ~= braking then
+		l.BrakeState = braking
+		for _, p in ipairs(l.Brake) do
+			p.Color = braking and BRAKE_ON or BRAKE_OFF
+		end
+	end
+	local on = blink ~= 0 and (math.floor(now * 2.5) % 2 == 0)
+	local state = on and blink or 0
+	if l.BlinkState ~= state then
+		l.BlinkState = state
+		for _, p in ipairs(l.Left) do
+			local lit = state < 0
+			p.Color = lit and BLINK_ON or BLINK_OFF
+			p.Material = lit and Enum.Material.Neon or Enum.Material.SmoothPlastic
+		end
+		for _, p in ipairs(l.Right) do
+			local lit = state > 0
+			p.Color = lit and BLINK_ON or BLINK_OFF
+			p.Material = lit and Enum.Material.Neon or Enum.Material.SmoothPlastic
+		end
+	end
 end
 
 return Cars

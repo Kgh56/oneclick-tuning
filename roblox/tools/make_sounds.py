@@ -210,6 +210,19 @@ def ambience(dur):
     return normalize(x, 0.6)
 
 
+def horn():
+    dur = 0.75
+    n = int(SR * dur)
+    tt = np.arange(n) / SR
+    x = np.zeros(n)
+    for f in (410.0, 505.0):  # Zweiklang wie eine Autohupe
+        ph = 2 * np.pi * f * tt
+        x += np.tanh(3 * np.sin(ph)) * 0.5 + 0.15 * np.sin(2 * ph) + 0.08 * np.sin(3 * ph)
+    x = signal.sosfilt(bp(250, 3500), x)
+    env = np.minimum(1, tt / 0.015) * np.minimum(1, (dur - tt) / 0.06)
+    return normalize(x * env, 0.85)
+
+
 def main():
     save("motor_tief", engine(40, 2.0, drive=1.6, bright=1400, rough=1.0))
     save("motor_hoch", engine(140, 2.0, drive=2.6, bright=4200, rough=0.6))
@@ -219,6 +232,7 @@ def main():
     save("reifen", screech(2.0))
     save("hydraulik", hydraulic(2.0))
     save("umgebung", ambience(24.0))
+    save("hupe", horn())
 
 
 if __name__ == "__main__":
