@@ -79,8 +79,8 @@ Config.DayLengthMinutes = 24 -- ein Tag-Nacht-Zyklus
 -- Leben in der Stadt (läuft auf jedem Client)
 Config.TrafficCars = 18 -- Autos im Straßenverkehr
 Config.TrafficSpeed = 42 -- Studs pro Sekunde
-Config.Pedestrians = 34 -- Fußgänger
-Config.NpcScale = 0.85 -- Größe der Fahrer und Fußgänger
+Config.Pedestrians = 26 -- Fußgänger
+Config.NpcScale = 0.85 -- Größe der Fahrer im Auto (Fußgänger haben normale Größe)
 
 -- Fahrwerte aus der Leistung (Studs pro Sekunde)
 function Config.DriveStats(hp)

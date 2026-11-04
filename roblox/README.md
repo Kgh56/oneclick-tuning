@@ -4,6 +4,7 @@ Ein Tycoon-Spiel für Roblox: Jeder Spieler bekommt eine eigene Werkstatt. Kunde
 
 ## So spielt es sich
 - **Große Welt:** Werkstattstraße mit 6 Werkstätten, Läden, Bäumen und Laternen. Dazu eine **Teststrecke** (Oval mit Tribüne, Curbs und Flutlicht), eine Landstraße als großer Rundkurs, ein See und Berge am Rand. Tag und Nacht wechseln sich ab, ein Tag dauert 24 Minuten.
+- **Echte Avatare:** Fußgänger, Fahrer, Kunden und Zuschauer sehen aus wie du und deine Roblox-Freunde (Reserve: bekannte Roblox-Konten). Sie laufen mit denselben Animationen wie dein eigener Charakter.
 - **Leben in der Stadt:** Verkehr mit Fahrern auf allen Straßen (Rechtsverkehr, hält vor dir an), Fußgänger auf den Gehwegen und am See, jubelnde Zuschauer auf der Tribüne, geparkte Autos im Fahrerlager. Alle Autos haben drehende und lenkende Räder.
 - **Landschaft:** Hügel, Wiesen, Felder mit Zaun, Büsche, Felsen, Blumen, Bänke, Bushaltestellen und Verkehrsschilder.
 - **Kunden** fahren mit ihrem Auto von der Straße auf deine Hebebühne, steigen aus und warten daneben. Über dem Auto steht, welches Modell es ist und welche Stage der Kunde will.

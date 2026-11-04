@@ -1322,7 +1322,27 @@ local function placeCharacter(player, char)
 	end
 end
 
+-- Avatare des Spielers und seiner Freunde als Fußgänger, Fahrer und Kunden
+local FALLBACK_AVATARS = { 156, 261, 1 } -- bekannte Roblox-Konten als Reserve
+local function collectAvatars(player)
+	local ids = { player.UserId }
+	pcall(function()
+		local pages = Players:GetFriendsAsync(player.UserId)
+		local friends = pages:GetCurrentPage()
+		for i = 1, math.min(#friends, 14) do
+			local j = math.random(i, #friends)
+			friends[i], friends[j] = friends[j], friends[i]
+			table.insert(ids, friends[i].Id)
+		end
+	end)
+	for _, id in ipairs(FALLBACK_AVATARS) do
+		table.insert(ids, id)
+	end
+	Npc.AddAvatars(ids, 24)
+end
+
 local function onPlayerAdded(player)
+	task.spawn(collectAvatars, player)
 	player.CharacterAdded:Connect(function(char)
 		placeCharacter(player, char)
 	end)

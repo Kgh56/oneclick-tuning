@@ -102,7 +102,7 @@ local function fallbackRig(skin, shirt, pants)
 	return m
 end
 
-local function prepare(model)
+local function prepare(model, isAvatar)
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CanCollide = false
@@ -125,13 +125,11 @@ local function prepare(model)
 		hum.BreakJointsOnDeath = false
 		hum.RequiresNeck = false
 	end
-	pcall(function()
-		model:ScaleTo(Config.NpcScale)
-	end)
-	-- Maße merken: Fußsohle und Scheitel relativ zur Hüfte
+	-- Maße merken (bei Größe 1): Fußsohle und Scheitel relativ zur Hüfte
 	local cf, size = model:GetBoundingBox()
 	model:SetAttribute("FootOffset", hrp.Position.Y - (cf.Position.Y - size.Y / 2))
 	model:SetAttribute("HeadTop", (cf.Position.Y + size.Y / 2) - hrp.Position.Y)
+	model:SetAttribute("Avatar", isAvatar == true)
 	CollectionService:AddTag(model, Npc.TAG)
 end
 
@@ -172,17 +170,59 @@ function Npc.BuildTemplates(count)
 			model = fallbackRig(skin, shirt, pants)
 		end
 		model.Name = "Person" .. i
-		prepare(model)
+		prepare(model, false)
 		model.Parent = folder
 	end
 	folder.Parent = ReplicatedStorage
 	return folder
 end
 
--- Klont eine zufällige Person
+-- Echte Roblox-Avatare (z. B. Spieler und ihre Freunde) als Vorlagen hinzufügen.
+-- Läuft auf dem Server und wartet auf Roblox-Anfragen.
+local added = {}
+function Npc.AddAvatars(userIds, maxTotal)
+	local folder = ReplicatedStorage:WaitForChild("Leute")
+	for _, id in ipairs(userIds) do
+		if Npc.AvatarCount() >= (maxTotal or 24) then
+			break
+		end
+		if not added[id] then
+			added[id] = true
+			local ok, model = pcall(function()
+				local desc = Players:GetHumanoidDescriptionFromUserId(id)
+				return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+			end)
+			if ok and model then
+				model.Name = "Avatar_" .. id
+				prepare(model, true)
+				model.Parent = folder
+			end
+		end
+	end
+end
+
+function Npc.AvatarCount()
+	local folder = ReplicatedStorage:FindFirstChild("Leute")
+	local n = 0
+	for _, t in ipairs(folder and folder:GetChildren() or {}) do
+		if t:GetAttribute("Avatar") then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- Klont eine zufällige Person (echte Avatare bevorzugt, sobald genug da sind)
 function Npc.Random(rng)
 	local folder = ReplicatedStorage:FindFirstChild("Leute")
-	local list = folder and folder:GetChildren() or {}
+	local all = folder and folder:GetChildren() or {}
+	local avatars = {}
+	for _, t in ipairs(all) do
+		if t:GetAttribute("Avatar") then
+			table.insert(avatars, t)
+		end
+	end
+	local list = (#avatars >= 3) and avatars or all
 	if #list == 0 then
 		return nil
 	end
@@ -190,18 +230,37 @@ function Npc.Random(rng)
 	return list[r]:Clone()
 end
 
+function Npc.SetScale(person, scale)
+	pcall(function()
+		if math.abs(person:GetScale() - scale) > 0.001 then
+			person:ScaleTo(scale)
+		end
+	end)
+end
+
+-- Maß einer Person unter Berücksichtigung ihrer aktuellen Größe
+function Npc.Dim(person, attr, default)
+	local scale = 1
+	pcall(function()
+		scale = person:GetScale()
+	end)
+	return (person:GetAttribute(attr) or default) * scale
+end
+
 -- Setzt eine Person auf den Fahrersitz eines Ausstellungsautos (verschweißt)
 function Npc.SeatInCar(person, car)
 	local root = car.PrimaryPart
 	local hrp = person.PrimaryPart
-	local headTop = person:GetAttribute("HeadTop") or 2
-	local roof = car:GetAttribute("RoofInner") or 2
-	local y = roof - headTop - 0.08
 	for _, w in ipairs(hrp:GetChildren()) do
 		if w:IsA("WeldConstraint") then
 			w:Destroy()
 		end
 	end
+	hrp.Anchored = true
+	Npc.SetScale(person, Config.NpcScale)
+	local headTop = Npc.Dim(person, "HeadTop", 2.4)
+	local roof = car:GetAttribute("RoofInner") or 2
+	local y = roof - headTop - 0.08
 	hrp.Anchored = false
 	hrp.CFrame = root.CFrame * CFrame.new(car:GetAttribute("SeatX") or -1.3, y, (car:GetAttribute("SeatZ") or 0) + 0.35)
 	local w = Instance.new("WeldConstraint")
@@ -222,7 +281,8 @@ function Npc.StandAt(person, groundCF, parent)
 		end
 	end
 	hrp.Anchored = true
-	hrp.CFrame = groundCF * CFrame.new(0, person:GetAttribute("FootOffset") or 2.5, 0)
+	Npc.SetScale(person, 1)
+	hrp.CFrame = groundCF * CFrame.new(0, Npc.Dim(person, "FootOffset", 3), 0)
 	person:SetAttribute("Pose", "stand")
 	person.Parent = parent
 end

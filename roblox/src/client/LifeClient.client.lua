@@ -111,6 +111,99 @@ local function poseCheer(person, t, seed)
 end
 
 ------------------------------------------------------------------------
+-- Echte Animationen: dieselben wie beim eigenen Charakter
+------------------------------------------------------------------------
+-- Standard-Animationen von Roblox (R15). Werden durch die Animationen des
+-- eigenen Charakters ersetzt, damit alle genauso laufen wie du.
+local ANIMS = {
+	walk = "rbxassetid://507777826",
+	idle = "rbxassetid://507766666",
+	cheer = "rbxassetid://507770677",
+	wave = "rbxassetid://507770239",
+}
+local animsReady = false
+
+task.spawn(function()
+	local char = player.Character or player.CharacterAdded:Wait()
+	local animate = char:WaitForChild("Animate", 8)
+	if animate then
+		for _, kind in ipairs({ "walk", "idle", "cheer", "wave" }) do
+			local folder = animate:FindFirstChild(kind)
+			local anim = folder and folder:FindFirstChildOfClass("Animation")
+			if anim and anim.AnimationId ~= "" then
+				ANIMS[kind] = anim.AnimationId
+			end
+		end
+	end
+	animsReady = true
+end)
+
+local trackCache = setmetatable({}, { __mode = "k" })
+
+local function getAnimator(person)
+	local hum = person:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return nil
+	end
+	local an = hum:FindFirstChildOfClass("Animator")
+	if not an then
+		an = Instance.new("Animator")
+		an.Parent = hum
+	end
+	return an
+end
+
+-- Spielt eine Animation in Schleife (nil = alle stoppen). Gibt true zurück, wenn sie läuft.
+local function playAnim(person, kind, speed)
+	local cache = trackCache[person]
+	if not cache then
+		cache = { Tracks = {} }
+		trackCache[person] = cache
+	end
+	if cache.Current == kind then
+		local tr = kind and cache.Tracks[kind]
+		if tr and speed then
+			tr:AdjustSpeed(speed)
+		end
+		return tr ~= nil
+	end
+	for _, tr in pairs(cache.Tracks) do
+		if tr.IsPlaying then
+			tr:Stop(0.25)
+		end
+	end
+	cache.Current = kind
+	if not kind or not animsReady then
+		cache.Current = nil
+		return false
+	end
+	local tr = cache.Tracks[kind]
+	if not tr and not cache.Failed then
+		local an = getAnimator(person)
+		local anim = Instance.new("Animation")
+		anim.AnimationId = ANIMS[kind]
+		local ok, res = pcall(function()
+			return an:LoadAnimation(anim)
+		end)
+		if ok and res then
+			tr = res
+			tr.Looped = true
+			cache.Tracks[kind] = tr
+		else
+			cache.Failed = true
+		end
+	end
+	if not tr then
+		return false
+	end
+	tr:Play(0.25)
+	if speed then
+		tr:AdjustSpeed(speed)
+	end
+	return true
+end
+
+------------------------------------------------------------------------
 -- Räder und Fahrer aller Autos
 ------------------------------------------------------------------------
 local carState = setmetatable({}, { __mode = "k" })
@@ -188,6 +281,10 @@ local function animateCar(car, dt, now, camPos, mine)
 	end
 	local driver = car:FindFirstChild("Fahrer")
 	if driver then
+		local cache = trackCache[driver]
+		if cache and cache.Current then
+			playAnim(driver, nil)
+		end
 		poseSit(driver, st.Steer, now, st.Seed)
 	end
 
@@ -301,20 +398,73 @@ do
 				Person = person,
 				Root = person.PrimaryPart,
 				Way = way,
-				Speed = rng:NextNumber(4.2, 6.2),
+				Speed = rng:NextNumber(6.5, 9),
 				Phase = rng:NextNumber(0, 1000),
-				Foot = person:GetAttribute("FootOffset") or 2.5,
+				Foot = Npc.Dim(person, "FootOffset", 3),
 			})
 		end
 	end
 	for _, cf in ipairs(Paths.Spectators()) do
 		local person = Npc.Random(rng)
 		if person then
-			person.PrimaryPart.CFrame = cf * CFrame.new(0, person:GetAttribute("FootOffset") or 2.5, 0)
+			person.PrimaryPart.CFrame = cf * CFrame.new(0, Npc.Dim(person, "FootOffset", 3), 0)
 			person.Parent = lifeFolder
-			table.insert(spectators, { Person = person, Seed = rng:NextNumber(0, 10) })
+			table.insert(spectators, { Person = person, Seed = rng:NextNumber(0, 10), CF = cf })
 		end
 	end
+end
+
+-- Sobald echte Avatare (du und deine Freunde) geladen sind, die Puppen ersetzen
+do
+	local leute = ReplicatedStorage:WaitForChild("Leute")
+	local pending = false
+	local rng = Random.new(99)
+	local function swapAll()
+		pending = false
+		if Npc.AvatarCount() < 3 then
+			return
+		end
+		for _, w in ipairs(walkers) do
+			if not w.Person:GetAttribute("Avatar") then
+				local person = Npc.Random(rng)
+				if person and person:GetAttribute("Avatar") then
+					w.Person:Destroy()
+					person.Parent = lifeFolder
+					w.Person = person
+					w.Root = person.PrimaryPart
+					w.Foot = Npc.Dim(person, "FootOffset", 3)
+				end
+			end
+		end
+		for _, sp in ipairs(spectators) do
+			if not sp.Person:GetAttribute("Avatar") then
+				local person = Npc.Random(rng)
+				if person and person:GetAttribute("Avatar") then
+					sp.Person:Destroy()
+					person.PrimaryPart.CFrame = sp.CF * CFrame.new(0, Npc.Dim(person, "FootOffset", 3), 0)
+					person.Parent = lifeFolder
+					sp.Person = person
+				end
+			end
+		end
+		for _, tc in ipairs(traffic) do
+			local old = tc.Car:FindFirstChild("Fahrer")
+			if old and not old:GetAttribute("Avatar") then
+				local person = Npc.Random(rng)
+				if person and person:GetAttribute("Avatar") then
+					old:Destroy()
+					Npc.SeatInCar(person, tc.Car)
+				end
+			end
+		end
+	end
+	leute.ChildAdded:Connect(function(t)
+		if t:GetAttribute("Avatar") and not pending then
+			pending = true
+			task.delay(3, swapAll)
+		end
+	end)
+	task.delay(4, swapAll)
 end
 
 -- Umgebungsgeräusch (Wind und Vögel)
@@ -401,20 +551,29 @@ RunService.RenderStepped:Connect(function(dt)
 		local p = pos + Vector3.new(0, w.Way.Ground + w.Foot, 0)
 		w.Root.CFrame = CFrame.lookAt(p, p + dir)
 		if (p - camPos).Magnitude < ANIM_DISTANCE then
-			poseWalk(w.Person, (now * w.Speed + w.Phase) * 1.15)
+			-- Laufanimation wie beim Spieler; Tempo passend zur Gehgeschwindigkeit
+			if not playAnim(w.Person, "walk", w.Speed / 8) then
+				poseWalk(w.Person, (now * w.Speed + w.Phase) * 1.15)
+			end
 		end
 	end
 
 	-- Zuschauer und wartende Kunden
 	for _, sp in ipairs(spectators) do
 		if (sp.Person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
-			poseCheer(sp.Person, now, sp.Seed)
+			local kinds = { "cheer", "wave", "idle" }
+			local kind = kinds[math.floor((now + sp.Seed * 3) / 5) % 3 + 1]
+			if not playAnim(sp.Person, kind) then
+				poseCheer(sp.Person, now, sp.Seed)
+			end
 		end
 	end
 	for _, person in ipairs(CollectionService:GetTagged(Npc.TAG)) do
 		if person:GetAttribute("Pose") == "stand" and person.PrimaryPart and person:IsDescendantOf(workspace) then
 			if (person.PrimaryPart.Position - camPos).Magnitude < ANIM_DISTANCE then
-				poseStand(person, now, (person.PrimaryPart.Position.X % 7))
+				if not playAnim(person, "idle") then
+					poseStand(person, now, (person.PrimaryPart.Position.X % 7))
+				end
 			end
 		end
 	end
