@@ -73,6 +73,33 @@ Solange `Id = 0` steht, zeigt der Knopf „Bald verfügbar“. Käufe in Studio 
 
 Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. Geldpakete werden sofort gutgeschrieben und gespeichert. Jeder Kauf wird nur einmal gutgeschrieben, auch wenn Roblox ihn erneut meldet.
 
+## Sounds
+Motor, Turbo, Abblasventil, Fehlzündung, Reifen, Hydraulik und Umgebung werden mit `tools/make_sounds.py` per Klangsynthese erzeugt. Die Dateien liegen in `sounds/`. `sounds/hoerprobe.mp3` zeigt, wie das im Spiel klingt (Leerlauf, Gasstoß, Beschleunigen mit Gangwechseln, Gas weg).
+
+| Datei | Eintrag in `Config.Sounds` |
+|---|---|
+| `motor_tief.ogg` | `MotorTief` |
+| `motor_hoch.ogg` | `MotorHoch` |
+| `turbo.ogg` | `Turbo` |
+| `abblasen.ogg` | `Abblasen` |
+| `fehlzuendung.ogg` | `Fehlzuendung` |
+| `reifen.ogg` | `Reifen` |
+| `hydraulik.ogg` | `Hydraulik` |
+| `umgebung.ogg` | `Umgebung` |
+
+So kommen sie ins Spiel:
+1. Auf https://create.roblox.com/dashboard/creations links **Development Items → Audio** öffnen, dann **Upload Asset** und die 8 Dateien hochladen. In Studio geht es auch über *View → Asset Manager → Bulk Import*.
+2. Die Prüfung durch Roblox abwarten (meist wenige Minuten).
+3. Die Zahlen-IDs in `src/shared/Config.lua` bei `Config.Sounds` eintragen, z. B. `MotorTief = "1234567890",`.
+
+Leere Einträge sind stumm. Das Spiel funktioniert auch ohne Sounds.
+
+## Testen
+- In **Roblox Studio** startest du automatisch mit 1.000.000 € (`Config.StudioMoney`).
+- Als **Besitzer des Spiels** (und in Studio) siehst du links lila Knöpfe: **+100.000 €** und **+50 Ruf**. Mit Ruf schaltest du die teureren Kundenautos frei.
+- Weitere Tester trägst du in `Config.AdminUserIds` ein.
+- Achtung: Ist in Studio der API-Zugriff an, wird das Testgeld auch im echten Spiel gespeichert.
+
 ## Dateien
 | Datei | Ort in Roblox | Inhalt |
 |---|---|---|
@@ -81,6 +108,7 @@ Gekaufte Game Passes werden bei jedem Betreten des Spiels von Roblox abgefragt. 
 | `src/shared/Npc.lua` | ReplicatedStorage › ModuleScript | Personen (Fahrer, Kunden, Fußgänger) |
 | `src/shared/Paths.lua` | ReplicatedStorage › ModuleScript | Fahrspuren und Fußwege |
 | `src/shared/Util.lua` | ReplicatedStorage › ModuleScript | Bau-Helfer |
+| `src/shared/EngineSound.lua` | ReplicatedStorage › ModuleScript | Motorsound mit Getriebe und Drehzahl |
 | `src/server/GameServer.server.lua` | ServerScriptService › Script | Werkstätten, Kunden, Hebebühnen, Geld, Fahren, Shop, Speichern |
 | `src/server/World.lua` | ServerScriptService › ModuleScript | Gelände, Licht, Straßen, Teststrecke, Natur, Gebäude |
 | `src/client/ChiptuningClient.client.lua` | StarterPlayerScripts › LocalScript | Oberfläche, Tuning-Minispiel, Shop |

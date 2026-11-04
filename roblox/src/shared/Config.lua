@@ -93,6 +93,48 @@ end
 -- Studs/s -> km/h (gefühlt passend zur Roblox-Größe)
 Config.KmhFactor = 1.25
 
+------------------------------------------------------------------------
+-- SOUNDS
+-- Die Dateien aus dem Ordner roblox/sounds bei Roblox hochladen
+-- (Creator Hub → Entwicklung → Audio, oder in Studio über den Asset Manager)
+-- und hier die Zahlen-IDs eintragen. Leer = Sound ist aus.
+------------------------------------------------------------------------
+Config.Sounds = {
+	MotorTief = "", -- motor_tief.ogg   (Motor unten, Leerlauf)
+	MotorHoch = "", -- motor_hoch.ogg   (Motor hohe Drehzahl)
+	Turbo = "", -- turbo.ogg            (Turbo-Pfeifen)
+	Abblasen = "", -- abblasen.ogg      (Abblasventil beim Schalten)
+	Fehlzuendung = "", -- fehlzuendung.ogg (Knallen aus dem Auspuff)
+	Reifen = "", -- reifen.ogg          (Reifenquietschen)
+	Hydraulik = "", -- hydraulik.ogg    (Hebebühne)
+	Umgebung = "", -- umgebung.ogg      (Wind und Vögel)
+}
+Config.SoundVolume = 1 -- Gesamtlautstärke der Fahrzeuge
+
+-- Wandelt eine eingetragene ID in "rbxassetid://..." um (nil = nicht gesetzt)
+function Config.SoundId(key)
+	local v = Config.Sounds[key]
+	if v == nil or v == "" or v == 0 then
+		return nil
+	end
+	v = tostring(v)
+	if v:match("^%d+$") then
+		return "rbxassetid://" .. v
+	end
+	return v
+end
+
+------------------------------------------------------------------------
+-- TESTEN
+-- In Roblox Studio startest du automatisch mit StudioMoney.
+-- Der Besitzer des Spiels (und alle IDs in AdminUserIds) sieht im Spiel
+-- Admin-Knöpfe für Testgeld und Ruf.
+------------------------------------------------------------------------
+Config.StudioMoney = 1000000
+Config.AdminUserIds = {} -- z. B. { 123456789 }
+Config.AdminMoneyStep = 100000
+Config.AdminRepStep = 50
+
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung
 Config.ZoneWidth = 0.16 -- Breite der grünen Zone (Anteil des Balkens)

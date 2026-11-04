@@ -16,6 +16,8 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
 local Paths = require(ReplicatedStorage:WaitForChild("Paths"))
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
+local SoundService = game:GetService("SoundService")
 ReplicatedStorage:WaitForChild("Leute")
 
 local ANIM_DISTANCE = 320 -- weiter entfernt wird nicht animiert
@@ -120,9 +122,22 @@ local function myCar()
 	return seat and seat.Parent
 end
 
+local SOUND_DISTANCE = 170
+
+local function dropSound(st)
+	if st and st.Sound then
+		st.Sound:Destroy()
+		st.Sound = nil
+	end
+end
+
 local function animateCar(car, dt, now, camPos, mine)
 	local root = car.PrimaryPart
-	if not root or car == mine then
+	if not root then
+		return
+	end
+	if car == mine then
+		dropSound(carState[car]) -- das eigene Auto klingt über DriveClient
 		return
 	end
 	local pos = root.Position
@@ -131,6 +146,7 @@ local function animateCar(car, dt, now, camPos, mine)
 		if st then
 			st.LastPos = pos
 			st.LastLook = root.CFrame.LookVector
+			dropSound(st)
 		end
 		return
 	end
@@ -173,6 +189,47 @@ local function animateCar(car, dt, now, camPos, mine)
 	local driver = car:FindFirstChild("Fahrer")
 	if driver then
 		poseSit(driver, st.Steer, now, st.Seed)
+	end
+
+	-- Motorgeräusch
+	local dist = (pos - camPos).Magnitude
+	if car.Name == "Geparkt" or dist > SOUND_DISTANCE + 30 then
+		dropSound(st)
+		return
+	end
+	local seat = car:FindFirstChild("Fahrersitz")
+	local moving = math.abs(v) > 0.3
+	st.Still = moving and 0 or (st.Still or 0) + dt
+	local running
+	if dyno > 0 or car.Name == "Verkehr" then
+		running = true
+	elseif seat then
+		running = seat.Occupant ~= nil
+	else
+		running = st.Still < 1.5
+	end
+	if not running then
+		dropSound(st)
+		return
+	end
+	if dist < SOUND_DISTANCE and not st.Sound then
+		st.Sound = EngineSound.new(root, car.Name == "Verkehr" and 0.45 or 0.8, false)
+		st.Rpm = EngineSound.IDLE
+		st.LastV = v
+	end
+	if st.Sound then
+		local accel = (v - (st.LastV or v)) / math.max(dt, 1e-3)
+		st.LastV = v
+		st.Load = (st.Load or 0.3) + (math.clamp(0.3 + accel / 12, 0.15, 1) - (st.Load or 0.3)) * math.min(1, dt * 4)
+		local rpmTarget
+		if dyno > 0 then
+			rpmTarget = 1500 + math.min(dyno / 36, 1) * 5200
+			st.Load = 1
+		else
+			rpmTarget = EngineSound.Rpm(v, 120)
+		end
+		st.Rpm += (rpmTarget - st.Rpm) * math.min(1, dt * 6)
+		st.Sound:Update(st.Rpm, st.Load, 0, 0)
 	end
 end
 
@@ -257,6 +314,20 @@ do
 			person.Parent = lifeFolder
 			table.insert(spectators, { Person = person, Seed = rng:NextNumber(0, 10) })
 		end
+	end
+end
+
+-- Umgebungsgeräusch (Wind und Vögel)
+do
+	local id = Config.SoundId("Umgebung")
+	if id then
+		local amb = Instance.new("Sound")
+		amb.Name = "Umgebung"
+		amb.SoundId = id
+		amb.Looped = true
+		amb.Volume = 0.35
+		amb.Parent = SoundService
+		amb:Play()
 	end
 end
 

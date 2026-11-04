@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="ReplicatedStorage" referent="RBX00000006"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Cars</string><ProtectedString name="Source"><![CDATA[-- Automodelle für Werkstatt, Verkehr und Spieler
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="ReplicatedStorage" referent="RBX00000007"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Cars</string><ProtectedString name="Source"><![CDATA[-- Automodelle für Werkstatt, Verkehr und Spieler
 -- ModuleScript "Cars" in ReplicatedStorage (Server und Client bauen damit Autos)
 --
 -- Koordinaten relativ zur Karosseriemitte. Die Karosseriemitte liegt 1.7 Studs
@@ -510,6 +510,48 @@ end
 -- Studs/s -> km/h (gefühlt passend zur Roblox-Größe)
 Config.KmhFactor = 1.25
 
+------------------------------------------------------------------------
+-- SOUNDS
+-- Die Dateien aus dem Ordner roblox/sounds bei Roblox hochladen
+-- (Creator Hub → Entwicklung → Audio, oder in Studio über den Asset Manager)
+-- und hier die Zahlen-IDs eintragen. Leer = Sound ist aus.
+------------------------------------------------------------------------
+Config.Sounds = {
+	MotorTief = "", -- motor_tief.ogg   (Motor unten, Leerlauf)
+	MotorHoch = "", -- motor_hoch.ogg   (Motor hohe Drehzahl)
+	Turbo = "", -- turbo.ogg            (Turbo-Pfeifen)
+	Abblasen = "", -- abblasen.ogg      (Abblasventil beim Schalten)
+	Fehlzuendung = "", -- fehlzuendung.ogg (Knallen aus dem Auspuff)
+	Reifen = "", -- reifen.ogg          (Reifenquietschen)
+	Hydraulik = "", -- hydraulik.ogg    (Hebebühne)
+	Umgebung = "", -- umgebung.ogg      (Wind und Vögel)
+}
+Config.SoundVolume = 1 -- Gesamtlautstärke der Fahrzeuge
+
+-- Wandelt eine eingetragene ID in "rbxassetid://..." um (nil = nicht gesetzt)
+function Config.SoundId(key)
+	local v = Config.Sounds[key]
+	if v == nil or v == "" or v == 0 then
+		return nil
+	end
+	v = tostring(v)
+	if v:match("^%d+$") then
+		return "rbxassetid://" .. v
+	end
+	return v
+end
+
+------------------------------------------------------------------------
+-- TESTEN
+-- In Roblox Studio startest du automatisch mit StudioMoney.
+-- Der Besitzer des Spiels (und alle IDs in AdminUserIds) sieht im Spiel
+-- Admin-Knöpfe für Testgeld und Ruf.
+------------------------------------------------------------------------
+Config.StudioMoney = 1000000
+Config.AdminUserIds = {} -- z. B. { 123456789 }
+Config.AdminMoneyStep = 100000
+Config.AdminRepStep = 50
+
 Config.CustomerInterval = 14 -- Sekunden zwischen Kunden
 Config.CustomerIntervalAds = 7 -- mit Werbung
 Config.ZoneWidth = 0.16 -- Breite der grünen Zone (Anteil des Balkens)
@@ -563,7 +605,129 @@ function Config.Format(n)
 end
 
 return Config
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">Npc</string><ProtectedString name="Source"><![CDATA[-- Personen-Vorlagen für Fahrer, Kunden und Fußgänger
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">EngineSound</string><ProtectedString name="Source"><![CDATA[-- Motorgeräusch eines Autos (nur auf dem Client)
+-- ModuleScript "EngineSound" in ReplicatedStorage
+--
+-- Mischt zwei Motor-Schleifen (tief/hoch) nach Drehzahl, dazu Turbo und
+-- Reifenquietschen. Die Drehzahl kommt aus einem einfachen 6-Gang-Getriebe.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+
+local EngineSound = {}
+EngineSound.__index = EngineSound
+
+EngineSound.IDLE = 900
+EngineSound.REDLINE = 6900
+local GEARS = { 0.2, 0.34, 0.5, 0.66, 0.83, 1.0 } -- Anteil der Höchstgeschwindigkeit je Gang
+
+-- Drehzahl und Gang aus Geschwindigkeit (Studs/s) und Höchstgeschwindigkeit
+function EngineSound.Rpm(speed, top)
+	speed = math.abs(speed)
+	local gear = #GEARS
+	for g, r in ipairs(GEARS) do
+		if speed <= top * r then
+			gear = g
+			break
+		end
+	end
+	local frac = math.clamp(speed / (top * GEARS[gear]), 0, 1)
+	return EngineSound.IDLE + frac * (EngineSound.REDLINE - EngineSound.IDLE), gear
+end
+
+local function makeLoop(part, key)
+	local id = Config.SoundId(key)
+	if not id then
+		return nil
+	end
+	local s = Instance.new("Sound")
+	s.Name = key
+	s.SoundId = id
+	s.Looped = true
+	s.Volume = 0
+	s.RollOffMode = Enum.RollOffMode.InverseTapered
+	s.RollOffMinDistance = 12
+	s.RollOffMaxDistance = 200
+	s.Parent = part
+	s:Play()
+	return s
+end
+
+-- full = true: auch Turbo und Reifen (für das eigene Auto)
+function EngineSound.new(part, volume, full)
+	local self = setmetatable({}, EngineSound)
+	self.Part = part
+	self.Volume = (volume or 1) * Config.SoundVolume
+	self.Low = makeLoop(part, "MotorTief")
+	self.High = makeLoop(part, "MotorHoch")
+	if full then
+		self.Turbo = makeLoop(part, "Turbo")
+		self.Tire = makeLoop(part, "Reifen")
+	end
+	return self
+end
+
+-- rpm: Drehzahl, load: Gas 0..1, turbo: 0..1 (Turbo-Anteil), skid: 0..1
+function EngineSound:Update(rpm, load, turbo, skid)
+	local v = self.Volume
+	local base = (0.35 + 0.65 * load) * v
+	if self.Low and self.High then
+		local mix = math.clamp((rpm - 2500) / 2500, 0, 1)
+		self.Low.PlaybackSpeed = rpm / 1200
+		self.Low.Volume = base * (1 - mix) * 0.9 + 0.08 * v
+		self.High.PlaybackSpeed = rpm / 4200
+		self.High.Volume = base * mix * 0.9
+	elseif self.Low then
+		self.Low.PlaybackSpeed = math.min(rpm / 1200, 4)
+		self.Low.Volume = base
+	elseif self.High then
+		self.High.PlaybackSpeed = math.max(rpm / 4200, 0.35)
+		self.High.Volume = base
+	end
+	if self.Turbo then
+		self.Turbo.PlaybackSpeed = 0.6 + rpm / 7000
+		self.Turbo.Volume = (turbo or 0) * load * math.clamp((rpm - 2000) / 3000, 0, 1) * 0.3 * v
+	end
+	if self.Tire then
+		self.Tire.Volume = (skid or 0) * 0.55 * v
+		self.Tire.PlaybackSpeed = 0.9 + (skid or 0) * 0.2
+	end
+end
+
+function EngineSound:Silence()
+	for _, s in pairs({ self.Low, self.High, self.Turbo, self.Tire }) do
+		s.Volume = 0
+	end
+end
+
+function EngineSound:Destroy()
+	for _, s in pairs({ self.Low, self.High, self.Turbo, self.Tire }) do
+		s:Destroy()
+	end
+end
+
+-- Einmaliger Sound an einem Teil (z. B. Abblasen, Fehlzündung)
+function EngineSound.OneShot(part, key, volume, speed)
+	local id = Config.SoundId(key)
+	if not id or not part then
+		return
+	end
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = (volume or 1) * Config.SoundVolume
+	s.PlaybackSpeed = speed or 1
+	s.RollOffMode = Enum.RollOffMode.InverseTapered
+	s.RollOffMinDistance = 12
+	s.RollOffMaxDistance = 250
+	s.Parent = part
+	s:Play()
+	task.delay(3, function()
+		s:Destroy()
+	end)
+end
+
+return EngineSound
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Npc</string><ProtectedString name="Source"><![CDATA[-- Personen-Vorlagen für Fahrer, Kunden und Fußgänger
 -- ModuleScript "Npc" in ServerScriptService
 --
 -- Erstellt beim Start einige R15-Figuren mit verschiedenen Haut-, Shirt- und
@@ -793,7 +957,7 @@ function Npc.StandAt(person, groundCF, parent)
 end
 
 return Npc
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Paths</string><ProtectedString name="Source"><![CDATA[-- Wege für Straßenverkehr und Fußgänger
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Paths</string><ProtectedString name="Source"><![CDATA[-- Wege für Straßenverkehr und Fußgänger
 -- ModuleScript "Paths" in ReplicatedStorage
 --
 -- Die Koordinaten passen zu World.lua (Werkstattstraße z = 50, Landstraße
@@ -913,7 +1077,7 @@ function Paths.Spectators()
 end
 
 return Paths
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Util</string><ProtectedString name="Source"><![CDATA[-- Bau-Helfer für Teile, Schilder und Bewegungen
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">Util</string><ProtectedString name="Source"><![CDATA[-- Bau-Helfer für Teile, Schilder und Bewegungen
 -- ModuleScript "Util" in ServerScriptService
 
 local RunService = game:GetService("RunService")
@@ -1043,7 +1207,7 @@ function Util.moveModel(model, fromCF, toCF, duration)
 end
 
 return Util
-]]></ProtectedString></Properties></Item></Item><Item class="ServerScriptService" referent="RBX00000009"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX00000007"><Properties><string name="Name">GameServer</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Server
+]]></ProtectedString></Properties></Item></Item><Item class="ServerScriptService" referent="RBX0000000A"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX00000008"><Properties><string name="Name">GameServer</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Server
 -- Script "GameServer" in ServerScriptService
 
 local Players = game:GetService("Players")
@@ -1078,10 +1242,34 @@ local Notify = newRemote("Notify") -- Server -> Client: Meldung
 local RequestTestDrive = newRemote("RequestTestDrive") -- Client -> Server
 local RequestCompanyCar = newRemote("RequestCompanyCar") -- Client -> Server
 local EndDrive = newRemote("EndDrive") -- Client -> Server
+local AdminAction = newRemote("AdminAction") -- Client -> Server (nur Admins)
 remotes.Parent = ReplicatedStorage
 
 local function notify(player, text, kind)
 	Notify:FireClient(player, text, kind or "info")
+end
+
+-- Sound am Server (alle hören ihn). key = Eintrag in Config.Sounds oder direkte ID
+local function playSound(parent, key, volume, looped)
+	local id = Config.SoundId(key) or (key:find("://") and key) or nil
+	if not id or not parent then
+		return nil
+	end
+	local snd = Instance.new("Sound")
+	snd.SoundId = id
+	snd.Volume = volume or 0.7
+	snd.Looped = looped or false
+	snd.RollOffMode = Enum.RollOffMode.InverseTapered
+	snd.RollOffMinDistance = 10
+	snd.RollOffMaxDistance = 160
+	snd.Parent = parent
+	if not looped then
+		snd:Play()
+		task.delay(4, function()
+			snd:Destroy()
+		end)
+	end
+	return snd
 end
 
 ------------------------------------------------------------------------
@@ -1397,6 +1585,7 @@ local function buildPlot(player, st, index)
 		local beacon = p({ Name = "Warnleuchte", Shape = Enum.PartType.Ball, Size = Vector3.new(0.9, 0.9, 0.9), CFrame = at(bx + 5.6, 11.4, BAY_Z + 10.4), Color = Color3.fromRGB(255, 150, 0), Material = Enum.Material.SmoothPlastic })
 		bay.Beacon = beacon
 		bay.BeaconLight = Util.light(beacon, "PointLight", { Range = 16, Brightness = 0, Color = Color3.fromRGB(255, 150, 0), Enabled = false })
+		bay.LiftSound = playSound(bay.LiftParts[1] and bay.LiftParts[1].Part, "Hydraulik", 0.6, true)
 		-- Warnstreifen am Boden rund um die Bühne
 		for k = 0, 9 do
 			for _, side in ipairs({ -1, 1 }) do
@@ -1529,6 +1718,9 @@ local function animateLift(bay, target, duration)
 		bay.BeaconLight.Enabled = true
 		bay.Beacon.Material = Enum.Material.Neon
 	end
+	if bay.LiftSound then
+		bay.LiftSound:Play()
+	end
 	local t0 = os.clock()
 	while bay.LiftToken == token do
 		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
@@ -1545,6 +1737,9 @@ local function animateLift(bay, target, duration)
 	if bay.LiftToken == token and bay.BeaconLight then
 		bay.BeaconLight.Enabled = false
 		bay.Beacon.Material = Enum.Material.SmoothPlastic
+	end
+	if bay.LiftToken == token and bay.LiftSound then
+		bay.LiftSound:Stop()
 	end
 end
 
@@ -1568,6 +1763,7 @@ end
 
 -- Flammen und Licht aus dem Auspuff
 local function backfire(carModel, duration)
+	local first = true
 	for _, d in ipairs(carModel:GetDescendants()) do
 		if d.Name == "Auspuff" and d:IsA("BasePart") then
 			local f = Instance.new("Fire")
@@ -1577,6 +1773,10 @@ local function backfire(carModel, duration)
 			f.SecondaryColor = Color3.fromRGB(255, 230, 90)
 			f.Parent = d
 			local l = Util.light(d, "PointLight", { Range = 12, Brightness = 3, Color = ORANGE })
+			if first then
+				first = false
+				playSound(d, "Fehlzuendung", 0.9)
+			end
 			task.delay(duration, function()
 				f.Enabled = false
 				l:Destroy()
@@ -1818,6 +2018,9 @@ local function completeCar(player, st, bay, score, byAzubi)
 	end
 	removeCable(carInfo)
 	setCartText(bay, "✔ " .. Config.Stages[carInfo.Stage].Name)
+	if bay.CartAttachment then
+		playSound(bay.CartAttachment.Parent, "rbxasset://sounds/electronicpingshort.wav", 0.6)
+	end
 	if carInfo.Model.PrimaryPart then
 		sparkle(carInfo.Model.PrimaryPart)
 	end
@@ -2141,6 +2344,33 @@ RequestCompanyCar.OnServerEvent:Connect(function(player)
 	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company")
 end)
 
+------------------------------------------------------------------------
+-- Testen: Admin-Knöpfe (Studio, Besitzer des Spiels, Config.AdminUserIds)
+------------------------------------------------------------------------
+local function isAdmin(player)
+	if RunService:IsStudio() then
+		return true
+	end
+	if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+		return true
+	end
+	return table.find(Config.AdminUserIds, player.UserId) ~= nil
+end
+
+AdminAction.OnServerEvent:Connect(function(player, action)
+	local st = States[player]
+	if not st or not isAdmin(player) then
+		return
+	end
+	if action == "money" then
+		setMoney(st, st.Data.Money + Config.AdminMoneyStep)
+		notify(player, "🧪 Testgeld: +" .. Config.Format(Config.AdminMoneyStep) .. " €", "good")
+	elseif action == "rep" then
+		setRep(st, st.Data.Rep + Config.AdminRepStep)
+		notify(player, "🧪 Ruf +" .. Config.AdminRepStep .. " (teurere Kundenautos)", "good")
+	end
+end)
+
 EndDrive.OnServerEvent:Connect(function(player)
 	local st = States[player]
 	if not st or not st.Drive then
@@ -2351,6 +2581,13 @@ local function onPlayerAdded(player)
 		NextCustomer = os.clock() + 3,
 		NextAzubi = os.clock() + Config.AzubiInterval,
 	}
+	if isAdmin(player) then
+		player:SetAttribute("Admin", true)
+		if RunService:IsStudio() and st.Data.Money < Config.StudioMoney then
+			setMoney(st, Config.StudioMoney)
+			notify(player, "🧪 Studio-Test: Startgeld " .. Config.Format(Config.StudioMoney) .. " €", "good")
+		end
+	end
 	st.Plot = buildPlot(player, st, index)
 	States[player] = st
 	task.spawn(checkPasses, player, st)
@@ -2453,7 +2690,7 @@ task.spawn(function()
 		Lighting.ClockTime = (t + rate * dt) % 24
 	end
 end)
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- Die Spielwelt: Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- Die Spielwelt: Gelände, Licht, Straßen, Teststrecke, Bäume, Gebäude
 -- ModuleScript "World" in ServerScriptService
 --
 -- Übersicht (von oben, Norden = -Z):
@@ -3382,7 +3619,7 @@ function World.TrackStart(index)
 end
 
 return World
-]]></ProtectedString></Properties></Item></Item><Item class="StarterPlayer" referent="RBX0000000E"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000000D"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX0000000A"><Properties><string name="Name">ChiptuningClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Benutzeroberfläche
+]]></ProtectedString></Properties></Item></Item><Item class="StarterPlayer" referent="RBX0000000F"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000000E"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX0000000B"><Properties><string name="Name">ChiptuningClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Benutzeroberfläche
 -- LocalScript "ChiptuningClient" in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -3404,6 +3641,7 @@ local BuyUpgrade = Remotes:WaitForChild("BuyUpgrade")
 local Notify = Remotes:WaitForChild("Notify")
 local RequestTestDrive = Remotes:WaitForChild("RequestTestDrive")
 local RequestCompanyCar = Remotes:WaitForChild("RequestCompanyCar")
+local AdminAction = Remotes:WaitForChild("AdminAction")
 
 local C = {
 	Bg = Color3.fromRGB(22, 24, 30),
@@ -3851,6 +4089,28 @@ carButton.Activated:Connect(function()
 	RequestCompanyCar:FireServer()
 end)
 
+-- Test-Knöpfe (nur für Admins: Studio, Besitzer des Spiels)
+local adminFrame = make("Frame", {
+	Size = UDim2.fromOffset(120, 100),
+	Position = UDim2.new(0, 12, 0.5, 145),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = gui,
+}, { make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
+local moneyBtn = button({ Size = UDim2.fromOffset(120, 38), Text = "🧪 +100.000 €", TextSize = 15, BackgroundColor3 = Color3.fromRGB(120, 60, 170), LayoutOrder = 1, Parent = adminFrame })
+local repBtn = button({ Size = UDim2.fromOffset(120, 38), Text = "🧪 +50 Ruf", TextSize = 15, BackgroundColor3 = Color3.fromRGB(120, 60, 170), LayoutOrder = 2, Parent = adminFrame })
+moneyBtn.Activated:Connect(function()
+	AdminAction:FireServer("money")
+end)
+repBtn.Activated:Connect(function()
+	AdminAction:FireServer("rep")
+end)
+local function updateAdmin()
+	adminFrame.Visible = player:GetAttribute("Admin") == true
+end
+player:GetAttributeChangedSignal("Admin"):Connect(updateAdmin)
+updateAdmin()
+
 local hint = label({
 	Size = UDim2.new(0, 560, 0, 34),
 	Position = UDim2.new(0.5, 0, 1, -70),
@@ -4179,7 +4439,7 @@ TuneResult.OnClientEvent:Connect(function(res)
 	shopWin.Visible = false
 	tuneWin.Visible = true
 end)
-]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000B"><Properties><string name="Name">DriveClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Fahrphysik und Tacho
+]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000C"><Properties><string name="Name">DriveClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Fahrphysik und Tacho
 -- LocalScript "DriveClient" in StarterPlayer > StarterPlayerScripts
 --
 -- Der Server gibt dem Fahrer die Physik des Autos (Network Owner). Hier
@@ -4195,6 +4455,7 @@ local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local EndDrive = Remotes:WaitForChild("EndDrive")
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
 
 local BRAKE = 95
 local COAST = 14
@@ -4390,6 +4651,12 @@ local function startDriving(seat)
 		Top = stats.TopSpeed,
 		Accel = stats.Accel,
 		Hp = hp,
+		Rpm = EngineSound.IDLE,
+		Gear = 1,
+		LastThrottle = 0,
+		TurboAmt = hp >= 150 and 1 or 0.35,
+		Sound = EngineSound.new(chassis, 1, true),
+		Exhausts = {},
 	}
 	local mass = chassis.AssemblyMass
 	lv.MaxForce = math.max(8000, mass * 220)
@@ -4399,13 +4666,37 @@ local function startDriving(seat)
 	lap.Start = nil
 	lap.Checkpoint = false
 	exitBtn.Text = seat:GetAttribute("Mode") == "test" and "Probefahrt beenden" or "Aussteigen"
+	for _, d in ipairs(car:GetDescendants()) do
+		if d.Name == "Auspuff" and d:IsA("BasePart") then
+			table.insert(active.Exhausts, d)
+		end
+	end
 	gui.Enabled = true
+end
+
+-- Flammen aus dem Auspuff (nur optisch, lokal)
+local function exhaustFlame(a)
+	for _, ex in ipairs(a.Exhausts) do
+		local f = Instance.new("Fire")
+		f.Size = 2.5
+		f.Heat = 2
+		f.Color = Color3.fromRGB(255, 120, 30)
+		f.SecondaryColor = Color3.fromRGB(255, 230, 120)
+		f.Parent = ex
+		task.delay(0.25, function()
+			f.Enabled = false
+			task.delay(1, function()
+				f:Destroy()
+			end)
+		end)
+	end
 end
 
 local function stopDriving()
 	if active then
 		active.LV.PlaneVelocity = Vector2.zero
 		active.AV.AngularVelocity = Vector3.zero
+		active.Sound:Destroy()
 	end
 	active = nil
 	gui.Enabled = false
@@ -4494,12 +4785,36 @@ RunService.Heartbeat:Connect(function(dt)
 		a.SteeringWheel.Transform = CFrame.Angles(a.SteerVis * 2.2, 0, 0)
 	end
 
+	-- Motor: Drehzahl aus dem Getriebe, Sounds
+	local targetRpm, gear = EngineSound.Rpm(speed, a.Top)
+	if throttle ~= 0 then
+		targetRpm = math.max(targetRpm, 1700) -- Kupplung beim Anfahren
+	end
+	a.Rpm += (targetRpm - a.Rpm) * math.min(1, dt * 10)
+	if gear > a.Gear and throttle > 0 then
+		EngineSound.OneShot(chassis, "Abblasen", 0.45 * a.TurboAmt)
+	end
+	a.Gear = gear
+	if a.LastThrottle > 0 and throttle <= 0 and a.Rpm > 4300 then
+		EngineSound.OneShot(chassis, "Abblasen", 0.6 * a.TurboAmt)
+		if a.Hp >= 300 then
+			EngineSound.OneShot(chassis, "Fehlzuendung", 0.8)
+			exhaustFlame(a)
+		end
+	end
+	a.LastThrottle = throttle
+	local skid = math.clamp(math.abs(steer) * (math.abs(speed) - 45) / 60, 0, 1)
+	if throttle < 0 and speed > 35 then
+		skid = math.max(skid, 0.5)
+	end
+	a.Sound:Update(a.Rpm, math.abs(throttle), a.TurboAmt, skid)
+
 	-- Anzeige
 	local kmh = math.floor(math.abs(actual) * Config.KmhFactor + 0.5)
 	speedLabel.Text = tostring(kmh)
-	local gearPos = (math.abs(speed) / a.Top * 5) % 1 -- Pseudo-Drehzahl mit "Gängen"
-	rpmBar.Size = UDim2.fromScale(math.abs(speed) < 1 and 0.08 or 0.25 + gearPos * 0.75, 1)
-	rpmBar.BackgroundColor3 = gearPos > 0.85 and Color3.fromRGB(230, 50, 50) or Color3.fromRGB(255, 140, 0)
+	local rpmFrac = a.Rpm / 7000
+	rpmBar.Size = UDim2.fromScale(math.clamp(rpmFrac, 0.05, 1), 1)
+	rpmBar.BackgroundColor3 = a.Rpm > 6200 and Color3.fromRGB(230, 50, 50) or Color3.fromRGB(255, 140, 0)
 
 	updateLap(chassis.Position)
 	lapLabel.Text = lapText()
@@ -4512,9 +4827,9 @@ RunService.Heartbeat:Connect(function(dt)
 	else
 		timerLabel.Visible = false
 	end
-	unitLabel.Text = speed < -0.5 and "km/h  ·  R" or "km/h"
+	unitLabel.Text = speed < -0.5 and "km/h  ·  R" or ("km/h  ·  %d. Gang  ·  %d U/min"):format(a.Gear, math.floor(a.Rpm / 100) * 100)
 end)
-]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000C"><Properties><string name="Name">LifeClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Leben in der Stadt
+]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX0000000D"><Properties><string name="Name">LifeClient</string><ProtectedString name="Source"><![CDATA[-- Chiptuning-Firma: Leben in der Stadt
 -- LocalScript "LifeClient" in StarterPlayer > StarterPlayerScripts
 --
 --  * dreht und lenkt die Räder aller Autos (Kunden, Verkehr, andere Spieler)
@@ -4532,6 +4847,8 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Cars = require(ReplicatedStorage:WaitForChild("Cars"))
 local Npc = require(ReplicatedStorage:WaitForChild("Npc"))
 local Paths = require(ReplicatedStorage:WaitForChild("Paths"))
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
+local SoundService = game:GetService("SoundService")
 ReplicatedStorage:WaitForChild("Leute")
 
 local ANIM_DISTANCE = 320 -- weiter entfernt wird nicht animiert
@@ -4636,9 +4953,22 @@ local function myCar()
 	return seat and seat.Parent
 end
 
+local SOUND_DISTANCE = 170
+
+local function dropSound(st)
+	if st and st.Sound then
+		st.Sound:Destroy()
+		st.Sound = nil
+	end
+end
+
 local function animateCar(car, dt, now, camPos, mine)
 	local root = car.PrimaryPart
-	if not root or car == mine then
+	if not root then
+		return
+	end
+	if car == mine then
+		dropSound(carState[car]) -- das eigene Auto klingt über DriveClient
 		return
 	end
 	local pos = root.Position
@@ -4647,6 +4977,7 @@ local function animateCar(car, dt, now, camPos, mine)
 		if st then
 			st.LastPos = pos
 			st.LastLook = root.CFrame.LookVector
+			dropSound(st)
 		end
 		return
 	end
@@ -4689,6 +5020,47 @@ local function animateCar(car, dt, now, camPos, mine)
 	local driver = car:FindFirstChild("Fahrer")
 	if driver then
 		poseSit(driver, st.Steer, now, st.Seed)
+	end
+
+	-- Motorgeräusch
+	local dist = (pos - camPos).Magnitude
+	if car.Name == "Geparkt" or dist > SOUND_DISTANCE + 30 then
+		dropSound(st)
+		return
+	end
+	local seat = car:FindFirstChild("Fahrersitz")
+	local moving = math.abs(v) > 0.3
+	st.Still = moving and 0 or (st.Still or 0) + dt
+	local running
+	if dyno > 0 or car.Name == "Verkehr" then
+		running = true
+	elseif seat then
+		running = seat.Occupant ~= nil
+	else
+		running = st.Still < 1.5
+	end
+	if not running then
+		dropSound(st)
+		return
+	end
+	if dist < SOUND_DISTANCE and not st.Sound then
+		st.Sound = EngineSound.new(root, car.Name == "Verkehr" and 0.45 or 0.8, false)
+		st.Rpm = EngineSound.IDLE
+		st.LastV = v
+	end
+	if st.Sound then
+		local accel = (v - (st.LastV or v)) / math.max(dt, 1e-3)
+		st.LastV = v
+		st.Load = (st.Load or 0.3) + (math.clamp(0.3 + accel / 12, 0.15, 1) - (st.Load or 0.3)) * math.min(1, dt * 4)
+		local rpmTarget
+		if dyno > 0 then
+			rpmTarget = 1500 + math.min(dyno / 36, 1) * 5200
+			st.Load = 1
+		else
+			rpmTarget = EngineSound.Rpm(v, 120)
+		end
+		st.Rpm += (rpmTarget - st.Rpm) * math.min(1, dt * 6)
+		st.Sound:Update(st.Rpm, st.Load, 0, 0)
 	end
 end
 
@@ -4773,6 +5145,20 @@ do
 			person.Parent = lifeFolder
 			table.insert(spectators, { Person = person, Seed = rng:NextNumber(0, 10) })
 		end
+	end
+end
+
+-- Umgebungsgeräusch (Wind und Vögel)
+do
+	local id = Config.SoundId("Umgebung")
+	if id then
+		local amb = Instance.new("Sound")
+		amb.Name = "Umgebung"
+		amb.SoundId = id
+		amb.Looped = true
+		amb.Volume = 0.35
+		amb.Parent = SoundService
+		amb:Play()
 	end
 end
 
@@ -4864,4 +5250,4 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 	end
 end)
-]]></ProtectedString></Properties></Item></Item></Item><Item class="Lighting" referent="RBX0000000F"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item></roblox>
+]]></ProtectedString></Properties></Item></Item></Item><Item class="Lighting" referent="RBX00000010"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item></roblox>

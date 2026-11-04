@@ -33,10 +33,34 @@ local Notify = newRemote("Notify") -- Server -> Client: Meldung
 local RequestTestDrive = newRemote("RequestTestDrive") -- Client -> Server
 local RequestCompanyCar = newRemote("RequestCompanyCar") -- Client -> Server
 local EndDrive = newRemote("EndDrive") -- Client -> Server
+local AdminAction = newRemote("AdminAction") -- Client -> Server (nur Admins)
 remotes.Parent = ReplicatedStorage
 
 local function notify(player, text, kind)
 	Notify:FireClient(player, text, kind or "info")
+end
+
+-- Sound am Server (alle hören ihn). key = Eintrag in Config.Sounds oder direkte ID
+local function playSound(parent, key, volume, looped)
+	local id = Config.SoundId(key) or (key:find("://") and key) or nil
+	if not id or not parent then
+		return nil
+	end
+	local snd = Instance.new("Sound")
+	snd.SoundId = id
+	snd.Volume = volume or 0.7
+	snd.Looped = looped or false
+	snd.RollOffMode = Enum.RollOffMode.InverseTapered
+	snd.RollOffMinDistance = 10
+	snd.RollOffMaxDistance = 160
+	snd.Parent = parent
+	if not looped then
+		snd:Play()
+		task.delay(4, function()
+			snd:Destroy()
+		end)
+	end
+	return snd
 end
 
 ------------------------------------------------------------------------
@@ -352,6 +376,7 @@ local function buildPlot(player, st, index)
 		local beacon = p({ Name = "Warnleuchte", Shape = Enum.PartType.Ball, Size = Vector3.new(0.9, 0.9, 0.9), CFrame = at(bx + 5.6, 11.4, BAY_Z + 10.4), Color = Color3.fromRGB(255, 150, 0), Material = Enum.Material.SmoothPlastic })
 		bay.Beacon = beacon
 		bay.BeaconLight = Util.light(beacon, "PointLight", { Range = 16, Brightness = 0, Color = Color3.fromRGB(255, 150, 0), Enabled = false })
+		bay.LiftSound = playSound(bay.LiftParts[1] and bay.LiftParts[1].Part, "Hydraulik", 0.6, true)
 		-- Warnstreifen am Boden rund um die Bühne
 		for k = 0, 9 do
 			for _, side in ipairs({ -1, 1 }) do
@@ -484,6 +509,9 @@ local function animateLift(bay, target, duration)
 		bay.BeaconLight.Enabled = true
 		bay.Beacon.Material = Enum.Material.Neon
 	end
+	if bay.LiftSound then
+		bay.LiftSound:Play()
+	end
 	local t0 = os.clock()
 	while bay.LiftToken == token do
 		local a = math.clamp((os.clock() - t0) / duration, 0, 1)
@@ -500,6 +528,9 @@ local function animateLift(bay, target, duration)
 	if bay.LiftToken == token and bay.BeaconLight then
 		bay.BeaconLight.Enabled = false
 		bay.Beacon.Material = Enum.Material.SmoothPlastic
+	end
+	if bay.LiftToken == token and bay.LiftSound then
+		bay.LiftSound:Stop()
 	end
 end
 
@@ -523,6 +554,7 @@ end
 
 -- Flammen und Licht aus dem Auspuff
 local function backfire(carModel, duration)
+	local first = true
 	for _, d in ipairs(carModel:GetDescendants()) do
 		if d.Name == "Auspuff" and d:IsA("BasePart") then
 			local f = Instance.new("Fire")
@@ -532,6 +564,10 @@ local function backfire(carModel, duration)
 			f.SecondaryColor = Color3.fromRGB(255, 230, 90)
 			f.Parent = d
 			local l = Util.light(d, "PointLight", { Range = 12, Brightness = 3, Color = ORANGE })
+			if first then
+				first = false
+				playSound(d, "Fehlzuendung", 0.9)
+			end
 			task.delay(duration, function()
 				f.Enabled = false
 				l:Destroy()
@@ -773,6 +809,9 @@ local function completeCar(player, st, bay, score, byAzubi)
 	end
 	removeCable(carInfo)
 	setCartText(bay, "✔ " .. Config.Stages[carInfo.Stage].Name)
+	if bay.CartAttachment then
+		playSound(bay.CartAttachment.Parent, "rbxasset://sounds/electronicpingshort.wav", 0.6)
+	end
 	if carInfo.Model.PrimaryPart then
 		sparkle(carInfo.Model.PrimaryPart)
 	end
@@ -1096,6 +1135,33 @@ RequestCompanyCar.OnServerEvent:Connect(function(player)
 	spawnDrivable(player, st, Config.CompanyCar, hp, st.Plot.CarSpot, "company")
 end)
 
+------------------------------------------------------------------------
+-- Testen: Admin-Knöpfe (Studio, Besitzer des Spiels, Config.AdminUserIds)
+------------------------------------------------------------------------
+local function isAdmin(player)
+	if RunService:IsStudio() then
+		return true
+	end
+	if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+		return true
+	end
+	return table.find(Config.AdminUserIds, player.UserId) ~= nil
+end
+
+AdminAction.OnServerEvent:Connect(function(player, action)
+	local st = States[player]
+	if not st or not isAdmin(player) then
+		return
+	end
+	if action == "money" then
+		setMoney(st, st.Data.Money + Config.AdminMoneyStep)
+		notify(player, "🧪 Testgeld: +" .. Config.Format(Config.AdminMoneyStep) .. " €", "good")
+	elseif action == "rep" then
+		setRep(st, st.Data.Rep + Config.AdminRepStep)
+		notify(player, "🧪 Ruf +" .. Config.AdminRepStep .. " (teurere Kundenautos)", "good")
+	end
+end)
+
 EndDrive.OnServerEvent:Connect(function(player)
 	local st = States[player]
 	if not st or not st.Drive then
@@ -1306,6 +1372,13 @@ local function onPlayerAdded(player)
 		NextCustomer = os.clock() + 3,
 		NextAzubi = os.clock() + Config.AzubiInterval,
 	}
+	if isAdmin(player) then
+		player:SetAttribute("Admin", true)
+		if RunService:IsStudio() and st.Data.Money < Config.StudioMoney then
+			setMoney(st, Config.StudioMoney)
+			notify(player, "🧪 Studio-Test: Startgeld " .. Config.Format(Config.StudioMoney) .. " €", "good")
+		end
+	end
 	st.Plot = buildPlot(player, st, index)
 	States[player] = st
 	task.spawn(checkPasses, player, st)

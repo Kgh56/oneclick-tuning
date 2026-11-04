@@ -20,6 +20,7 @@ local BuyUpgrade = Remotes:WaitForChild("BuyUpgrade")
 local Notify = Remotes:WaitForChild("Notify")
 local RequestTestDrive = Remotes:WaitForChild("RequestTestDrive")
 local RequestCompanyCar = Remotes:WaitForChild("RequestCompanyCar")
+local AdminAction = Remotes:WaitForChild("AdminAction")
 
 local C = {
 	Bg = Color3.fromRGB(22, 24, 30),
@@ -466,6 +467,28 @@ local carButton = button({
 carButton.Activated:Connect(function()
 	RequestCompanyCar:FireServer()
 end)
+
+-- Test-Knöpfe (nur für Admins: Studio, Besitzer des Spiels)
+local adminFrame = make("Frame", {
+	Size = UDim2.fromOffset(120, 100),
+	Position = UDim2.new(0, 12, 0.5, 145),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = gui,
+}, { make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
+local moneyBtn = button({ Size = UDim2.fromOffset(120, 38), Text = "🧪 +100.000 €", TextSize = 15, BackgroundColor3 = Color3.fromRGB(120, 60, 170), LayoutOrder = 1, Parent = adminFrame })
+local repBtn = button({ Size = UDim2.fromOffset(120, 38), Text = "🧪 +50 Ruf", TextSize = 15, BackgroundColor3 = Color3.fromRGB(120, 60, 170), LayoutOrder = 2, Parent = adminFrame })
+moneyBtn.Activated:Connect(function()
+	AdminAction:FireServer("money")
+end)
+repBtn.Activated:Connect(function()
+	AdminAction:FireServer("rep")
+end)
+local function updateAdmin()
+	adminFrame.Visible = player:GetAttribute("Admin") == true
+end
+player:GetAttributeChangedSignal("Admin"):Connect(updateAdmin)
+updateAdmin()
 
 local hint = label({
 	Size = UDim2.new(0, 560, 0, 34),

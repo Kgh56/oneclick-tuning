@@ -14,6 +14,7 @@ local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local EndDrive = Remotes:WaitForChild("EndDrive")
+local EngineSound = require(ReplicatedStorage:WaitForChild("EngineSound"))
 
 local BRAKE = 95
 local COAST = 14
@@ -209,6 +210,12 @@ local function startDriving(seat)
 		Top = stats.TopSpeed,
 		Accel = stats.Accel,
 		Hp = hp,
+		Rpm = EngineSound.IDLE,
+		Gear = 1,
+		LastThrottle = 0,
+		TurboAmt = hp >= 150 and 1 or 0.35,
+		Sound = EngineSound.new(chassis, 1, true),
+		Exhausts = {},
 	}
 	local mass = chassis.AssemblyMass
 	lv.MaxForce = math.max(8000, mass * 220)
@@ -218,13 +225,37 @@ local function startDriving(seat)
 	lap.Start = nil
 	lap.Checkpoint = false
 	exitBtn.Text = seat:GetAttribute("Mode") == "test" and "Probefahrt beenden" or "Aussteigen"
+	for _, d in ipairs(car:GetDescendants()) do
+		if d.Name == "Auspuff" and d:IsA("BasePart") then
+			table.insert(active.Exhausts, d)
+		end
+	end
 	gui.Enabled = true
+end
+
+-- Flammen aus dem Auspuff (nur optisch, lokal)
+local function exhaustFlame(a)
+	for _, ex in ipairs(a.Exhausts) do
+		local f = Instance.new("Fire")
+		f.Size = 2.5
+		f.Heat = 2
+		f.Color = Color3.fromRGB(255, 120, 30)
+		f.SecondaryColor = Color3.fromRGB(255, 230, 120)
+		f.Parent = ex
+		task.delay(0.25, function()
+			f.Enabled = false
+			task.delay(1, function()
+				f:Destroy()
+			end)
+		end)
+	end
 end
 
 local function stopDriving()
 	if active then
 		active.LV.PlaneVelocity = Vector2.zero
 		active.AV.AngularVelocity = Vector3.zero
+		active.Sound:Destroy()
 	end
 	active = nil
 	gui.Enabled = false
@@ -313,12 +344,36 @@ RunService.Heartbeat:Connect(function(dt)
 		a.SteeringWheel.Transform = CFrame.Angles(a.SteerVis * 2.2, 0, 0)
 	end
 
+	-- Motor: Drehzahl aus dem Getriebe, Sounds
+	local targetRpm, gear = EngineSound.Rpm(speed, a.Top)
+	if throttle ~= 0 then
+		targetRpm = math.max(targetRpm, 1700) -- Kupplung beim Anfahren
+	end
+	a.Rpm += (targetRpm - a.Rpm) * math.min(1, dt * 10)
+	if gear > a.Gear and throttle > 0 then
+		EngineSound.OneShot(chassis, "Abblasen", 0.45 * a.TurboAmt)
+	end
+	a.Gear = gear
+	if a.LastThrottle > 0 and throttle <= 0 and a.Rpm > 4300 then
+		EngineSound.OneShot(chassis, "Abblasen", 0.6 * a.TurboAmt)
+		if a.Hp >= 300 then
+			EngineSound.OneShot(chassis, "Fehlzuendung", 0.8)
+			exhaustFlame(a)
+		end
+	end
+	a.LastThrottle = throttle
+	local skid = math.clamp(math.abs(steer) * (math.abs(speed) - 45) / 60, 0, 1)
+	if throttle < 0 and speed > 35 then
+		skid = math.max(skid, 0.5)
+	end
+	a.Sound:Update(a.Rpm, math.abs(throttle), a.TurboAmt, skid)
+
 	-- Anzeige
 	local kmh = math.floor(math.abs(actual) * Config.KmhFactor + 0.5)
 	speedLabel.Text = tostring(kmh)
-	local gearPos = (math.abs(speed) / a.Top * 5) % 1 -- Pseudo-Drehzahl mit "Gängen"
-	rpmBar.Size = UDim2.fromScale(math.abs(speed) < 1 and 0.08 or 0.25 + gearPos * 0.75, 1)
-	rpmBar.BackgroundColor3 = gearPos > 0.85 and Color3.fromRGB(230, 50, 50) or Color3.fromRGB(255, 140, 0)
+	local rpmFrac = a.Rpm / 7000
+	rpmBar.Size = UDim2.fromScale(math.clamp(rpmFrac, 0.05, 1), 1)
+	rpmBar.BackgroundColor3 = a.Rpm > 6200 and Color3.fromRGB(230, 50, 50) or Color3.fromRGB(255, 140, 0)
 
 	updateLap(chassis.Position)
 	lapLabel.Text = lapText()
@@ -331,5 +386,5 @@ RunService.Heartbeat:Connect(function(dt)
 	else
 		timerLabel.Visible = false
 	end
-	unitLabel.Text = speed < -0.5 and "km/h  ·  R" or "km/h"
+	unitLabel.Text = speed < -0.5 and "km/h  ·  R" or ("km/h  ·  %d. Gang  ·  %d U/min"):format(a.Gear, math.floor(a.Rpm / 100) * 100)
 end)
