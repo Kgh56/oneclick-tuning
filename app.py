@@ -15,6 +15,7 @@ Loesungen aus dem Archiv: sofort bezahlen + laden; Anfragen (und Rueckruesten ue
 """
 
 import getpass
+import base64
 import hashlib
 import hmac
 import io
@@ -24,6 +25,7 @@ import os
 import re
 import secrets
 import shutil
+import struct
 import subprocess
 import sys
 import threading
@@ -395,6 +397,60 @@ def csrf_pruefen():
 # Seiten fuer Kunden
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Zwei-Faktor-Anmeldung (Authenticator-App, TOTP nach RFC 6238)
+# ---------------------------------------------------------------------------
+
+def totp_code(geheim: str, zaehler: int) -> str:
+    schluessel = base64.b32decode(geheim + "=" * (-len(geheim) % 8))
+    h = hmac.new(schluessel, struct.pack(">Q", zaehler), hashlib.sha1).digest()
+    o = h[-1] & 0x0F
+    return f"{(struct.unpack('>I', h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000:06d}"
+
+
+def totp_pruefen(geheim: str, code: str, zuletzt: int = 0, jetzt: float = None):
+    """Zaehlerstand bei richtigem Code (+/- 30 Sekunden Toleranz), sonst None. Ein Code gilt nur einmal."""
+    code = re.sub(r"\D", "", code or "")
+    if len(code) != 6 or not geheim:
+        return None
+    basis = int((time.time() if jetzt is None else jetzt) // 30)
+    for z in (basis - 1, basis, basis + 1):
+        if z > zuletzt and hmac.compare_digest(totp_code(geheim, z), code):
+            return z
+    return None
+
+
+def ersatz_hash(code: str) -> str:
+    return hashlib.sha256(re.sub(r"[^0-9a-z]", "", (code or "").lower()).encode()).hexdigest()
+
+
+def ersatz_neu() -> list:
+    return [f"{secrets.token_hex(2)}-{secrets.token_hex(2)}" for _ in range(8)]
+
+
+def zweiter_faktor_ok(b: dict, code: str) -> bool:
+    """Code aus der App oder ein Ersatzcode (wird dabei verbraucht). Speichert den Benutzer bei Erfolg."""
+    z = totp_pruefen(b.get("totp", ""), code, int(b.get("totp_zuletzt", 0)))
+    if z is not None:
+        b["totp_zuletzt"] = z
+        return True
+    h = ersatz_hash(code)
+    if len(re.sub(r"[^0-9a-z]", "", (code or "").lower())) == 8 and h in b.get("ersatz", []):
+        b["ersatz"].remove(h)
+        return True
+    return False
+
+
+def qr_svg(text: str):
+    try:
+        import segno
+    except ImportError:   # ohne Paket: Schluessel zum Abtippen reicht auch
+        return None
+    puffer = io.BytesIO()
+    segno.make(text, error="m").save(puffer, kind="svg", scale=6, border=2, dark="#0d0f14", light="#ffffff", xmldecl=False)
+    return puffer.getvalue().decode()
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -405,12 +461,41 @@ def login():
         b = lade_benutzer().get(name)
         if b and b.get("rolle") == "admin" and check_password_hash(b["pw"], request.form.get("pw", "")):
             session.clear()
-            session["benutzer"], session["admin"] = name, True
             session["csrf"] = secrets.token_hex(16)
+            if b.get("totp"):   # Zwei-Faktor: erst noch der Code aus der App
+                session["zfa_name"], session["zfa_seit"] = name, time.time()
+                return redirect(url_for("login_code"))
+            session["benutzer"], session["admin"] = name, True
             return redirect(url_for("admin"))
         merken("login")
         flash("Benutzername oder Passwort falsch.")
     return render_template("login.html")
+
+
+@app.route("/login/code", methods=["GET", "POST"])
+def login_code():
+    name = session.get("zfa_name")
+    if not name or time.time() - session.get("zfa_seit", 0) > 300:   # 5 Minuten nach dem Passwort
+        session.pop("zfa_name", None)
+        flash("Bitte erneut anmelden.")
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if zu_viele("login_code", 5, 15 * 60):
+            flash("Zu viele falsche Codes. Bitte 15 Minuten warten.")
+            return render_template("login_code.html")
+        benutzer = lade_benutzer()
+        b = benutzer.get(name)
+        if b and b.get("totp") and zweiter_faktor_ok(b, request.form.get("code", "")):
+            json_speichern(BENUTZER_DATEI, benutzer)
+            session.clear()
+            session["benutzer"], session["admin"] = name, True
+            session["csrf"] = secrets.token_hex(16)
+            if not b.get("ersatz"):
+                flash("Hinweis: Du hast keine Ersatzcodes mehr – bitte unter Einstellungen neue erzeugen.")
+            return redirect(url_for("admin"))
+        merken("login_code")
+        flash("Code falsch oder abgelaufen.")
+    return render_template("login_code.html")
 
 
 @app.route("/impressum")
@@ -2705,6 +2790,37 @@ def einstellungen():
                 threading.Thread(target=neustarten, daemon=True).start()
                 return render_template("neustart.html")
             flash("Update installiert. Bitte den Server neu starten, damit es aktiv wird.")
+        elif aktion in ("2fa_start", "2fa_bestaetigen", "2fa_aus", "2fa_ersatz"):
+            benutzer = lade_benutzer()
+            ich = benutzer.get(session["benutzer"])
+            if aktion == "2fa_start":
+                session["zfa_neu"] = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+            elif aktion == "2fa_bestaetigen":
+                geheim = session.get("zfa_neu", "")
+                z = totp_pruefen(geheim, request.form.get("code", ""))
+                if not geheim or z is None:
+                    flash("Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben (er wechselt alle 30 Sekunden).")
+                else:
+                    codes = ersatz_neu()
+                    ich.update(totp=geheim, totp_zuletzt=z, ersatz=[ersatz_hash(c) for c in codes])
+                    json_speichern(BENUTZER_DATEI, benutzer)
+                    session.pop("zfa_neu", None)
+                    session["ersatz_anzeigen"] = codes
+                    flash("Zwei-Faktor-Anmeldung ist aktiv. Bitte die Ersatzcodes jetzt aufschreiben oder ausdrucken.")
+            elif not check_password_hash(ich["pw"], request.form.get("pw", "")) or not zweiter_faktor_ok(ich, request.form.get("code", "")):
+                flash("Passwort oder Code stimmt nicht.")
+            elif aktion == "2fa_aus":
+                for k in ("totp", "totp_zuletzt", "ersatz"):
+                    ich.pop(k, None)
+                json_speichern(BENUTZER_DATEI, benutzer)
+                flash("Zwei-Faktor-Anmeldung ist aus.")
+            else:
+                codes = ersatz_neu()
+                ich["ersatz"] = [ersatz_hash(c) for c in codes]
+                json_speichern(BENUTZER_DATEI, benutzer)
+                session["ersatz_anzeigen"] = codes
+                flash("Neue Ersatzcodes erzeugt – die alten gelten nicht mehr.")
+            return redirect(url_for("einstellungen") + "#zfa")
         elif aktion == "passwort":
             benutzer = lade_benutzer()
             ich = benutzer.get(session["benutzer"])
@@ -2724,8 +2840,15 @@ def einstellungen():
         v = version()
     except Exception:
         v = {}
+    ich = lade_benutzer().get(session["benutzer"], {})
+    zfa_neu = session.get("zfa_neu") if not ich.get("totp") else None
+    uri = (f"otpauth://totp/{urllib.parse.quote(PROGRAMM_NAME + ':' + session['benutzer'])}?secret={zfa_neu}"
+           f"&issuer={urllib.parse.quote(PROGRAMM_NAME)}&digits=6&period=30") if zfa_neu else ""
     return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
-                           rechtliches=RECHTLICHES,
+                           rechtliches=RECHTLICHES, zfa_aktiv=bool(ich.get("totp")), zfa_ersatz_rest=len(ich.get("ersatz", [])),
+                           zfa_neu=zfa_neu, zfa_qr=qr_svg(uri) if uri else None,
+                           zfa_geheim=" ".join(zfa_neu[i:i + 4] for i in range(0, len(zfa_neu), 4)) if zfa_neu else "",
+                           ersatz_anzeigen=session.pop("ersatz_anzeigen", None),
                            version=v, update_liste=session.get("update_liste"))
 
 
@@ -2953,6 +3076,18 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <input type="text" name="name" placeholder="Benutzername" autofocus>
 <input type="password" name="pw" placeholder="Passwort">
 <button class="btn" style="width:100%">Anmelden</button></form></div>
+{% endblock %}""",
+
+"login_code.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte" style="max-width:380px;margin:40px auto">
+<h1>Bestätigungscode</h1>
+<p class="leise">Öffne deine Authenticator-App und gib den 6-stelligen Code für OneClick Solutions ein.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}">
+<input type="text" name="code" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" maxlength="9" autofocus
+ style="font-size:24px;letter-spacing:6px;text-align:center">
+<button class="btn" style="width:100%">Bestätigen</button></form>
+<p class="leise" style="font-size:13px;margin-top:12px">Handy nicht da? Einen deiner Ersatzcodes eingeben (z. B. a1b2-c3d4).</p>
+<p style="font-size:13px"><a href="{{ url_for('login') }}">← Zurück zur Anmeldung</a></p></div>
 {% endblock %}""",
 
 "auftrag.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -3733,6 +3868,36 @@ Ablauf: Kunde bestellt → du gibst frei → Kunde bezahlt bei Stripe → Downlo
 {% else %}<p class="leise">Updates per Knopf gibt es nur auf dem Server (Installation über das Installations-Skript).</p>{% endif %}
 </div>
 
+<div class="karte" id="zfa"><h2>Zwei-Faktor-Anmeldung</h2>
+{% if ersatz_anzeigen %}<div class="hinweis" style="border-color:#2fd35a"><b>Deine Ersatzcodes</b> – jeder funktioniert genau einmal, falls das Handy weg ist.
+Jetzt aufschreiben oder ausdrucken, sie werden nicht nochmal angezeigt:
+<div style="display:grid;grid-template-columns:repeat(4,max-content);gap:8px 22px;margin:10px 0;font:600 17px ui-monospace,monospace">
+{% for c in ersatz_anzeigen %}<span>{{ c }}</span>{% endfor %}</div>
+<button type="button" class="btn grau klein" onclick="window.print()">Drucken</button></div>{% endif %}
+{% if zfa_aktiv %}
+<p><span class="status s-FREIGEGEBEN">Aktiv</span> &nbsp;Beim Anmelden wird nach dem Passwort ein Code aus deiner Authenticator-App abgefragt.
+<span class="leise">Noch {{ zfa_ersatz_rest }} Ersatzcode(s) übrig.</span></p>
+<form method="post" style="max-width:420px;margin-top:12px"><input type="hidden" name="csrf" value="{{ session.csrf }}">
+<input type="password" name="pw" placeholder="Passwort" autocomplete="current-password">
+<input type="text" name="code" placeholder="Code aus der App (oder Ersatzcode)" inputmode="numeric" autocomplete="one-time-code">
+<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn grau" name="aktion" value="2fa_ersatz">Neue Ersatzcodes</button>
+<button class="btn" name="aktion" value="2fa_aus" onclick="return confirm('Zwei-Faktor-Anmeldung wirklich ausschalten?')">Ausschalten</button></div></form>
+{% elif zfa_neu %}
+<p><b>1.</b> Authenticator-App öffnen (z. B. Google Authenticator, Microsoft Authenticator) → „+“ → QR-Code scannen:</p>
+{% if zfa_qr %}<div style="background:#fff;display:inline-block;padding:8px;border-radius:12px;margin:6px 0 10px" id="zfa-qr">{{ zfa_qr|safe }}</div>{% endif %}
+<p class="leise">Oder Schlüssel von Hand eingeben: <code style="font-size:16px;user-select:all">{{ zfa_geheim }}</code></p>
+<p style="margin-top:12px"><b>2.</b> Den 6-stelligen Code aus der App eingeben:</p>
+<form method="post" style="max-width:420px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="2fa_bestaetigen">
+<input type="text" name="code" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" maxlength="7" autofocus>
+<button class="btn gruen">Aktivieren</button></form>
+{% else %}
+<p class="leise">Schützt den Admin-Bereich zusätzlich: Selbst wer dein Passwort kennt, kommt ohne dein Handy nicht rein.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="2fa_start">
+<button class="btn">Einrichten</button></form>
+{% endif %}
+<div class="hinweis">Notfall (Handy und Ersatzcodes weg): auf dem Server <code>cd /opt/oneclick/app &amp;&amp; sudo -u oneclick ../venv/bin/python app.py 2fa-aus {{ session.benutzer }}</code> ausführen.</div>
+</div>
+
 <div class="karte"><h2>Passwort ändern</h2>
 <form method="post" style="max-width:420px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="passwort">
 <input type="password" name="alt" placeholder="Aktuelles Passwort" autocomplete="current-password">
@@ -3801,6 +3966,15 @@ if __name__ == "__main__":
     befehl = sys.argv[1] if len(sys.argv) > 1 else ""
     if befehl == "admin" and len(sys.argv) >= 3:
         admin_anlegen(sys.argv[2])
+    elif befehl == "2fa-aus" and len(sys.argv) >= 3:
+        benutzer = lade_benutzer()
+        if sys.argv[2] in benutzer:
+            for k in ("totp", "totp_zuletzt", "ersatz"):
+                benutzer[sys.argv[2]].pop(k, None)
+            json_speichern(BENUTZER_DATEI, benutzer)
+            print(f"Zwei-Faktor-Anmeldung für {sys.argv[2]} ist aus. Bitte danach neu einrichten.")
+        else:
+            print("Benutzer nicht gefunden:", ", ".join(benutzer))
     elif befehl == "telegram-id":
         telegram_id()
     elif befehl == "telegram-test":

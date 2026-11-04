@@ -6,6 +6,7 @@ Automatische Tests. Ausfuehren im Projektordner:
 Arbeiten komplett in einem temporaeren Ordner, echte Daten werden nicht angefasst.
 """
 
+import base64
 import html
 import io
 import json
@@ -597,6 +598,70 @@ class WebTests(Basis):
         self.assertIn("💬 Chat", a.get("/admin").text)
         # Admin-Ticketseite verlinkt den Auftrag
         self.assertIn(f"/auftrag/{aid}", a.get(f"/admin/ticket/{tid}").text)
+
+    def test_zwei_faktor_anmeldung(self):
+        a = self.admin()
+        csrf = lambda c: c.session_transaction().__enter__()["csrf"]
+        # einrichten: Schluessel + QR-Code, dann mit Code aus der "App" bestaetigen
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "2fa_start"})
+        seite = a.get("/admin/einstellungen").text
+        self.assertIn("<svg", seite)
+        with a.session_transaction() as s:
+            geheim = s["zfa_neu"]
+        jetzt = int(time.time() // 30)
+        self.assertIn("stimmt nicht", a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "2fa_bestaetigen", "code": "000000"},
+                                             follow_redirects=True).text)
+        seite = html.unescape(a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "2fa_bestaetigen",
+                                                                   "code": A.totp_code(geheim, jetzt)}, follow_redirects=True).text)
+        self.assertIn("Deine Ersatzcodes", seite)
+        ersatz = re.findall(r"<span>([0-9a-f]{4}-[0-9a-f]{4})</span>", seite)
+        self.assertEqual(len(ersatz), 8)
+        b = A.lade_benutzer()["chef"]
+        self.assertEqual((b["totp"], len(b["ersatz"])), (geheim, 8))
+        self.assertNotIn(ersatz[0], json.dumps(b))                    # nur Hashes gespeichert
+        self.assertNotIn("Deine Ersatzcodes", a.get("/admin/einstellungen").text)   # nur einmal angezeigt
+        # Anmelden: Passwort allein reicht nicht mehr
+        c = self.client()
+        r = c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
+        self.assertIn("/login/code", r.headers["Location"])
+        self.assertEqual(c.get("/admin").status_code, 302)                  # noch nicht drin
+        k = csrf(c)
+        self.assertIn("falsch", c.post("/login/code", data={"csrf": k, "code": "123456"}).text)
+        self.assertEqual(c.get("/admin").status_code, 302)
+        A.versuche.clear()
+        # derselbe Code wie beim Einrichten gilt nicht nochmal; der naechste schon
+        self.assertIn("falsch", c.post("/login/code", data={"csrf": k, "code": A.totp_code(geheim, jetzt)}).text)
+        r = c.post("/login/code", data={"csrf": k, "code": A.totp_code(geheim, jetzt + 1)})
+        self.assertTrue(r.headers["Location"].endswith("/admin"))
+        self.assertEqual(c.get("/admin").status_code, 200)
+        # Ersatzcode funktioniert genau einmal (auch in Grossbuchstaben / ohne Strich)
+        for versuch, ok in [(ersatz[0].upper().replace("-", ""), True), (ersatz[0], False)]:
+            d = self.client(); d.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": d.csrf})
+            r = d.post("/login/code", data={"csrf": csrf(d), "code": versuch})
+            self.assertEqual(r.status_code == 302 and r.headers["Location"].endswith("/admin"), ok)
+        A.versuche.clear()
+        # Code-Seite ohne vorheriges Passwort -> zurueck zum Login
+        self.assertIn("/login", self.client().get("/login/code").headers["Location"])
+        # Raten wird gebremst
+        e = self.client(); e.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": e.csrf})
+        for _ in range(6):
+            t = e.post("/login/code", data={"csrf": csrf(e), "code": "999999"}).text
+        self.assertIn("Zu viele", t)
+        A.versuche.clear()
+        # Ausschalten nur mit Passwort + Code
+        self.assertIn("stimmt nicht", c.post("/admin/einstellungen", data={"csrf": csrf(c), "aktion": "2fa_aus", "pw": "falsch",
+                                                                           "code": A.totp_code(geheim, jetzt + 2)}, follow_redirects=True).text)
+        c.post("/admin/einstellungen", data={"csrf": csrf(c), "aktion": "2fa_aus", "pw": "Geheim123", "code": ersatz[1]})
+        self.assertNotIn("totp", A.lade_benutzer()["chef"])
+        f = self.client()
+        self.assertTrue(f.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": f.csrf}).headers["Location"].endswith("/admin"))
+
+    def test_totp_rfc_testwerte(self):
+        g = base64.b32encode(b"12345678901234567890").decode().rstrip("=")
+        self.assertEqual(A.totp_code(g, 59 // 30), "287082")
+        self.assertEqual(A.totp_code(g, 1111111109 // 30), "081804")
+        self.assertEqual(A.totp_pruefen(g, "287 082", 0, jetzt=59), 1)
+        self.assertIsNone(A.totp_pruefen(g, "287082", 1, jetzt=59))      # schon benutzt
 
     def test_rechtstexte_im_programm_mit_zurueck(self):
         for url in ["/impressum", "/datenschutz", "/agb", "/widerruf", "/haftung"]:

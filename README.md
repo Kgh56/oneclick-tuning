@@ -154,6 +154,17 @@ Kunden nutzen OneClick **nur** über das Programm **OneClick Solutions** (`progr
   Hochladen geht im Browser nicht, die Kunden-Schnittstelle (`/api/...`) antwortet nur dem Programm.
   Im Browser gibt es sonst nur noch den Admin-Bereich (`/login`) und die Rechtstexte.
 
+## Zwei-Faktor-Anmeldung (Admin)
+
+Unter **Einstellungen → Zwei-Faktor-Anmeldung → Einrichten** den QR-Code mit einer Authenticator-App scannen
+(Google/Microsoft Authenticator o. Ä.) und den Code eingeben. Danach fragt der Login nach dem Passwort zusätzlich
+den 6-stelligen Code ab. Beim Einrichten gibt es **8 Ersatzcodes** (je einmal gültig) – aufschreiben!
+Notfall ohne Handy und Ersatzcodes, auf dem Server:
+
+```bash
+cd /opt/oneclick/app && sudo -u oneclick ../venv/bin/python app.py 2fa-aus <benutzername>
+```
+
 ## Support-Tickets (statt WhatsApp)
 
 Kunden öffnen im Programm unter **Support** ein Ticket (oder über „Problem?“ an einem Auftrag) – mit Thema,
