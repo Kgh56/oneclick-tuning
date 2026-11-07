@@ -2971,7 +2971,7 @@ def einstellungen():
     zfa_neu = session.get("zfa_neu") if not ich.get("totp") else None
     uri = (f"otpauth://totp/{urllib.parse.quote(PROGRAMM_NAME + ':' + session['benutzer'])}?secret={zfa_neu}"
            f"&issuer={urllib.parse.quote(PROGRAMM_NAME)}&digits=6&period=30") if zfa_neu else ""
-    return render_template("einstellungen.html", cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
+    return render_template("einstellungen.html", homepage_status=homepage_status, cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
                            rechtliches=RECHTLICHES, zfa_aktiv=bool(ich.get("totp")), zfa_ersatz_rest=len(ich.get("ersatz", [])),
                            zfa_neu=zfa_neu, zfa_qr=qr_svg(uri) if uri else None,
                            zfa_geheim=" ".join(zfa_neu[i:i + 4] for i in range(0, len(zfa_neu), 4)) if zfa_neu else "",
@@ -4071,6 +4071,7 @@ Ablauf: Kunde bestellt → du gibst frei → Kunde bezahlt bei Stripe → Downlo
 <form method="post" class="inline"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="update_pruefen">
 <button class="btn grau">Nach Updates suchen</button></form>
 <div class="hinweis">Archiv, Aufträge und Einstellungen bleiben beim Update erhalten. Die Seite ist dabei ein paar Sekunden nicht erreichbar.</div>
+<p class="leise" style="margin-top:10px">Homepage gh-mapping.de auf diesem Server: <b>{{ homepage_status.text }}</b>{% if homepage_status.zeit %} <span class="leise">(geprüft {{ homepage_status.zeit }})</span>{% endif %}</p>
 {% else %}<p class="leise">Updates per Knopf gibt es nur auf dem Server (Installation über das Installations-Skript).</p>{% endif %}
 </div>
 
@@ -4157,6 +4158,90 @@ def telegram_id():
     print('-> in config.json bei "telegram_chat_id" eintragen.')
 
 
+# ---------------------------------------------------------------------------
+# Homepage gh-mapping.de: liegt in homepage/seite und wird von Caddy ausgeliefert.
+# Damit dafuer kein SSH-Zugang noetig ist, meldet der Server sie selbst ueber die
+# lokale Caddy-Steuerung (nur auf dem Server selbst erreichbar) an - beim Start und
+# danach alle 5 Minuten (Caddy vergisst das bei einem eigenen Neustart).
+HOMEPAGE_CADDY = Path(__file__).resolve().parent / "homepage" / "homepage.caddy"
+CADDY_API = "http://localhost:2019"
+homepage_status = {"text": "noch nicht geprüft"}
+
+
+def _caddy(methode, pfad, daten=None):
+    req = urllib.request.Request(CADDY_API + pfad, method=methode,
+                                 data=None if daten is None else json.dumps(daten).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        inhalt = r.read()
+    return json.loads(inhalt) if inhalt.strip() else None
+
+
+def _hosts_in(routen):
+    gefunden = set()
+    for r in routen or []:
+        for m in r.get("match") or []:
+            gefunden.update(m.get("host") or [])
+    return gefunden
+
+
+def homepage_anmelden():
+    """Traegt die Homepage in den laufenden Caddy ein, falls sie dort fehlt. Gibt den Status als Text zurueck."""
+    if not HOMEPAGE_CADDY.exists() or not shutil.which("caddy"):
+        return "kein Caddy auf diesem Rechner"
+    try:
+        server = _caddy("GET", "/config/apps/http/servers") or {}
+    except (urllib.error.URLError, OSError, ValueError):
+        return "Caddy-Steuerung nicht erreichbar"
+    name = next((n for n, s in server.items() if ":443" in (s.get("listen") or [])), None)
+    if not name:
+        return "kein HTTPS-Server in Caddy gefunden"
+    if "gh-mapping.de" in _hosts_in(server[name].get("routes")):
+        return "aktiv"
+    erg = subprocess.run(["caddy", "adapt", "--config", str(HOMEPAGE_CADDY), "--adapter", "caddyfile"],
+                         capture_output=True, text=True, timeout=30)
+    if erg.returncode != 0:
+        return "Fehler in homepage.caddy: " + erg.stderr.strip()[-200:]
+    neu = next(iter(json.loads(erg.stdout)["apps"]["http"]["servers"].values()))
+    # Caddy (Benutzer caddy) muss die Dateien lesen koennen
+    seite = HOMEPAGE_CADDY.parent / "seite"
+    for ordner in (seite.parent.parent.parent, seite.parent.parent, seite.parent):
+        try:
+            os.chmod(ordner, os.stat(ordner).st_mode | 0o001)
+        except OSError:
+            pass
+    for wurzel, ordner, dateien in os.walk(seite):
+        for n in ordner:
+            os.chmod(os.path.join(wurzel, n), 0o755)
+        for n in dateien:
+            os.chmod(os.path.join(wurzel, n), 0o644)
+    basis = f"/config/apps/http/servers/{name}"
+    try:
+        _caddy("POST", basis + "/routes/...", neu["routes"])
+        fehler = (neu.get("errors") or {}).get("routes") or []
+        if fehler:
+            if server[name].get("errors"):
+                _caddy("POST", basis + "/errors/routes/...", fehler)
+            else:
+                _caddy("PUT", basis + "/errors", {"routes": fehler})
+    except urllib.error.HTTPError as e:
+        return f"Caddy hat abgelehnt: {e.read().decode(errors='replace')[:200]}"
+    except (urllib.error.URLError, OSError) as e:
+        return f"Caddy-Fehler: {e}"
+    print("Homepage gh-mapping.de bei Caddy angemeldet.")
+    return "aktiv (gerade angemeldet)"
+
+
+def homepage_schleife():
+    while True:
+        try:
+            homepage_status["text"] = homepage_anmelden()
+        except Exception as e:  # nie den Server stoeren
+            homepage_status["text"] = f"Fehler: {e}"
+        homepage_status["zeit"] = datetime.now().strftime("%d.%m. %H:%M")
+        time.sleep(300)
+
+
 def einmalige_anpassungen():
     """Aenderungen, die genau einmal beim Server-Start passieren sollen (danach entscheidet der Admin)."""
     erledigt = lade_config().get("erledigt", [])
@@ -4192,6 +4277,7 @@ if __name__ == "__main__":
         einmalige_anpassungen()
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
+        threading.Thread(target=homepage_schleife, daemon=True).start()
         host = os.environ.get("ONECLICK_HOST", "0.0.0.0")
         app.config["SESSION_COOKIE_SECURE"] = lade_config().get("basis_url", "").startswith("https://")
         try:
