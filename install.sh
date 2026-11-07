@@ -102,6 +102,8 @@ $DOMAIN {
 	reverse_proxy 127.0.0.1:5000
 }
 EOF
+# Homepage (homepage/einrichten.sh) beim erneuten Installieren beibehalten
+[ -f /etc/caddy/homepage.caddy ] && printf '\nimport /etc/caddy/homepage.caddy\n' >> /etc/caddy/Caddyfile
 
 # ---------------------------------------------------------------------------
 gruen "5/7  Firewall"

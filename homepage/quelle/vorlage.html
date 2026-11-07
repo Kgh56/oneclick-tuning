@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chiptuning-Files &amp; Kennfeldoptimierung aus WinOLS | GH-MAPPING</title>
+<meta name="description" content="Chiptuning-Files aus lizenziertem WinOLS 5: Stage 1, Getriebe, Pop &amp; Bang, Rückrüsten. Bestellen über OneClick für Windows &amp; Mac, Archiv-Files sofort.">
+<meta name="theme-color" content="#0e0e0f">
+<meta name="google-site-verification" content="OaHe9xBlosN7DRknNmt-APn0EBYUEJZVsHNQqlQA3SI" />
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="author" content="GH-MAPPING">
+<link rel="canonical" href="https://gh-mapping.de/">
+<link rel="alternate" hreflang="de" href="https://gh-mapping.de/">
+<link rel="alternate" hreflang="x-default" href="https://gh-mapping.de/">
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/archivo.woff" as="font" type="font/woff" crossorigin>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="GH-MAPPING">
+<meta property="og:locale" content="de_DE">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:url" content="https://gh-mapping.de/">
+<meta property="og:title" content="Chiptuning-Files vom Profi | GH-MAPPING">
+<meta property="og:description" content="Chiptuning-Files aus WinOLS 5. Bestellung über das eigene Programm OneClick Solutions für Windows und Mac.">
+<meta property="og:image" content="https://gh-mapping.de/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Chiptuning-Files vom Profi | GH-MAPPING">
+<meta property="og:image:alt" content="GH-MAPPING – Chiptuning-Files aus WinOLS 5">
+<meta name="twitter:image" content="https://gh-mapping.de/og-image.png">
+<!--JSONLD-->
+<style>
+@font-face{font-family:"Archivo";font-style:normal;font-weight:400 900;font-stretch:100% 125%;font-display:swap;src:url(/fonts/archivo.woff) format("woff")}
+@font-face{font-family:"Plex Mono";font-style:normal;font-weight:400 500;font-display:swap;src:url(/fonts/plex-mono.woff) format("woff")}
+:root{
+  --schwarz:#0e0e0f;--graphit:#17171a;--graphit2:#202024;--linie:#2c2c31;--linie-hell:#d9d5cc;
+  --papier:#f3f1ec;--papier2:#e9e6df;--text:#ecebe7;--text-dunkel:#141416;--grau:#9a9893;--grau-dunkel:#5d5b57;
+  --rot:#e3231b;--rot-dunkel:#b8170f;
+  --rand:clamp(20px,5vw,72px);--max:1320px;
+  --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:84px}
+body{background:var(--schwarz);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.6;font-stretch:100%;overflow-x:hidden}
+img{max-width:100%;height:auto;display:block}
+a{color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 var(--rand)}
+.mono{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase}
+.rot{color:var(--rot)}
+h1,h2,h3{font-weight:800;font-stretch:118%;letter-spacing:-.01em;line-height:1.02}
+h2{font-size:clamp(34px,5vw,64px)}
+h3{font-size:22px;font-stretch:110%;letter-spacing:0;line-height:1.2}
+p{max-width:62ch}
+::selection{background:var(--rot);color:#fff}
+:focus-visible{outline:2px solid var(--rot);outline-offset:3px}
+
+/* ---------- Kopfzeile ---------- */
+.kopf{position:fixed;inset:0 0 auto;z-index:50;transition:background .25s,border-color .25s;border-bottom:1px solid transparent}
+.kopf.fest{background:rgba(14,14,15,.92);backdrop-filter:saturate(140%) blur(10px);-webkit-backdrop-filter:saturate(140%) blur(10px);border-bottom-color:var(--linie)}
+.kopf .wrap{display:flex;align-items:center;gap:28px;height:72px}
+.marke img{height:30px;width:auto}
+.nav{display:flex;gap:26px;margin-left:auto;font-size:14.5px;font-weight:500}
+.nav a{text-decoration:none;color:#c9c7c1;transition:color .15s}
+.nav a:hover{color:#fff}
+.sprache{display:flex;border:1px solid var(--linie);border-radius:3px;overflow:hidden}
+.sprache button{font-family:var(--mono);font-size:12px;padding:6px 9px;color:var(--grau)}
+.sprache button[aria-pressed=true]{background:#fff;color:var(--schwarz)}
+.knopf{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:3px;font-weight:700;font-size:15px;text-decoration:none;
+  transition:background .15s,color .15s,border-color .15s;white-space:nowrap;border:1px solid transparent}
+.knopf.rot{background:var(--rot);color:#fff}
+.knopf.rot:hover{background:var(--rot-dunkel)}
+.knopf.rahmen{border-color:#4a4a50;color:#fff}
+.knopf.rahmen:hover{border-color:#fff}
+.knopf.dunkel{background:var(--text-dunkel);color:#fff}
+.knopf.dunkel:hover{background:#000}
+.knopf svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.kopf .knopf{padding:10px 16px;font-size:14px}
+.menue{display:none;width:40px;height:40px;margin-left:auto;align-items:center;justify-content:center}
+.menue span,.menue span::before,.menue span::after{display:block;width:20px;height:2px;background:#fff;position:relative;transition:transform .2s}
+.menue span::before,.menue span::after{content:"";position:absolute;left:0}
+.menue span::before{top:-6px}.menue span::after{top:6px}
+.menue[aria-expanded=true] span{background:transparent}
+.menue[aria-expanded=true] span::before{transform:translateY(6px) rotate(45deg)}
+.menue[aria-expanded=true] span::after{transform:translateY(-6px) rotate(-45deg)}
+
+/* ---------- Hero ---------- */
+.hero{padding:150px 0 0;position:relative;border-bottom:1px solid var(--linie)}
+.hero-raster{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:clamp(32px,5vw,80px);align-items:end}
+.hero .ueber{display:flex;gap:14px;align-items:center;color:var(--grau);margin-bottom:28px}
+.hero .ueber::before{content:"";width:28px;height:2px;background:var(--rot)}
+.hero h1{font-size:clamp(40px,4.9vw,76px);font-stretch:125%;letter-spacing:-.02em;line-height:.95;text-transform:uppercase}
+.hero h1 em{font-style:normal;color:var(--rot)}
+.hero .lead{font-size:clamp(17px,1.5vw,20px);color:#c9c7c1;margin:30px 0 36px;max-width:52ch}
+.hero .aktionen{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:64px}
+.hero-bild{position:relative;align-self:stretch;min-height:520px;border:1px solid var(--linie);border-bottom:0;overflow:hidden;background:#0a0a0b}
+.hero-bild img{width:100%;height:100%;object-fit:cover;object-position:top left;filter:saturate(.9)}
+.hero-bild figcaption{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;gap:12px;padding:14px 16px;
+  background:linear-gradient(transparent,rgba(0,0,0,.85) 40%);color:#c9c7c1}
+.daten{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--linie)}
+.daten div{padding:22px 24px 24px 0;border-right:1px solid var(--linie)}
+.daten div+div{padding-left:24px}
+.daten div:last-child{border-right:0}
+.daten b{display:block;font-size:17px;font-weight:700;font-stretch:110%;margin-top:6px}
+.daten .mono{color:var(--grau)}
+
+/* ---------- Abschnitte ---------- */
+.abschnitt{padding:clamp(80px,10vw,140px) 0;position:relative}
+.hell{background:var(--papier);color:var(--text-dunkel)}
+.hell .grau,.hell .mono.grau{color:var(--grau-dunkel)}
+.kapitel{display:flex;gap:16px;align-items:baseline;margin-bottom:22px;color:var(--grau)}
+.hell .kapitel{color:var(--grau-dunkel)}
+.kapitel b{color:var(--rot);font-weight:500}
+.kopfzeile{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:end;margin-bottom:clamp(40px,6vw,72px)}
+.kopfzeile p{color:var(--grau);font-size:18px}
+.hell .kopfzeile p{color:var(--grau-dunkel)}
+
+/* Leistungen als Datenblatt */
+.datenblatt{border-top:2px solid var(--text-dunkel)}
+.zeile{display:grid;grid-template-columns:70px minmax(0,1.1fr) minmax(0,1.4fr) minmax(0,.9fr);gap:24px;padding:28px 0;border-bottom:1px solid var(--linie-hell);align-items:baseline}
+.zeile .nr{font-family:var(--mono);font-size:13px;color:var(--grau-dunkel)}
+.zeile h3{font-size:clamp(22px,2.2vw,30px)}
+.zeile p{color:#3d3b37}
+.zeile .fuer{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--grau-dunkel);text-align:right}
+.zeile .fuer i{font-style:normal;color:var(--rot)}
+.fussnote{margin-top:22px;font-size:14px;color:var(--grau-dunkel)}
+
+/* Werkstatt / WinOLS */
+.werkstatt-raster{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:clamp(36px,6vw,96px);align-items:start}
+.screenshot{border:1px solid var(--linie);background:#000;position:relative}
+.screenshot .titel{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--linie);color:var(--grau)}
+.screenshot .titel i{width:9px;height:9px;border-radius:50%;background:#3a3a40}
+.screenshot .titel span{margin-left:8px}
+.screenshot img{width:100%;height:auto}
+.liste-nummern{list-style:none;counter-reset:n;border-top:1px solid var(--linie);margin:34px 0}
+.liste-nummern li{counter-increment:n;display:grid;grid-template-columns:48px 1fr auto;gap:14px;padding:16px 0;border-bottom:1px solid var(--linie);align-items:baseline}
+.liste-nummern li::before{content:counter(n,decimal-leading-zero);font-family:var(--mono);font-size:12.5px;color:var(--rot)}
+.liste-nummern b{font-weight:600}
+.liste-nummern span{font-family:var(--mono);font-size:12px;color:var(--grau)}
+.zitat{font-size:clamp(22px,2.4vw,30px);font-weight:700;font-stretch:112%;line-height:1.25;max-width:24ch;margin-bottom:22px}
+.textlink{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;border-bottom:1px solid currentColor;padding-bottom:2px}
+.textlink svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+
+/* Ablauf */
+.schritte{display:grid;grid-template-columns:repeat(4,1fr);border-top:2px solid var(--text-dunkel)}
+.schritt{padding:26px 26px 0 0;border-right:1px solid var(--linie-hell);min-height:240px}
+.schritt+.schritt{padding-left:26px}
+.schritt:last-child{border-right:0}
+.schritt .mono{color:var(--rot)}
+.schritt h3{margin:18px 0 12px;font-size:21px}
+.schritt p{color:#3d3b37;font-size:16px}
+.hinweisband{margin-top:48px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:22px 26px;background:var(--papier2);border-left:3px solid var(--rot)}
+.hinweisband p{flex:1;min-width:260px}
+
+/* OneClick */
+.oc-raster{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(36px,5vw,80px);align-items:center}
+.merkmale{list-style:none;margin:32px 0 36px;border-top:1px solid var(--linie)}
+.merkmale li{display:flex;gap:16px;padding:15px 0;border-bottom:1px solid var(--linie)}
+.merkmale li::before{content:"";flex:none;width:7px;height:7px;margin-top:10px;background:var(--rot)}
+.merkmale b{font-weight:600;color:#fff}
+.merkmale span{color:var(--grau)}
+.geraet{border:1px solid var(--linie);background:#000;padding:10px 10px 0;border-radius:6px 6px 0 0;box-shadow:0 40px 80px rgba(0,0,0,.45)}
+.geraet img{border-radius:3px 3px 0 0}
+#oneclick{overflow:hidden}
+.geraet-fuss{height:14px;background:#1d1d21;border:1px solid var(--linie);border-top:0;border-radius:0 0 10px 10px;margin:0 -24px}
+.galerie{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:clamp(48px,6vw,80px)}
+.galerie figure{margin:0}
+.galerie img{border:1px solid var(--linie);aspect-ratio:16/10;object-fit:cover;object-position:top left;transition:border-color .15s}
+.galerie a:hover img{border-color:#6a6a70}
+.galerie figcaption{margin-top:10px;color:var(--grau);font-size:14px}
+.galerie figcaption .mono{color:var(--rot);margin-right:6px}
+.download-zeile{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.download-zeile .mono{color:var(--grau)}
+
+/* Flex */
+.flex-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(36px,6vw,96px)}
+.flex-karte{border:1px solid var(--linie-hell);background:#fff;padding:34px}
+.flex-karte dl{display:grid;grid-template-columns:auto 1fr;gap:12px 24px;margin:20px 0 28px}
+.flex-karte dt{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--grau-dunkel);padding-top:3px}
+.flex-karte dd{font-weight:600}
+
+/* FAQ */
+.faq-raster{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr);gap:clamp(36px,6vw,96px)}
+.frage{border-bottom:1px solid var(--linie)}
+.frage:first-child{border-top:1px solid var(--linie)}
+.frage h3{font-size:inherit;font-stretch:100%;line-height:inherit;font-weight:inherit;letter-spacing:0}
+.frage button{width:100%;display:flex;justify-content:space-between;gap:20px;padding:22px 0;text-align:left;font-size:18px;font-weight:600}
+.frage button::after{content:"+";font-family:var(--mono);font-size:22px;line-height:1;color:var(--grau);transition:transform .2s}
+.frage button[aria-expanded=true]::after{transform:rotate(45deg);color:var(--rot)}
+.frage .antwort{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s}
+.frage .antwort>div{overflow:hidden}
+.frage.auf .antwort{grid-template-rows:1fr}
+.frage .antwort p{color:#bdbbb5;padding-bottom:22px}
+.frage .antwort a{color:#fff}
+
+/* Kontakt */
+.kontakt{background:var(--rot);color:#fff;padding:clamp(70px,9vw,120px) 0}
+.kontakt-raster{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:48px;align-items:end}
+.kontakt h2{font-size:clamp(40px,6vw,84px);text-transform:uppercase;font-stretch:125%}
+.kontakt p{font-size:18px;margin-top:20px;color:#ffe9e7}
+.kontakt-wege{display:grid;gap:12px}
+.kontakt-wege a{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 20px;background:rgba(0,0,0,.18);text-decoration:none;font-weight:700;transition:background .15s}
+.kontakt-wege a:hover{background:rgba(0,0,0,.32)}
+.kontakt-wege .mono{opacity:.8;font-weight:400}
+
+/* Fuss */
+.fuss{padding:64px 0 40px;border-top:1px solid var(--linie);font-size:14.5px;color:var(--grau)}
+.fuss-raster{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px}
+.fuss img{height:26px;width:auto;margin-bottom:18px}
+.fuss h4{font-family:var(--mono);font-weight:400;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6d6b66;margin-bottom:14px}
+.fuss ul{list-style:none;display:grid;gap:8px}
+.fuss a{text-decoration:none}.fuss a:hover{color:#fff}
+.fuss .unten{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:56px;padding-top:22px;border-top:1px solid var(--linie);font-size:13px;color:#6d6b66}
+
+/* WhatsApp */
+.wa{position:fixed;right:20px;bottom:20px;z-index:40;display:flex;align-items:center;gap:10px;padding:12px 16px 12px 14px;background:#1b1b1e;border:1px solid var(--linie);
+  border-radius:40px;text-decoration:none;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.4);transition:border-color .15s}
+.wa:hover{border-color:#25d366}
+.wa svg{width:20px;height:20px;fill:#25d366}
+
+/* Rechtliches (Overlay) */
+.recht{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;justify-content:flex-end}
+.recht[hidden]{display:none}
+.recht-box{width:min(760px,100%);height:100%;overflow:auto;background:var(--papier);color:var(--text-dunkel);padding:56px clamp(22px,5vw,56px) 80px;position:relative}
+.recht-box h2{font-size:clamp(30px,4vw,44px);margin-bottom:26px}
+.recht-box h3{font-size:18px;margin:28px 0 8px}
+.recht-box p{margin:0 0 12px;max-width:none;font-size:15.5px;color:#2d2b28}
+.recht-box a{color:var(--rot-dunkel)}
+.recht-zu{position:sticky;top:0;float:right;margin:-30px -10px 0 0;width:44px;height:44px;font-size:28px;line-height:1;background:var(--papier2);border-radius:50%}
+
+/* Einblenden */
+.rein{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .7s ease}
+.rein.da{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.rein{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1100px){
+  .nav{gap:18px;font-size:14px}
+  .daten{grid-template-columns:repeat(2,1fr)}
+  .daten div:nth-child(2){border-right:0}
+  .daten div:nth-child(3){padding-left:0;border-top:1px solid var(--linie)}
+  .daten div:nth-child(4){border-top:1px solid var(--linie)}
+  .galerie{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:900px){
+  .nav,.kopf .sprache,.kopf .knopf{display:none}
+  .menue{display:flex}
+  .kopf.offen{background:var(--schwarz)}
+  .kopf.offen .nav{display:flex;position:absolute;top:72px;left:0;right:0;flex-direction:column;gap:0;background:var(--schwarz);border-bottom:1px solid var(--linie);padding:8px var(--rand) 22px}
+  .kopf.offen .nav a{padding:14px 0;border-bottom:1px solid var(--linie);font-size:17px}
+  .kopf.offen .nav .nav-mobil{display:flex}
+  .hero{padding-top:120px}
+  .hero-raster,.werkstatt-raster,.oc-raster,.flex-raster,.faq-raster,.kontakt-raster,.kopfzeile{grid-template-columns:1fr}
+  .screenshot img{max-height:560px;object-fit:cover;object-position:top left}
+  .hero-bild{min-height:380px;max-height:460px;border-bottom:1px solid var(--linie);margin-bottom:40px}
+  .hero .aktionen{margin-bottom:40px}
+  .zeile{grid-template-columns:44px 1fr;gap:6px 14px}
+  .zeile p,.zeile .fuer{grid-column:2;text-align:left}
+  .schritte{grid-template-columns:1fr 1fr}
+  .schritt{min-height:0;padding-bottom:26px}
+  .schritt:nth-child(2){border-right:0}
+  .schritt:nth-child(3){padding-left:0;border-top:1px solid var(--linie-hell)}
+  .schritt:nth-child(4){border-top:1px solid var(--linie-hell)}
+  .galerie{grid-template-columns:repeat(2,1fr)}
+  .fuss-raster{grid-template-columns:1fr 1fr}
+  .fuss-raster>div:first-child{grid-column:1/-1}
+}
+@media (max-width:560px){
+  body{font-size:16px}
+  .hero h1{font-size:10.4vw;font-stretch:112%}
+  h2{font-size:9.6vw}
+  .kontakt h2{font-size:11vw}
+  .daten{grid-template-columns:1fr}
+  .daten div,.daten div+div{padding:16px 0;border-right:0;border-top:1px solid var(--linie)}
+  .daten div:first-child{border-top:0}
+  .schritte{grid-template-columns:1fr}
+  .schritt,.schritt+.schritt{padding:22px 0;border-right:0;border-top:1px solid var(--linie-hell)}
+  .schritt:first-child{border-top:0}
+  .liste-nummern li{grid-template-columns:40px 1fr}
+  .liste-nummern li span{grid-column:2}
+  .wa span{display:none}
+  .wa{padding:13px}
+  .fuss-raster{grid-template-columns:1fr}
+}
+.nav-mobil{display:none;gap:12px;align-items:center;padding-top:18px}
+</style>
+</head>
+<body>
+
+<header class="kopf" id="kopf">
+  <div class="wrap">
+    <a class="marke" href="#top" aria-label="GH-MAPPING Startseite"><img src="/assets/logo.webp" width="720" height="99" alt="GH-MAPPING Chiptuning Solutions"></a>
+    <nav class="nav" id="nav" aria-label="Hauptmenü">
+      <a href="#leistungen" data-en="Services">Leistungen</a>
+      <a href="#werkstatt" data-en="Workshop">Werkstatt</a>
+      <a href="#ablauf" data-en="Process">Ablauf</a>
+      <a href="#oneclick">OneClick</a>
+      <a href="#flex">Flex</a>
+      <a href="#faq">FAQ</a>
+      <a href="#kontakt" data-en="Contact">Kontakt</a>
+      <div class="nav-mobil"><div class="sprache" role="group" aria-label="Sprache"><button type="button" data-lang="de" aria-pressed="true">DE</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div></div>
+    </nav>
+    <div class="sprache" role="group" aria-label="Sprache"><button type="button" data-lang="de" aria-pressed="true">DE</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+    <a class="knopf rot" href="https://oneclicksoulution.gh-mapping.de/" data-en="Get the program">Programm laden</a>
+    <button class="menue" id="menue" type="button" aria-label="Menü" aria-expanded="false" aria-controls="nav"><span></span></button>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-raster">
+      <div>
+        <p class="ueber mono" data-en="File service · Dierdorf, Germany">Fileservice · Dierdorf</p>
+        <h1 data-en-html="Chiptuning<br>files from<br><em>a pro.</em>">Chiptuning-<br>Files<br><em>vom Profi.</em></h1>
+        <p class="lead" data-en="Map optimisation for workshops and private customers from Dierdorf, Germany – built individually in a licensed WinOLS 5 environment, based on the original file of your vehicle.">Kennfeldoptimierung für Werkstätten und Privatkunden aus Dierdorf – individuell in einer lizenzierten WinOLS-5-Umgebung erstellt, auf Basis des Originals Ihres Fahrzeugs.</p>
+        <div class="aktionen">
+          <a class="knopf rot" href="https://oneclicksoulution.gh-mapping.de/"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span data-en="Download OneClick">OneClick laden</span></a>
+          <a class="knopf rahmen" href="#leistungen" data-en="View services">Leistungen ansehen</a>
+        </div>
+      </div>
+      <figure class="hero-bild">
+        <img src="/assets/winols-sq8.webp" width="973" height="1367" alt="WinOLS 5 – Projekt Audi SQ8 mit Kennfeldliste" fetchpriority="high">
+        <figcaption><span class="mono" data-en="WinOLS 5 · Project Audi SQ8">WinOLS 5 · Projekt Audi SQ8</span><span class="mono" data-en="1,149 maps">1.149 Kennfelder</span></figcaption>
+      </figure>
+    </div>
+    <div class="daten">
+      <div><span class="mono" data-en="Software">Software</span><b data-en="Licensed WinOLS 5">WinOLS 5, lizenziert</b></div>
+      <div><span class="mono" data-en="Ordering">Bestellung</span><b data-en="Own program, Windows &amp; Mac" data-en-html="Own program, Windows &amp; Mac">Eigenes Programm, Windows &amp; Mac</b></div>
+      <div><span class="mono" data-en="Archive files">Files aus dem Archiv</span><b data-en="Instant download, 24/7">Sofort-Download, 24/7</b></div>
+      <div><span class="mono" data-en="Support">Support</span><b data-en="Mon–Sat, 10 am – 8 pm">Mo–Sa, 10–20 Uhr</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="abschnitt hell" id="leistungen">
+  <div class="wrap">
+    <div class="kopfzeile rein">
+      <div><p class="kapitel mono"><b>01</b><span data-en="Services">Leistungen</span></p><h2 data-en="What we map">Was wir mappen</h2></div>
+      <p data-en="From a stock vehicle to custom requests: you tell us the goal, we deliver the matching file – checked and ready to flash.">Vom Serienfahrzeug bis zum Sonderwunsch: Sie nennen uns das Ziel, wir liefern das passende File – geprüft und bereit zum Aufspielen.</p>
+    </div>
+    <div class="datenblatt rein">
+      <div class="zeile"><span class="nr">01</span><h3>Stage 1</h3><p data-en="More power and torque for vehicles with stock hardware, tuned to engine and ECU.">Mehr Leistung und Drehmoment für Fahrzeuge mit Serienhardware, abgestimmt auf Motor und Steuergerät.</p><span class="fuer" data-en-html="Stock hardware">Serienhardware</span></div>
+      <div class="zeile"><span class="nr">02</span><h3 data-en="Gearbox / TCU">Getriebe / TCU</h3><p data-en="Shift points and torque limits for automatic and dual-clutch gearboxes, plus Vmax off.">Schaltpunkte und Momentenbegrenzer für Automatik- und Doppelkupplungsgetriebe, dazu Vmax offen.</p><span class="fuer" data-en="Automatic · DSG">Automatik · DSG</span></div>
+      <div class="zeile"><span class="nr">03</span><h3>Pop &amp; Bang</h3><p data-en="Sporty crackle on overrun – adjustable to your taste.">Sportliches Knallen im Schubbetrieb – nach Ihren Wünschen abgestimmt.</p><span class="fuer" data-en-html="<i>Off public roads only</i>"><i>Nur abseits öffentl. Straßen</i></span></div>
+      <div class="zeile"><span class="nr">04</span><h3 data-en="Start/stop · Launch">Start/Stopp · Launch</h3><p data-en="Start/stop off and launch control as separate solutions – also combinable with Stage 1 in one file.">Start/Stopp aus und Launch Control als eigene Lösungen – auch zusammen mit Stage 1 in einem File.</p><span class="fuer" data-en="Combinable">Kombinierbar</span></div>
+      <div class="zeile"><span class="nr">05</span><h3 data-en="Back to original">Rückrüsten</h3><p data-en="Upload a tuned file and get the matching original back – e.g. before a sale or an inspection.">Getuntes File hochladen, passendes Original zurückbekommen – zum Beispiel vor einem Verkauf.</p><span class="fuer" data-en="Original file">Original-File</span></div>
+      <div class="zeile"><span class="nr">06</span><h3 data-en="Custom adjustments">Individuelle Anpassungen</h3><p data-en="Change requests based on your dyno data and logs – send us what you measure.">Änderungswünsche auf Basis Ihrer Prüfstandsdaten und Logs – schicken Sie uns, was Sie messen.</p><span class="fuer" data-en="Logs · Dyno">Logs · Prüfstand</span></div>
+    </div>
+    <p class="fussnote" data-en="Files have no approval for public road traffic. Details: notes on use and liability.">Die Files haben keine Zulassung für den öffentlichen Straßenverkehr. Details: <a href="/haftung/" data-legal="haftung">Hinweise zu Einsatz und Haftung</a>.</p>
+  </div>
+</section>
+
+<section class="abschnitt" id="werkstatt">
+  <div class="wrap werkstatt-raster">
+    <div class="rein">
+      <p class="kapitel mono"><b>02</b><span data-en="Workshop">Werkstatt</span></p>
+      <h2 data-en-html="Built in<br>WinOLS 5.">Gebaut in<br>WinOLS 5.</h2>
+      <p class="grau" style="margin:26px 0 0;color:var(--grau)" data-en="Every file is created from the original of your vehicle. Here is a real project: an Audi SQ8 with more than a thousand potential maps – of which we only touch what the goal requires.">Jedes File entsteht aus dem Original Ihres Fahrzeugs. Hier ein echtes Projekt: ein Audi SQ8 mit über tausend potentiellen Kennfeldern – von denen wir nur anfassen, was das Ziel verlangt.</p>
+      <ol class="liste-nummern">
+        <li><b data-en="Boost pressure">Ladedruck</b><span>Boost pressure calculation</span></li>
+        <li><b data-en="Torque limiters">Drehmomentbegrenzer</b><span>Engine torque limiters</span></li>
+        <li><b data-en="Ignition timing">Zündwinkel</b><span>Ignition advance timing</span></li>
+        <li><b data-en="Rev limiter">Drehzahlbegrenzer</b><span>Maximum RPM limiters</span></li>
+        <li><b data-en="Wastegate control">Wastegate-Regelung</b><span>Wastegate control</span></li>
+      </ol>
+      <a class="textlink" href="https://www.evc.de/de/check_evc_license.asp?k=oPfQHArwj4zH5UjuwnBw0Q%3d%3d" target="_blank" rel="noopener"><span data-en="Verify our WinOLS license at EVC">WinOLS-Lizenz beim Hersteller EVC prüfen</span><svg viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+    </div>
+    <figure class="screenshot rein">
+      <div class="titel"><i></i><i></i><i></i><span class="mono">WinOLS 5 · Audi SQ8</span></div>
+      <img src="/assets/winols-sq8.webp" width="973" height="1367" loading="lazy" alt="WinOLS 5 Projekt Audi SQ8: Kennfeldgruppen wie Ladedruck, Zündwinkel und Drehmomentbegrenzer">
+    </figure>
+  </div>
+</section>
+
+<section class="abschnitt hell" id="ablauf">
+  <div class="wrap">
+    <div class="kopfzeile rein">
+      <div><p class="kapitel mono"><b>03</b><span data-en="Process">Ablauf</span></p><h2 data-en="How an order works">So läuft ein Auftrag</h2></div>
+      <p data-en="No sign-up, no subscription. You only pay for the file you actually need.">Ohne Anmeldung, ohne Abo. Sie bezahlen nur das File, das Sie wirklich brauchen.</p>
+    </div>
+    <div class="schritte rein">
+      <div class="schritt"><span class="mono">01</span><h3 data-en="Read the ECU">Steuergerät auslesen</h3><p data-en="You or your workshop read the original file – via OBD, bench or boot.">Sie oder Ihre Werkstatt lesen das Original-File aus – per OBD, Bench oder Boot.</p></div>
+      <div class="schritt"><span class="mono">02</span><h3 data-en="Upload in OneClick">In OneClick laden</h3><p data-en="Drag the file into the program. ECU and software are recognised automatically.">File ins Programm ziehen. Steuergerät und Software werden automatisch erkannt.</p></div>
+      <div class="schritt"><span class="mono">03</span><h3 data-en="Choose &amp; pay" data-en-html="Choose &amp; pay">Lösung wählen &amp; bezahlen</h3><p data-en="Pick one or several solutions and pay securely via Stripe. Invoice by e-mail.">Eine oder mehrere Lösungen wählen, sicher über Stripe bezahlen. Rechnung per E-Mail.</p></div>
+      <div class="schritt"><span class="mono">04</span><h3 data-en="Download &amp; flash" data-en-html="Download &amp; flash">Laden &amp; aufspielen</h3><p data-en="Files from our archive are ready immediately. Then write the file with your tool.">Files aus unserem Archiv stehen sofort bereit. Danach mit Ihrem Tool aufspielen.</p></div>
+    </div>
+    <div class="hinweisband rein">
+      <p data-en="Nothing suitable in the archive yet? Send a request with your vehicle data right in the program – we create the file and notify you there.">Noch nichts Passendes im Archiv? Stellen Sie im Programm eine Anfrage mit Ihren Fahrzeugdaten – wir erstellen das File und melden uns dort.</p>
+      <a class="knopf dunkel" href="https://oneclicksoulution.gh-mapping.de/" data-en="Get the program">Programm laden</a>
+    </div>
+  </div>
+</section>
+
+<section class="abschnitt" id="oneclick">
+  <div class="wrap">
+    <div class="oc-raster">
+      <div class="rein">
+        <p class="kapitel mono"><b>04</b><span data-en="Program">Programm</span></p>
+        <h2>OneClick<br>Solutions.</h2>
+        <p style="margin-top:26px;color:var(--grau);font-size:18px" data-en="Our own program for Windows and Mac. Load the original, see immediately which solutions exist for exactly your file – and download it right away.">Unser eigenes Programm für Windows und Mac. Original laden, sofort sehen, welche Lösungen es für genau Ihr File gibt – und direkt herunterladen.</p>
+        <ul class="merkmale">
+          <li><div><b data-en="Instant check.">Sofort-Check.</b> <span data-en="ECU and software are detected automatically.">Steuergerät und Software werden automatisch erkannt.</span></div></li>
+          <li><div><b data-en="No subscription.">Kein Abo.</b> <span data-en="No monthly fee, no credits – pay per file.">Keine Monatsgebühr, keine Credits – Sie zahlen pro File.</span></div></li>
+          <li><div><b data-en="Support built in.">Support eingebaut.</b> <span data-en="Open a ticket; adjusted files arrive right in the chat.">Ticket öffnen, angepasste Files kommen direkt in den Chat.</span></div></li>
+          <li><div><b data-en="Always up to date.">Immer aktuell.</b> <span data-en="Updates install with one click.">Updates mit einem Klick, ohne neuen Download.</span></div></li>
+        </ul>
+        <div class="download-zeile">
+          <a class="knopf rot" href="https://oneclicksoulution.gh-mapping.de/"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span data-en="Download for free">Kostenlos laden</span></a>
+          <span class="mono" data-en="Windows 10/11 · macOS 11+">Windows 10/11 · macOS 11+</span>
+        </div>
+      </div>
+      <div class="rein">
+        <div class="geraet"><img src="/oneclick-auswahl.webp" width="1440" height="900" loading="lazy" alt="OneClick Solutions: verfügbare Lösungen wählen und sofort kaufen"></div>
+        <div class="geraet-fuss"></div>
+      </div>
+    </div>
+    <div class="galerie rein">
+      <figure><a href="/oneclick-hochladen.webp" target="_blank" rel="noopener"><img src="/oneclick-hochladen.webp" width="1440" height="900" loading="lazy" alt="Original-File laden"></a><figcaption><span class="mono">01</span><span data-en="Load the original">Original laden</span></figcaption></figure>
+      <figure><a href="/oneclick-bezahlen.webp" target="_blank" rel="noopener"><img src="/oneclick-bezahlen.webp" width="1440" height="900" loading="lazy" alt="Sicher über Stripe bezahlen"></a><figcaption><span class="mono">02</span><span data-en="Pay via Stripe">Über Stripe bezahlen</span></figcaption></figure>
+      <figure><a href="/oneclick-fertig.webp" target="_blank" rel="noopener"><img src="/oneclick-fertig.webp" width="1440" height="900" loading="lazy" alt="File herunterladen"></a><figcaption><span class="mono">03</span><span data-en="Download">Herunterladen</span></figcaption></figure>
+      <figure><a href="/oneclick-support.webp" target="_blank" rel="noopener"><img src="/oneclick-support.webp" width="1440" height="900" loading="lazy" alt="Support-Ticket mit File im Chat"></a><figcaption><span class="mono">04</span><span data-en="Support chat">Support-Chat</span></figcaption></figure>
+      <figure><a href="/oneclick-start.webp" target="_blank" rel="noopener"><img src="/oneclick-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"></a><figcaption><span class="mono">05</span><span data-en="Start screen">Startbildschirm</span></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="abschnitt hell" id="flex">
+  <div class="wrap flex-raster">
+    <div class="rein">
+      <p class="kapitel mono"><b>05</b><span data-en="Tool">Werkzeug</span></p>
+      <h2 data-en-html="Magic Motorsport<br>Flex – from us.">Magic Motorsport<br>Flex – bei uns.</h2>
+      <p style="margin-top:26px;font-size:18px;color:#3d3b37" data-en="We work with Magic Motorsport and offer the Flex as a slave: the tool for reading and writing ECUs – ideal for workshops that read and flash themselves and get their files from us.">Wir arbeiten mit Magic Motorsport zusammen und bieten das Flex als Slave an: das Werkzeug zum Auslesen und Beschreiben von Steuergeräten – ideal für Werkstätten, die selbst auslesen und aufspielen und ihre Files von uns beziehen.</p>
+    </div>
+    <div class="flex-karte rein">
+      <p class="mono grau" data-en="At a glance">Auf einen Blick</p>
+      <dl>
+        <dt data-en="Version">Variante</dt><dd>Magic Motorsport Flex · Slave</dd>
+        <dt data-en="For">Für</dt><dd data-en="Workshops &amp; tuners" data-en-html="Workshops &amp; tuners">Werkstätten &amp; Tuner</dd>
+        <dt data-en="Files">Files</dt><dd data-en="Directly from GH-MAPPING">Direkt von GH-MAPPING</dd>
+        <dt data-en="Advice">Beratung</dt><dd data-en="Personally via WhatsApp">Persönlich per WhatsApp</dd>
+      </dl>
+      <a class="knopf dunkel" href="https://wa.me/4915568540674?text=Hallo%20GH-MAPPING%2C%20ich%20interessiere%20mich%20f%C3%BCr%20das%20Magic%20Motorsport%20Flex%20(Slave)." target="_blank" rel="noopener" data-en="Ask about the Flex">Flex anfragen</a>
+    </div>
+  </div>
+</section>
+
+<section class="abschnitt" id="faq">
+  <div class="wrap faq-raster">
+    <div class="rein">
+      <p class="kapitel mono"><b>06</b><span>FAQ</span></p>
+      <h2 data-en-html="Frequently<br>asked.">Häufige<br>Fragen.</h2>
+      <p style="margin-top:22px;color:var(--grau)" data-en="Your question is not listed? Write to us directly.">Ihre Frage ist nicht dabei? Schreiben Sie uns direkt.</p>
+    </div>
+    <div class="rein" id="fragen"><!--FAQ--></div>
+  </div>
+</section>
+
+<section class="kontakt" id="kontakt">
+  <div class="wrap kontakt-raster">
+    <div class="rein">
+      <h2 data-en-html="Questions<br>before ordering?">Fragen<br>vorab?</h2>
+      <p data-en="Mon–Sat, 10 am – 8 pm. We usually reply the same day.">Mo–Sa, 10–20 Uhr. Wir antworten in der Regel am selben Tag.</p>
+    </div>
+    <div class="kontakt-wege rein">
+      <a href="https://wa.me/4915568540674" target="_blank" rel="noopener"><span>WhatsApp</span><span class="mono">+49 155 68540674</span></a>
+      <a href="mailto:chiptuning2002@gmail.com"><span data-en="E-mail">E-Mail</span><span class="mono">chiptuning2002@gmail.com</span></a>
+      <a href="https://oneclicksoulution.gh-mapping.de/"><span data-en="Support ticket in the program">Support-Ticket im Programm</span><span class="mono">OneClick</span></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="fuss">
+  <div class="wrap">
+    <div class="fuss-raster">
+      <div>
+        <img src="/assets/logo.webp" width="720" height="99" alt="GH-MAPPING" loading="lazy">
+        <address style="font-style:normal">GH-MAPPING · Luisa Neuer<br>Hachenburgerstraße 3 · 56269 Dierdorf<br><a href="tel:+4915568540674">+49 155 68540674</a> · <a href="mailto:chiptuning2002@gmail.com">chiptuning2002@gmail.com</a></address>
+        <p style="margin-top:12px" data-en="Files must be used in accordance with the applicable legal requirements.">Der Einsatz der Files muss im Rahmen der geltenden gesetzlichen Vorgaben erfolgen.</p>
+      </div>
+      <div>
+        <h4 data-en="Legal">Rechtliches</h4>
+        <ul>
+          <li><a href="/impressum/" data-legal="impressum" data-en="Legal notice">Impressum</a></li>
+          <li><a href="/datenschutz/" data-legal="datenschutz" data-en="Privacy policy">Datenschutz</a></li>
+          <li><a href="/agb/" data-legal="agb" data-en="Terms and conditions">AGB</a></li>
+          <li><a href="/widerruf/" data-legal="widerruf" data-en="Right of withdrawal">Widerruf</a></li>
+          <li><a href="/haftung/" data-legal="haftung" data-en="Use and liability">Haftungshinweis</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 data-en="Links">Links</h4>
+        <ul>
+          <li><a href="https://oneclicksoulution.gh-mapping.de/" data-en="OneClick program">OneClick-Programm</a></li>
+          <li><a href="https://www.evc.de/de/check_evc_license.asp?k=oPfQHArwj4zH5UjuwnBw0Q%3d%3d" target="_blank" rel="noopener" data-en="WinOLS license check">WinOLS-Lizenzcheck</a></li>
+          <li><a href="https://wa.me/4915568540674" target="_blank" rel="noopener">WhatsApp</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="unten"><span>© 2026 GH-MAPPING</span><span data-en="Prices excl. VAT not applicable – small business according to § 19 UStG.">Kleinunternehmer nach § 19 UStG – keine Umsatzsteuer.</span></div>
+  </div>
+</footer>
+
+<a class="wa" href="https://wa.me/4915568540674" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3a.5.5 0 0 0 0-.5l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.5-.3Z"/></svg><span data-en="Questions? Write to us">Fragen? Schreiben</span></a>
+
+<div class="recht" id="recht" hidden role="dialog" aria-modal="true" aria-labelledby="rechtTitel">
+  <div class="recht-box"><button class="recht-zu" id="rechtZu" type="button" aria-label="Schließen">×</button><h2 id="rechtTitel"></h2><div id="rechtText"></div></div>
+</div>
+
+<!--RECHTSTEXTE-->
+
+<script>
+(function(){
+  var $=function(s,e){return (e||document).querySelector(s)}, $$=function(s,e){return [].slice.call((e||document).querySelectorAll(s))};
+  // Kopfzeile
+  var kopf=$('#kopf'); function fest(){kopf.classList.toggle('fest',window.scrollY>20)} fest(); addEventListener('scroll',fest,{passive:true});
+  var menue=$('#menue'); menue.addEventListener('click',function(){var o=menue.getAttribute('aria-expanded')!=='true';menue.setAttribute('aria-expanded',o);kopf.classList.toggle('offen',o)});
+  $$('#nav a').forEach(function(a){a.addEventListener('click',function(){menue.setAttribute('aria-expanded','false');kopf.classList.remove('offen')})});
+  // Einblenden
+  if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('da');io.unobserve(e.target)}})},{threshold:0,rootMargin:'0px 0px -8% 0px'});
+    $$('.rein').forEach(function(el){io.observe(el)}); setTimeout(function(){$$('.rein').forEach(function(el){el.classList.add('da')})},4000);}
+  else $$('.rein').forEach(function(el){el.classList.add('da')});
+  // FAQ
+  $$('.frage button').forEach(function(b){b.addEventListener('click',function(){var auf=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',auf);b.closest('.frage').classList.toggle('auf',auf)})});
+  // Sprache
+  var LANG='de';
+  try{var l=localStorage.getItem('ghm-lang');if(l==='en'||l==='de')LANG=l;else if(/^en/i.test(navigator.language||''))LANG='en'}catch(e){}
+  function sprache(l){
+    LANG=l; document.documentElement.lang=l;
+    $$('[data-en],[data-en-html]').forEach(function(el){
+      if(el.dataset.de===undefined) el.dataset.de=el.innerHTML;
+      if(l==='en') el.innerHTML=el.dataset.enHtml!==undefined?el.dataset.enHtml:el.dataset.en.replace(/&/g,'&amp;');
+      else el.innerHTML=el.dataset.de;
+    });
+    $$('.sprache button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lang===l)});
+    try{localStorage.setItem('ghm-lang',l)}catch(e){}
+    if(!$('#recht').hidden && offen) zeigen(offen);
+  }
+  $$('.sprache button').forEach(function(b){b.addEventListener('click',function(){sprache(b.dataset.lang)})});
+  if(LANG==='en') sprache('en');
+  // Rechtstexte
+  var TITEL={impressum:['Impressum','Legal notice'],datenschutz:['Datenschutzerklärung','Privacy policy'],agb:['Allgemeine Geschäftsbedingungen','Terms and conditions'],
+             widerruf:['Widerrufsbelehrung','Right of withdrawal'],haftung:['Hinweise zu Einsatz und Haftung','Notes on use and liability']};
+  var recht=$('#recht'),offen=null,vorher=null;
+  function zeigen(n){
+    var t=document.getElementById('t-'+n+(LANG==='en'?'-en':''))||document.getElementById('t-'+n); if(!t) return;
+    offen=n; $('#rechtTitel').textContent=TITEL[n][LANG==='en'?1:0];
+    var box=$('#rechtText'); box.innerHTML=''; box.appendChild(t.content.cloneNode(true));
+    if(recht.hidden){vorher=document.activeElement; recht.hidden=false; document.body.style.overflow='hidden'; $('#rechtZu').focus()}
+    recht.querySelector('.recht-box').scrollTop=0;
+  }
+  function zu(){recht.hidden=true;offen=null;document.body.style.overflow='';if(location.hash&&TITEL[location.hash.slice(1)])history.replaceState(null,'',location.pathname+location.search);if(vorher)vorher.focus()}
+  document.addEventListener('click',function(e){var a=e.target.closest('[data-legal]');if(a){e.preventDefault();zeigen(a.dataset.legal);history.replaceState(null,'','#'+a.dataset.legal)}});
+  $('#rechtZu').addEventListener('click',zu);
+  recht.addEventListener('click',function(e){if(e.target===recht)zu()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!recht.hidden)zu()});
+  var h=location.hash.slice(1); if(TITEL[h]) zeigen(h);
+})();
+</script>
+</body>
+</html>

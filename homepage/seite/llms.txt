@@ -1,0 +1,82 @@
+# GH-MAPPING
+
+> GH-MAPPING ist ein Chiptuning-Fileservice von Luisa Neuer in Dierdorf (Deutschland). Steuergerätedateien werden in einer lizenzierten WinOLS-5-Umgebung bearbeitet. Bestellt wird über das eigene Programm OneClick Solutions für Windows und Mac (https://oneclicksoulution.gh-mapping.de/): Original-File laden, verfügbare Lösungen wählen, über Stripe bezahlen und das fertige File herunterladen. Files aus dem Archiv gibt es sofort, Anfragen gibt GH-MAPPING vorher frei. Kunden sind Werkstätten und Privatpersonen.
+
+## Leistungen
+- Stage 1: Software-Optimierung für Fahrzeuge mit Serienhardware.
+- Getriebe / TCU: Optimierung für Automatik- und Doppelkupplungsgetriebe, Vmax offen.
+- Pop & Bang: Knallen im Schubbetrieb, nur für den Einsatz abseits öffentlicher Straßen.
+- Start/Stopp aus und Launch Control, auch kombiniert mit Stage 1.
+- Rückrüsten: getuntes File hochladen, passendes Original zurückbekommen.
+- Individuelle Anpassungen auf Basis von Prüfstandsdaten und Logs.
+- Magic Motorsport Flex als Slave (in Zusammenarbeit mit Magic Motorsport).
+
+## So funktioniert eine Bestellung
+1. Steuergerät auslesen (OBD, Bench oder Boot).
+2. Original-File in OneClick Solutions laden; Steuergerät und Software werden automatisch erkannt.
+3. Eine oder mehrere Lösungen wählen und über Stripe bezahlen.
+4. Fertiges File im Programm herunterladen und mit dem eigenen Tool aufspielen (Checksumme korrigiert das Flash-Tool).
+5. Bei Problemen ein Support-Ticket im Programm öffnen.
+
+## Wichtige Hinweise
+- GH-MAPPING liefert nur die Datei und führt keine Arbeiten am Fahrzeug aus.
+- Die Files haben keine Zulassung für den öffentlichen Straßenverkehr.
+
+## Kontakt
+- Website: https://gh-mapping.de/
+- Programm (Windows und Mac): https://oneclicksoulution.gh-mapping.de/
+- E-Mail: chiptuning2002@gmail.com
+- WhatsApp: +49 155 68540674
+- Erreichbar: Montag bis Samstag, 10:00 bis 20:00 Uhr
+- Anschrift: GH-MAPPING, Luisa Neuer, Hachenburgerstraße 3, 56269 Dierdorf, Deutschland
+- WinOLS-Lizenzstatus: https://www.evc.de/de/check_evc_license.asp?k=oPfQHArwj4zH5UjuwnBw0Q%3d%3d
+
+## Häufige Fragen
+
+### Wie bestelle ich?
+Laden Sie unser Programm OneClick Solutions (Windows oder Mac), ziehen Sie Ihr Original-File hinein und wählen Sie die gewünschte Lösung. Liegt Ihr File in unserem Archiv, bezahlen Sie sofort und laden es direkt herunter. Gibt es noch nichts Passendes, stellen Sie dort eine Anfrage mit Ihren Fahrzeugdaten.
+
+### Wie läuft die Bezahlung?
+Online über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und weiteren Verfahren. Files aus dem Archiv bezahlen Sie sofort, Anfragen nachdem wir Ihr File freigegeben haben. Die Rechnung kommt per E-Mail.
+
+### Wo bekomme ich mein fertiges File?
+Im Programm unter „Meine Aufträge“. Nach der Zahlung laden Sie es dort herunter. Bei Anfragen meldet sich das Programm, sobald Ihr File fertig ist.
+
+### Was kostet ein Chiptuning-File?
+Die Preise hängen von der Lösung ab und werden im Programm direkt nach dem Laden Ihres Originals angezeigt – bevor Sie etwas bezahlen. Es gibt kein Abo und keine Credits: Sie zahlen nur das File, das Sie bestellen. Als Kleinunternehmer berechnen wir keine Umsatzsteuer.
+
+### Wie lange dauert es, bis ich mein File bekomme?
+Liegt Ihr File bereits in unserem Archiv, laden Sie es direkt nach der Zahlung herunter – rund um die Uhr. Bei einer Anfrage erstellen wir das File individuell; das Programm meldet sich, sobald es fertig ist.
+
+### Welches Werkzeug brauche ich zum Auslesen und Aufspielen?
+Ein Flash-Tool, mit dem Sie das Steuergerät per OBD, Bench oder Boot auslesen und beschreiben können – zum Beispiel das Magic Motorsport Flex, das wir als Slave anbieten. Laden Sie immer das unveränderte Original hoch und sichern Sie es vor dem Aufspielen.
+
+### Für welche Fahrzeuge und Steuergeräte gibt es Files?
+Für alle Fahrzeuge, deren Original-File Sie auslesen können. Ob es für Ihr Steuergerät und Ihre Software bereits eine fertige Lösung gibt, zeigt OneClick sofort nach dem Laden. Ist noch nichts im Archiv, stellen Sie im Programm eine Anfrage mit Ihren Fahrzeugdaten.
+
+### Ich habe ein Problem mit meinem File – was tun?
+Öffnen Sie im Programm unter „Support“ ein Ticket oder klicken Sie am Auftrag auf „Problem?“. Hängen Sie gern Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken Ihnen ein angepasstes File direkt in den Chat.
+
+### Gibt es das Programm auch für den Mac?
+Ja. OneClick Solutions läuft unter Windows 10/11 und macOS 11 oder neuer – auf Intel-Macs und Macs mit Apple-Chip. Das Programm ist kostenlos, Sie zahlen nur die Files.
+
+### Was ist ein Chiptuning-File?
+Eine bearbeitete Steuergerätedatei. Dabei werden Kennfelder, zum Beispiel für Ladedruck, Einspritzmenge und Zündwinkel, auf Leistung und Drehmoment abgestimmt. Das fertige File wird anschließend auf das Steuergerät des Fahrzeugs gespielt.
+
+### Arbeitet ihr wirklich in WinOLS?
+Ja. Jedes File wird in einer lizenzierten WinOLS-5-Umgebung des Herstellers EVC bearbeitet. Unsere Lizenz können Sie selbst prüfen: über den Link „WinOLS-Lizenzcheck“ unten auf der Seite.
+
+### Muss ich die Checksumme korrigieren?
+Ja. Lassen Sie die Checksumme beim Schreiben von Ihrem Flash-Tool korrigieren – das machen die gängigen Tools automatisch.
+
+### Was ist Pop & Bang?
+Knall- und Knistergeräusche im Schubbetrieb, also wenn man vom Gas geht. Die Funktion ist ausschließlich für den Einsatz abseits öffentlicher Straßen vorgesehen.
+
+### Ist Chiptuning erlaubt?
+Eine Leistungssteigerung verändert die Betriebserlaubnis des Fahrzeugs. Für den öffentlichen Straßenverkehr sind Eintragungen und Abnahmen (§ 19 StVZO) nötig, die der Halter veranlassen muss. Die Files von GH-MAPPING haben keine Zulassung für öffentliche Straßen.
+
+### Führt ihr das Aufspielen am Fahrzeug durch?
+Nein. GH-MAPPING liefert das bearbeitete File und führt keine Arbeiten am Fahrzeug aus. Auslesen und Aufspielen übernehmen Sie oder Ihre Werkstatt.
+
+### Wann seid ihr erreichbar?
+Montag bis Samstag, 10 bis 20 Uhr – per WhatsApp, E-Mail oder Support-Ticket im Programm.
