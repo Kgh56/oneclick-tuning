@@ -634,6 +634,10 @@ WERBE_FAQ = [
      "zum Beispiel mit dem Magic Motorsport Flex. Die Checksumme korrigiert dein Flash-Tool beim Schreiben."),
     ("Was mache ich, wenn es ein Problem mit dem File gibt?", "Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. "
      "Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat."),
+    ("Bekomme ich Launch Control, Antilag oder Mapswitch?", "Ja, für VAG: 2-Step / Launch Control, Antilag und No-Lift-Shift "
+     "für Bosch ME7 sowie Mapswitch für VAG. Öffne im Programm unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, "
+     "nenn Fahrzeug und gewünschte Funktion und häng dein Original-File an – wir melden uns mit Preis und Umsetzung. "
+     "Die Funktionen sind für den Motorsport gedacht, nicht für den öffentlichen Straßenverkehr."),
     ("Gibt es das Programm für Mac oder Handy?", "Für den Mac ja (macOS 11 oder neuer, Intel und Apple-Chip). Fürs Handy gibt es OneClick Solutions nicht – "
      "du brauchst einen Windows-PC, Laptop oder Mac."),
     ("Wer steckt hinter OneClick Solutions?", "GH-MAPPING, ein Chiptuning-Fileservice aus Dierdorf (Rheinland-Pfalz). "
@@ -1352,6 +1356,7 @@ def auftrag_suche():
 
 TICKET_THEMEN = {"file": "Problem mit einem File", "auto": "Fehler am Auto nach dem Aufspielen",
                  "bestellung": "Frage zu Bestellung / Zahlung", "sonstiges": "Sonstiges",
+                 "sonderfunktion": "Anfrage Sonderfunktion (Launch, Antilag, NLS, Mapswitch)",
                  "rueckfrage": "Rückfrage zu deinem Auftrag"}   # startet der Admin am Auftrag
 TICKET_STATUS = {"OFFEN": "Offen", "BEANTWORTET": "Beantwortet", "GESCHLOSSEN": "Geschlossen"}
 ticket_sperre = threading.Lock()
@@ -3691,6 +3696,11 @@ h2{font-size:clamp(26px,3.4vw,38px);margin:0 0 10px;font-weight:800;letter-spaci
 .f:hover{border-color:rgba(47,123,255,.6);transform:translateY(-3px)}
 .f .ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(180deg,#3b86ff,#1f5fe0);box-shadow:0 6px 18px rgba(47,123,255,.35);margin-bottom:14px}
 .f .ic svg{stroke:#fff}
+.sonder{margin-top:16px;padding:24px 26px;border-radius:14px;border:1px solid rgba(47,123,255,.45);background:linear-gradient(135deg,rgba(47,123,255,.16),rgba(47,123,255,.03));display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:10px 28px;align-items:center}
+.sonder b{display:block;font-size:20px;margin:6px 0}.sonder span{color:var(--leise,#9aa3b2)}.sonder .marke{display:inline-block;width:auto;padding:4px 10px;border-radius:99px;border:1px solid rgba(110,164,255,.4);background:rgba(47,123,255,.12);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6ea4ff}
+.sonder ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}.sonder li{padding:7px 12px;border-radius:99px;border:1px solid var(--rand);background:var(--karte);font-weight:600;font-size:14px}
+.sonder small{grid-column:1/-1;color:var(--leise,#9aa3b2);font-size:12.5px}
+@media(max-width:760px){.sonder{grid-template-columns:1fr;padding:20px}}
 .f b{display:block;font-size:17px;margin-bottom:6px}.f span{color:var(--leise);font-size:14.5px}
 .bilder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .bilder figure{margin:0}.bilder img{width:100%;height:auto;display:block;border-radius:12px;border:1px solid var(--rand);box-shadow:0 18px 50px rgba(0,0,0,.5)}
@@ -3740,7 +3750,12 @@ footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></div><b>Support im Programm</b><span>Problem mit einem File? Ticket öffnen, Logs oder Screenshots anhängen – wir antworten im Programm und schicken dir das angepasste File direkt in den Chat.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div><b>Updates mit einem Klick</b><span>Neue Funktionen kommen über den Update-Knopf im Programm – kein neuer Download nötig.</span></div>
- </div></div></section>
+ </div>
+ <div class="sonder"><div><span class="marke">Neu · Auf Anfrage</span><b>VAG Sonderfunktionen</b>
+  <span>2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 – und Mapswitch für VAG. Anfrage einfach per Ticket im Programm: Thema „Sonderfunktion“, Original-File anhängen, fertig.</span></div>
+  <ul><li>2-Step / Launch</li><li>Antilag</li><li>No-Lift-Shift</li><li>Mapswitch</li></ul>
+  <small>Für den Motorsport – nicht für den öffentlichen Straßenverkehr.</small></div>
+</div></section>
 <section><div class="breit">
  <h2>So sieht's aus</h2><p class="unter">Dunkel, klar, schnell – gemacht für die Arbeit in der Werkstatt.</p>
  <div class="bilder">

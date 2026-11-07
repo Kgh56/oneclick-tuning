@@ -63,6 +63,9 @@ Ja. OneClick Solutions läuft unter Windows 10/11 und macOS 11 oder neuer – au
 ### Was ist ein Chiptuning-File?
 Eine bearbeitete Steuergerätedatei. Dabei werden Kennfelder, zum Beispiel für Ladedruck, Einspritzmenge und Zündwinkel, auf Leistung und Drehmoment abgestimmt. Das fertige File wird anschließend auf das Steuergerät des Fahrzeugs gespielt.
 
+### Bietet ihr Launch Control, Antilag oder Mapswitch an?
+Ja, für VAG-Fahrzeuge: 2-Step / Launch Control, Antilag und No-Lift-Shift für Steuergeräte Bosch ME7 sowie Mapswitch für VAG. Öffnen Sie dazu im Programm OneClick Solutions unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, nennen Sie Fahrzeug und gewünschte Funktion und hängen Sie Ihr Original-File an. Wir melden uns mit Preis und Umsetzung. Die Funktionen sind für den Motorsport gedacht, nicht für den öffentlichen Straßenverkehr.
+
 ### Arbeitet ihr wirklich in WinOLS?
 Ja. Jedes File wird in einer lizenzierten WinOLS-5-Umgebung des Herstellers EVC bearbeitet. Unsere Lizenz können Sie selbst prüfen: über den Link „WinOLS-Lizenzcheck“ unten auf der Seite.
 

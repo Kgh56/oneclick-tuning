@@ -1370,12 +1370,14 @@ button.hilfe svg{width:15px;height:15px}
         <section class="karte" id="tk-rechts">
           <div id="tk-leer" class="tk-leer"><span class="nx-quadrat gross"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></span><b>Wie können wir helfen?</b>
             <span class="leise">Wähle links ein Ticket oder öffne ein neues. Bei Problemen mit einem File am besten den Auftrag auswählen und Fehlercodes mitschicken.</span>
-            <button type="button" class="btn" id="tk-neu-knopf2">Neues Ticket öffnen</button></div>
+            <button type="button" class="btn" id="tk-neu-knopf2">Neues Ticket öffnen</button>
+            <button type="button" class="btn grau" id="tk-sonder-knopf">Sonderfunktion anfragen</button>
+            <span class="leise">VAG: 2-Step / Launch, Antilag und No-Lift-Shift für Bosch ME7 · Mapswitch</span></div>
           <form id="tk-form" class="tk-form" hidden>
             <h2>Neues Ticket</h2>
             <label class="nx-label" for="tk-thema">Thema</label>
             <select class="feld" id="tk-thema"><option value="file">Problem mit einem File</option><option value="auto">Fehler am Auto nach dem Aufspielen</option>
-              <option value="bestellung">Frage zu Bestellung / Zahlung</option><option value="sonstiges">Sonstiges</option></select>
+              <option value="bestellung">Frage zu Bestellung / Zahlung</option><option value="sonderfunktion">Sonderfunktion anfragen (Launch, Antilag, NLS, Mapswitch)</option><option value="sonstiges">Sonstiges</option></select>
             <label class="nx-label" for="tk-auftrag">Auftrag (optional)</label>
             <select class="feld" id="tk-auftrag"><option value="">– kein bestimmter Auftrag –</option></select>
             <label class="nx-label" for="tk-text">Deine Nachricht</label>
@@ -2320,7 +2322,7 @@ function neuesTicket(aid = "", thema = "file") {
   seite("support"); $("#sn-support").classList.add("an");
   const sel = $("#tk-auftrag"); sel.innerHTML = '<option value="">– kein bestimmter Auftrag –</option>';
   zustand.auftraege.forEach(a => { const o = document.createElement("option"); o.value = a.id; o.textContent = a.datei + " · " + (a.option_name || "–") + " · " + datum(a.zeit); sel.appendChild(o); });
-  sel.value = aid; $("#tk-thema").value = thema; $("#tk-text").value = ""; $("#tk-kontakt").value = $("#kontakt").value;
+  sel.value = aid; $("#tk-thema").value = thema; tkThemaHinweis(); $("#tk-text").value = ""; $("#tk-kontakt").value = $("#kontakt").value;
   tkAktiv = null; tkBereich("#tk-form"); tkNeuAnhang.setzen(null); tkListeMalen(); $("#tk-text").focus();
 }
 async function ticketsLaden(melden) {
@@ -2384,6 +2386,14 @@ setTimeout(() => updatePruefen(true), 20000);
 setInterval(() => updatePruefen(true), 30 * 60 * 1000);
 $("#sn-support").addEventListener("click", () => { seite("support"); $("#sn-support").classList.add("an"); if (!tkAktiv && $("#tk-form").hidden) tkBereich("#tk-leer"); ticketsLaden(false); });
 ["#tk-neu-knopf", "#tk-neu-knopf2", "#nx-info-support"].forEach(x => $(x).addEventListener("click", () => neuesTicket()));
+$("#tk-sonder-knopf").addEventListener("click", () => neuesTicket("", "sonderfunktion"));
+const tkPlatzhalter = $("#tk-text").placeholder;
+function tkThemaHinweis() {
+  $("#tk-text").placeholder = $("#tk-thema").value === "sonderfunktion"
+    ? "Fahrzeug, Motor, Steuergerät (z. B. Bosch ME7.5) und gewünschte Funktion: 2-Step / Launch, Antilag, No-Lift-Shift oder Mapswitch. Am besten das Original-File anhängen."
+    : tkPlatzhalter;
+}
+$("#tk-thema").addEventListener("change", tkThemaHinweis);
 $("#tk-abbrechen").addEventListener("click", () => tkBereich("#tk-leer"));
 /* Datei an ein Ticket haengen: Bueroklammer oder Datei in den Bereich ziehen */
 const TK_MAX = 16 * 1024 * 1024;
