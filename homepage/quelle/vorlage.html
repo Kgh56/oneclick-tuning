@@ -287,10 +287,11 @@ p{max-width:62ch}
 </style>
 <script>(function(){try{if(matchMedia("(prefers-reduced-motion: reduce)").matches||sessionStorage.getItem("gh-intro"))return;sessionStorage.setItem("gh-intro","1")}catch(e){return}document.documentElement.classList.add("intro")})()</script>
 <style>
-html:not(.intro) #intro{display:none}
+html:not(.intro) #intro:not(.auf2){display:none}
+#intro.auf2{pointer-events:none}
 html.intro,html.intro body{overflow:hidden}
 #intro{position:fixed;inset:0;z-index:9999;pointer-events:auto;cursor:pointer;font-family:var(--sans)}
-#intro .i-h{position:absolute;left:0;right:0;height:50.2%;background:#0b0b0c;transition:transform .85s cubic-bezier(.77,0,.18,1)}
+#intro .i-h{position:absolute;left:0;right:0;height:50.2%;background:#0b0b0c;transition:transform 1.3s cubic-bezier(.45,0,.2,1),opacity 1.1s cubic-bezier(.4,0,.2,1)}
 #intro .i-h::before{content:"";position:absolute;inset:0;background:linear-gradient(#202024 1px,transparent 1px) 0 0/64px 64px,linear-gradient(90deg,#202024 1px,transparent 1px) 0 0/64px 64px;opacity:.55}
 #intro .i-o{top:0}#intro .i-o::before{background-position:0 0}
 #intro .i-u{bottom:0}#intro .i-u::before{background-position:0 100%}
@@ -307,26 +308,26 @@ html.intro,html.intro body{overflow:hidden}
 #intro.shift .i-licht i{background:var(--rot)!important;box-shadow:0 0 18px var(--rot)!important;animation:i-blink .09s 4 alternate}
 #intro svg{display:block;width:100%;height:auto;overflow:visible}
 #intro .k{fill:none;stroke-width:3;stroke-linecap:round;stroke-dasharray:1200;stroke-dashoffset:1200}
-#intro .k-s{stroke:#5d5b57;stroke-dasharray:8 8;stroke-dashoffset:0;clip-path:inset(0 100% 0 0);animation:i-wisch 1.15s .15s cubic-bezier(.4,0,.2,1) forwards}
-#intro .k-t{stroke:var(--rot);stroke-width:4;filter:drop-shadow(0 0 8px rgba(227,35,27,.8));animation:i-zeichnen 1.15s .15s cubic-bezier(.4,0,.2,1) forwards}
-#intro .k-f{fill:url(#i-verlauf);opacity:0;animation:i-ein .5s .9s forwards}
-#intro .k-txt{font-family:var(--mono);font-size:15px;letter-spacing:.1em;opacity:0;animation:i-ein .3s 1s forwards}
+#intro .k-s{stroke:#5d5b57;stroke-dasharray:8 8;stroke-dashoffset:0;clip-path:inset(0 100% 0 0);animation:i-wisch 1.95s .15s cubic-bezier(.4,0,.2,1) forwards}
+#intro .k-t{stroke:var(--rot);stroke-width:4;filter:drop-shadow(0 0 8px rgba(227,35,27,.8));animation:i-zeichnen 1.95s .15s cubic-bezier(.4,0,.2,1) forwards}
+#intro .k-f{fill:url(#i-verlauf);opacity:0;animation:i-ein .8s 1.5s forwards}
+#intro .k-txt{font-family:var(--mono);font-size:15px;letter-spacing:.1em;opacity:0;animation:i-ein .5s 1.7s forwards}
 #intro .i-logo{position:absolute;left:50%;top:50%;width:min(620px,78vw);transform:translate(-50%,-50%) scale(2.4);filter:blur(24px);opacity:0;z-index:4}
 #intro .i-logo img{width:100%;height:auto;display:block;filter:drop-shadow(0 0 30px rgba(227,35,27,.55))}
 #intro .i-claim{position:absolute;left:0;right:0;top:calc(50% + min(62px,9vw));text-align:center;font-family:var(--mono);font-size:clamp(12px,1.6vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#cfcdc8;opacity:0;z-index:4}
 #intro .i-blitz{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,#fff 0,rgba(227,35,27,.9) 35%,transparent 75%);opacity:0;z-index:5;pointer-events:none}
 #intro .i-weg{position:absolute;right:20px;bottom:18px;z-index:6;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6f6d69;background:none;border:0;cursor:pointer}
-#intro.slam .i-mitte{opacity:.13;filter:blur(3px);transition:opacity .35s,filter .35s}
-#intro.slam .i-buehne{animation:i-wackeln .38s}
-#intro.slam .i-logo{animation:i-slam .55s cubic-bezier(.2,1.3,.3,1) forwards}
-#intro.slam .i-claim{animation:i-claim .5s .3s forwards}
-#intro.slam .i-blitz{animation:i-blitz .5s}
-#intro.auf .i-naht{animation:i-naht .5s forwards}
-#intro.auf2 .i-o{transform:translateY(-101%)}
-#intro.auf2 .i-u{transform:translateY(101%)}
-#intro.auf2 .i-buehne,#intro.auf2 .i-logo,#intro.auf2 .i-claim{opacity:0!important;transition:opacity .25s}
-#intro.auf2 .i-buehne{transform:scale(1.12)}
-#intro.auf2 .i-naht{opacity:0;transition:opacity .3s .15s}
+#intro.slam .i-mitte{opacity:.13;filter:blur(3px);transition:opacity .6s,filter .6s}
+#intro.slam .i-buehne{animation:i-wackeln .5s}
+#intro.slam .i-logo{animation:i-slam .85s cubic-bezier(.2,1.15,.3,1) forwards}
+#intro.slam .i-claim{animation:i-claim .9s .45s cubic-bezier(.2,.7,.2,1) forwards}
+#intro.slam .i-blitz{animation:i-blitz .8s}
+#intro.auf .i-naht{animation:i-naht .7s cubic-bezier(.4,0,.2,1) forwards}
+#intro.auf2 .i-o{transform:translateY(-40%);opacity:0}
+#intro.auf2 .i-u{transform:translateY(40%);opacity:0}
+#intro.auf2 .i-buehne,#intro.auf2 .i-logo,#intro.auf2 .i-claim{opacity:0!important;filter:blur(8px)!important;transition:opacity .8s cubic-bezier(.4,0,.2,1),filter .8s}
+#intro.auf2 .i-buehne{transform:scale(1.06)}
+#intro.auf2 .i-naht{opacity:0!important;transition:opacity .9s .1s}
 #intro.auf2 .i-weg{display:none}
 @media(max-width:600px){#intro .i-claim{letter-spacing:.14em!important;animation-name:i-claim-m!important}}
 @keyframes i-claim-m{from{opacity:0;letter-spacing:.5em}to{opacity:1;letter-spacing:.14em}}
@@ -337,9 +338,9 @@ html.intro,html.intro body{overflow:hidden}
 @keyframes i-blink{to{opacity:.35}}
 @keyframes i-slam{0%{opacity:0;transform:translate(-50%,-50%) scale(2.4);filter:blur(24px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:blur(0)}}
 @keyframes i-claim{from{opacity:0;letter-spacing:.9em}to{opacity:1;letter-spacing:.32em}}
-@keyframes i-blitz{0%{opacity:0}15%{opacity:.85}100%{opacity:0}}
-@keyframes i-wackeln{0%,100%{transform:none}20%{transform:translate(-9px,5px)}40%{transform:translate(8px,-6px)}60%{transform:translate(-6px,-3px)}80%{transform:translate(4px,4px)}}
-@keyframes i-naht{0%{opacity:1;transform:scaleX(0)}100%{opacity:1;transform:scaleX(1)}}
+@keyframes i-blitz{0%{opacity:0}18%{opacity:.6}100%{opacity:0}}
+@keyframes i-wackeln{0%,100%{transform:none}20%{transform:translate(-6px,3px)}40%{transform:translate(5px,-4px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(2px,2px)}}
+@keyframes i-naht{0%{opacity:0;transform:scaleX(0)}100%{opacity:.8;transform:scaleX(1)}}
 </style>
 </head>
 <body>
@@ -367,18 +368,18 @@ html.intro,html.intro body{overflow:hidden}
   if(!h.classList.contains("intro")||!el){if(el)el.remove();return}
   var rpm=el.querySelector(".i-rpm b"),st=el.querySelector(".i-status"),li=el.querySelectorAll(".i-licht i"),uhr=[],fertig=false;
   function nach(ms,f){uhr.push(setTimeout(f,ms))}
-  function ende(){if(fertig)return;fertig=true;uhr.forEach(clearTimeout);el.classList.add("auf2");h.classList.remove("intro");setTimeout(function(){el.remove()},900)}
-  var t0=performance.now(),dauer=1250;
+  function ende(){if(fertig)return;fertig=true;uhr.forEach(clearTimeout);el.classList.add("auf2");h.classList.remove("intro");setTimeout(function(){el.remove()},1400)}
+  var t0=performance.now(),dauer=2000;
   (function lauf(t){var x=Math.min(1,(t-t0)/dauer),e=1-Math.pow(1-x,2.2),n=Math.round(e*7200);
     rpm.textContent=("000"+n).slice(-4);var an=Math.round(e*li.length);
     for(var i=0;i<li.length;i++)li[i].classList.toggle("an",i<an);
     if(x<1&&!fertig)requestAnimationFrame(lauf)})(t0);
-  nach(450,function(){st.textContent="Kennfelder · Optimieren …"});
-  nach(950,function(){st.textContent="Checksumme · OK"});
-  nach(1300,function(){el.classList.add("shift")});
-  nach(1420,function(){el.classList.add("slam")});
-  nach(2250,function(){el.classList.add("auf")});
-  nach(2600,ende);
+  nach(700,function(){st.textContent="Kennfelder · Optimieren …"});
+  nach(1450,function(){st.textContent="Checksumme · OK"});
+  nach(2050,function(){el.classList.add("shift")});
+  nach(2200,function(){el.classList.add("slam")});
+  nach(3150,function(){el.classList.add("auf")});
+  nach(3500,ende);
   el.addEventListener("click",ende);
   addEventListener("keydown",function(e){if(e.key==="Escape"||e.key===" "||e.key==="Enter")ende()},{once:true});
 })()</script>
