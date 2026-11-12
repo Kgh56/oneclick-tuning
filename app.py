@@ -3722,7 +3722,90 @@ footer .breit{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}foote
 footer .rechts{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap}
 @media (max-width:980px){.held{grid-template-columns:1fr;padding-top:40px}.fenster{transform:none}.raster,.bilder{grid-template-columns:1fr 1fr}.schritte{grid-template-columns:1fr 1fr}nav .links{display:none}}
 @media (max-width:620px){.raster,.bilder,.schritte{grid-template-columns:1fr}footer .rechts{margin-left:0}}
-</style></head><body>
+</style>
+<script>(function(){try{if(matchMedia("(prefers-reduced-motion: reduce)").matches||sessionStorage.getItem("oc-intro"))return;sessionStorage.setItem("oc-intro","1")}catch(e){return}document.documentElement.classList.add("oc-intro")})()</script>
+<style>
+html:not(.oc-intro) #oc-intro:not(.weg){display:none}
+html.oc-intro,html.oc-intro body{overflow:hidden}
+#oc-intro{position:fixed;inset:0;z-index:9999;background:#0a0c11;display:grid;place-items:center;font-family:Montserrat,system-ui,sans-serif;color:#e8ecf4;overflow:hidden}
+#oc-intro::before{content:"";position:absolute;inset:-20%;background:radial-gradient(700px 420px at 50% 40%,rgba(47,123,255,.18),transparent 65%),linear-gradient(rgba(47,123,255,.07) 1px,transparent 1px) 0 0/56px 56px,linear-gradient(90deg,rgba(47,123,255,.07) 1px,transparent 1px) 0 0/56px 56px;
+ -webkit-mask-image:radial-gradient(ellipse at 50% 45%,#000 20%,transparent 70%);mask-image:radial-gradient(ellipse at 50% 45%,#000 20%,transparent 70%)}
+#oc-intro .o-szene{position:relative;width:min(560px,88vw);transition:opacity .7s,filter .7s,transform .9s cubic-bezier(.2,.7,.2,1)}
+#oc-intro .o-zone{position:relative;height:clamp(130px,26vw,170px);border:2px dashed rgba(90,160,255,.45);border-radius:18px;background:rgba(22,25,32,.7);display:grid;place-items:center;overflow:hidden}
+#oc-intro .o-datei{display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:14px;background:linear-gradient(180deg,#1c2230,#151a25);border:1px solid #2c3446;box-shadow:0 18px 40px rgba(0,0,0,.5);font-weight:700;font-size:clamp(14px,2.4vw,17px);transform:translateY(-190px) rotate(-6deg);opacity:0;animation:o-fall .8s .2s cubic-bezier(.25,1.4,.4,1) forwards}
+#oc-intro .o-datei svg{width:34px;height:34px;flex:none}
+#oc-intro .o-datei small{display:block;font-weight:500;font-size:12px;color:#8b93a5}
+#oc-intro .o-scan{position:absolute;top:0;bottom:0;width:120px;left:-140px;background:linear-gradient(90deg,transparent,rgba(90,160,255,.35),transparent);animation:o-scan 1s 1s ease-in-out forwards}
+#oc-intro .o-status{display:flex;justify-content:space-between;align-items:center;margin-top:18px;font-weight:600;font-size:clamp(13px,2.2vw,15px);color:#c9d1df;min-height:22px}
+#oc-intro .o-status b{color:#5aa0ff;font-weight:700}
+#oc-intro .o-balken{height:6px;border-radius:9px;background:#1b1f29;margin-top:10px;overflow:hidden}
+#oc-intro .o-balken i{display:block;height:100%;width:0;border-radius:9px;background:linear-gradient(90deg,#1f5fe0,#5aa0ff);box-shadow:0 0 14px rgba(47,123,255,.8);animation:o-balken 1.5s .9s cubic-bezier(.4,0,.2,1) forwards}
+#oc-intro .o-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;justify-content:center}
+#oc-intro .o-chips span{padding:9px 16px;border-radius:99px;border:1px solid rgba(90,160,255,.5);background:rgba(47,123,255,.12);font-weight:700;font-size:clamp(13px,2.2vw,15px);opacity:0;transform:translateY(12px) scale(.9)}
+#oc-intro.loes .o-chips span{animation:o-chip .5s cubic-bezier(.2,1.3,.4,1) forwards}
+#oc-intro.loes .o-chips span:nth-child(2){animation-delay:.14s}#oc-intro.loes .o-chips span:nth-child(3){animation-delay:.28s}
+#oc-intro .o-knopf{position:relative;display:block;margin:24px auto 0;width:clamp(150px,30vw,190px);padding:16px 0;border:0;border-radius:14px;background:linear-gradient(180deg,#3b86ff,#1f5fe0);color:#fff;font:800 clamp(16px,2.8vw,19px) Montserrat,sans-serif;letter-spacing:.02em;box-shadow:0 10px 30px rgba(47,123,255,.45);opacity:0;transform:scale(.85)}
+#oc-intro.loes .o-knopf{animation:o-knopf-ein .5s .45s cubic-bezier(.2,1.3,.4,1) forwards}
+#oc-intro.klick .o-knopf{animation:o-druck .35s forwards}
+#oc-intro .o-welle{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;border:3px solid #5aa0ff;opacity:0;box-shadow:0 0 40px rgba(47,123,255,.8),inset 0 0 40px rgba(47,123,255,.5);pointer-events:none}
+#oc-intro.klick .o-welle{animation:o-welle 1.1s .12s cubic-bezier(.2,.6,.2,1) forwards}
+#oc-intro.klick .o-welle.w2{animation-delay:.3s}
+#oc-intro .o-blitz{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.9),rgba(47,123,255,.6) 35%,transparent 70%);opacity:0;pointer-events:none}
+#oc-intro.klick .o-blitz{animation:o-blitz .9s .15s forwards}
+#oc-intro.klick .o-szene{opacity:0;filter:blur(6px);transform:scale(.94);transition-delay:.15s}
+#oc-intro .o-logo{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:18px;text-align:center;pointer-events:none}
+#oc-intro .o-icon{width:clamp(92px,16vw,130px);height:clamp(92px,16vw,130px);opacity:0;transform:scale(.4) rotate(-12deg);filter:drop-shadow(0 0 34px rgba(47,123,255,.75))}
+#oc-intro .o-icon svg{width:100%;height:100%}
+#oc-intro .o-name{font-weight:800;font-size:clamp(28px,5.6vw,52px);letter-spacing:-.01em;opacity:0;transform:translateY(16px)}
+#oc-intro .o-name em{font-style:normal;background:linear-gradient(90deg,#5aa0ff,#a9c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+#oc-intro .o-claim{font-weight:600;font-size:clamp(13px,2.2vw,16px);letter-spacing:.24em;text-transform:uppercase;color:#8b93a5;opacity:0}
+#oc-intro.logo .o-icon{animation:o-icon .9s cubic-bezier(.2,1.25,.35,1) forwards}
+#oc-intro.logo .o-name{animation:o-hoch .8s .3s cubic-bezier(.2,.8,.2,1) forwards}
+#oc-intro.logo .o-claim{animation:o-claim .9s .55s cubic-bezier(.2,.7,.2,1) forwards}
+#oc-intro.weg{pointer-events:none;opacity:0;transition:opacity 1.6s .45s cubic-bezier(.45,0,.25,1)}
+#oc-intro.weg .o-logo{opacity:0;filter:blur(6px);transform:scale(1.05);transition:opacity .8s,filter 1s,transform 1s cubic-bezier(.3,0,.2,1)}
+html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
+@keyframes o-fall{to{opacity:1;transform:none}}
+@keyframes o-scan{to{left:calc(100% + 20px)}}
+@keyframes o-balken{to{width:100%}}
+@keyframes o-chip{to{opacity:1;transform:none}}
+@keyframes o-knopf-ein{to{opacity:1;transform:none}}
+@keyframes o-druck{0%{opacity:1;transform:scale(1)}40%{opacity:1;transform:scale(.9);box-shadow:0 0 0 rgba(47,123,255,0)}100%{opacity:1;transform:scale(1.04);box-shadow:0 0 60px rgba(90,160,255,.9)}}
+@keyframes o-welle{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(60)}}
+@keyframes o-blitz{0%{opacity:0}20%{opacity:.55}100%{opacity:0}}
+@keyframes o-icon{0%{opacity:0;transform:scale(.4) rotate(-12deg)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes o-hoch{to{opacity:1;transform:none}}
+@keyframes o-claim{from{opacity:0;letter-spacing:.7em}to{opacity:1;letter-spacing:.24em}}
+@keyframes o-seite{from{opacity:0;transform:scale(1.02)}to{opacity:1;transform:none}}
+@media(max-width:600px){ #oc-intro .o-claim{letter-spacing:.12em;animation-name:o-claim-m!important} }
+@keyframes o-claim-m{from{opacity:0;letter-spacing:.45em}to{opacity:1;letter-spacing:.12em}}
+</style>
+</head><body>
+<div id="oc-intro" aria-hidden="true">
+ <div class="o-szene">
+  <div class="o-zone"><div class="o-datei"><svg viewBox="0 0 24 24" fill="none" stroke="#5aa0ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg><div>original.bin<small>2.048 KB · ECU-File</small></div></div><div class="o-scan"></div></div>
+  <div class="o-status"><span class="o-text">Original wird geprüft …</span><b class="o-proz">0 %</b></div>
+  <div class="o-balken"><i></i></div>
+  <div class="o-chips"><span>Stage 1</span><span>Launch Control</span><span>Pop &amp; Bang</span></div>
+  <button class="o-knopf" type="button" tabindex="-1">1-Click</button>
+ </div>
+ <div class="o-welle"></div><div class="o-welle w2"></div><div class="o-blitz"></div>
+ <div class="o-logo"><div class="o-icon"></div><div class="o-name">OneClick <em>Solutions</em></div><div class="o-claim">Chiptuning-Files mit einem Klick</div></div>
+</div>
+<script>(function(){
+ var h=document.documentElement,el=document.getElementById("oc-intro");
+ if(!h.classList.contains("oc-intro")||!el){if(el)el.remove();return}
+ var tx=el.querySelector(".o-text"),pz=el.querySelector(".o-proz");
+ function nach(ms,f){setTimeout(f,ms)}
+ var t0=performance.now()+900,dauer=1500;
+ (function lauf(t){var x=Math.max(0,Math.min(1,(t-t0)/dauer)),e=x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;pz.textContent=Math.round(e*100)+" %";if(x<1)requestAnimationFrame(lauf)})(performance.now());
+ nach(1350,function(){tx.textContent="Steuergerät erkannt"});
+ nach(1950,function(){tx.textContent="3 Lösungen gefunden";el.classList.add("loes")});
+ nach(2900,function(){el.classList.add("klick")});
+ nach(3150,function(){var l=document.querySelector("nav .logo");if(l)el.querySelector(".o-icon").appendChild(l.cloneNode(true));el.classList.add("logo")});
+ nach(4600,function(){el.classList.add("weg");h.classList.add("oc-rein");h.classList.remove("oc-intro");
+   setTimeout(function(){el.remove();h.classList.remove("oc-rein")},2400)});
+})()</script>
 <nav><div class="breit"><a class="marke" href="/programm"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#eaf2ff"/></svg><span>{{ firma }}</span></a>
 <div class="links"><a href="#funktionen">Funktionen</a><a href="#ablauf">So geht's</a><a href="#faq">FAQ</a></div>
 <a class="btn klein pc" href="{{ download }}" data-dl>Download</a></div></nav>
