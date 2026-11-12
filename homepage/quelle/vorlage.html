@@ -285,8 +285,103 @@ p{max-width:62ch}
 }
 .nav-mobil{display:none;gap:12px;align-items:center;padding-top:18px}
 </style>
+<script>(function(){try{if(matchMedia("(prefers-reduced-motion: reduce)").matches||sessionStorage.getItem("gh-intro"))return;sessionStorage.setItem("gh-intro","1")}catch(e){return}document.documentElement.classList.add("intro")})()</script>
+<style>
+html:not(.intro) #intro{display:none}
+html.intro,html.intro body{overflow:hidden}
+#intro{position:fixed;inset:0;z-index:9999;pointer-events:auto;cursor:pointer;font-family:var(--sans)}
+#intro .i-h{position:absolute;left:0;right:0;height:50.2%;background:#0b0b0c;transition:transform .85s cubic-bezier(.77,0,.18,1)}
+#intro .i-h::before{content:"";position:absolute;inset:0;background:linear-gradient(#202024 1px,transparent 1px) 0 0/64px 64px,linear-gradient(90deg,#202024 1px,transparent 1px) 0 0/64px 64px;opacity:.55}
+#intro .i-o{top:0}#intro .i-o::before{background-position:0 0}
+#intro .i-u{bottom:0}#intro .i-u::before{background-position:0 100%}
+#intro .i-naht{position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--rot);box-shadow:0 0 18px 4px rgba(227,35,27,.85),0 0 60px 10px rgba(227,35,27,.45);transform:scaleX(0);opacity:0;z-index:3}
+#intro .i-buehne{position:absolute;inset:0;display:grid;place-items:center;z-index:2;transition:opacity .3s,transform .6s cubic-bezier(.2,.7,.2,1)}
+#intro .i-mitte{width:min(880px,88vw)}
+#intro .i-zeile{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:clamp(11px,1.3vw,14px);letter-spacing:.12em;text-transform:uppercase;color:#8d8b86}
+#intro .i-status::before{content:"";display:inline-block;width:8px;height:8px;margin-right:10px;border-radius:50%;background:var(--rot);box-shadow:0 0 10px var(--rot);animation:i-puls .5s infinite alternate}
+#intro .i-rpm b{font-size:clamp(26px,4.4vw,46px);color:#f3f1ec;font-weight:500;letter-spacing:.02em;font-variant-numeric:tabular-nums;margin-right:8px}
+#intro .i-licht{display:grid;grid-template-columns:repeat(14,1fr);gap:clamp(3px,.6vw,7px);margin:14px 0 22px}
+#intro .i-licht i{height:clamp(8px,1.2vw,12px);border-radius:2px;background:#1d1d21;transition:background .08s,box-shadow .08s}
+#intro .i-licht i.an{background:#ecebe7;box-shadow:0 0 10px rgba(236,235,231,.6)}
+#intro .i-licht i.an.r{background:var(--rot);box-shadow:0 0 14px var(--rot)}
+#intro.shift .i-licht i{background:var(--rot)!important;box-shadow:0 0 18px var(--rot)!important;animation:i-blink .09s 4 alternate}
+#intro svg{display:block;width:100%;height:auto;overflow:visible}
+#intro .k{fill:none;stroke-width:3;stroke-linecap:round;stroke-dasharray:1200;stroke-dashoffset:1200}
+#intro .k-s{stroke:#5d5b57;stroke-dasharray:8 8;stroke-dashoffset:0;clip-path:inset(0 100% 0 0);animation:i-wisch 1.15s .15s cubic-bezier(.4,0,.2,1) forwards}
+#intro .k-t{stroke:var(--rot);stroke-width:4;filter:drop-shadow(0 0 8px rgba(227,35,27,.8));animation:i-zeichnen 1.15s .15s cubic-bezier(.4,0,.2,1) forwards}
+#intro .k-f{fill:url(#i-verlauf);opacity:0;animation:i-ein .5s .9s forwards}
+#intro .k-txt{font-family:var(--mono);font-size:15px;letter-spacing:.1em;opacity:0;animation:i-ein .3s 1s forwards}
+#intro .i-logo{position:absolute;left:50%;top:50%;width:min(620px,78vw);transform:translate(-50%,-50%) scale(2.4);filter:blur(24px);opacity:0;z-index:4}
+#intro .i-logo img{width:100%;height:auto;display:block;filter:drop-shadow(0 0 30px rgba(227,35,27,.55))}
+#intro .i-claim{position:absolute;left:0;right:0;top:calc(50% + min(62px,9vw));text-align:center;font-family:var(--mono);font-size:clamp(12px,1.6vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#cfcdc8;opacity:0;z-index:4}
+#intro .i-blitz{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,#fff 0,rgba(227,35,27,.9) 35%,transparent 75%);opacity:0;z-index:5;pointer-events:none}
+#intro .i-weg{position:absolute;right:20px;bottom:18px;z-index:6;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6f6d69;background:none;border:0;cursor:pointer}
+#intro.slam .i-mitte{opacity:.13;filter:blur(3px);transition:opacity .35s,filter .35s}
+#intro.slam .i-buehne{animation:i-wackeln .38s}
+#intro.slam .i-logo{animation:i-slam .55s cubic-bezier(.2,1.3,.3,1) forwards}
+#intro.slam .i-claim{animation:i-claim .5s .3s forwards}
+#intro.slam .i-blitz{animation:i-blitz .5s}
+#intro.auf .i-naht{animation:i-naht .5s forwards}
+#intro.auf2 .i-o{transform:translateY(-101%)}
+#intro.auf2 .i-u{transform:translateY(101%)}
+#intro.auf2 .i-buehne,#intro.auf2 .i-logo,#intro.auf2 .i-claim{opacity:0!important;transition:opacity .25s}
+#intro.auf2 .i-buehne{transform:scale(1.12)}
+#intro.auf2 .i-naht{opacity:0;transition:opacity .3s .15s}
+#intro.auf2 .i-weg{display:none}
+@media(max-width:600px){#intro .i-claim{letter-spacing:.14em!important;animation-name:i-claim-m!important}}
+@keyframes i-claim-m{from{opacity:0;letter-spacing:.5em}to{opacity:1;letter-spacing:.14em}}
+@keyframes i-zeichnen{to{stroke-dashoffset:0}}
+@keyframes i-wisch{to{clip-path:inset(0 0 0 0)}}
+@keyframes i-ein{to{opacity:1}}
+@keyframes i-puls{to{opacity:.25}}
+@keyframes i-blink{to{opacity:.35}}
+@keyframes i-slam{0%{opacity:0;transform:translate(-50%,-50%) scale(2.4);filter:blur(24px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:blur(0)}}
+@keyframes i-claim{from{opacity:0;letter-spacing:.9em}to{opacity:1;letter-spacing:.32em}}
+@keyframes i-blitz{0%{opacity:0}15%{opacity:.85}100%{opacity:0}}
+@keyframes i-wackeln{0%,100%{transform:none}20%{transform:translate(-9px,5px)}40%{transform:translate(8px,-6px)}60%{transform:translate(-6px,-3px)}80%{transform:translate(4px,4px)}}
+@keyframes i-naht{0%{opacity:1;transform:scaleX(0)}100%{opacity:1;transform:scaleX(1)}}
+</style>
 </head>
 <body>
+<div id="intro" aria-hidden="true">
+  <div class="i-h i-o"></div><div class="i-h i-u"></div><div class="i-naht"></div>
+  <div class="i-buehne"><div class="i-mitte">
+    <div class="i-zeile"><span class="i-status">ECU · Auslesen …</span><span class="i-rpm"><b>0000</b>U/min</span></div>
+    <div class="i-licht"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="r"></i><i class="r"></i><i class="r"></i><i class="r"></i></div>
+    <svg viewBox="0 0 1000 300" role="presentation">
+      <defs><linearGradient id="i-verlauf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3231b" stop-opacity=".35"/><stop offset="1" stop-color="#e3231b" stop-opacity="0"/></linearGradient></defs>
+      <path class="k-f" d="M0 290 C120 280 200 200 330 150 C460 100 560 40 700 30 C820 22 900 50 1000 80 L1000 300 L0 300 Z"/>
+      <path class="k k-s" d="M0 290 C140 284 230 230 360 196 C490 162 600 128 720 122 C840 116 920 140 1000 160"/>
+      <path class="k k-t" d="M0 290 C120 280 200 200 330 150 C460 100 560 40 700 30 C820 22 900 50 1000 80"/>
+      <text class="k-txt" x="995" y="196" text-anchor="end" fill="#8d8b86">SERIE</text>
+      <text class="k-txt" x="995" y="116" text-anchor="end" fill="#e3231b">GH-MAPPING</text>
+    </svg>
+  </div></div>
+  <div class="i-logo"><img src="/assets/logo.webp" alt="" width="720" height="99"></div>
+  <div class="i-claim">Chiptuning-Files vom Profi.</div>
+  <div class="i-blitz"></div>
+  <button class="i-weg" type="button" tabindex="-1">Überspringen ›</button>
+</div>
+<script>(function(){
+  var h=document.documentElement,el=document.getElementById("intro");
+  if(!h.classList.contains("intro")||!el){if(el)el.remove();return}
+  var rpm=el.querySelector(".i-rpm b"),st=el.querySelector(".i-status"),li=el.querySelectorAll(".i-licht i"),uhr=[],fertig=false;
+  function nach(ms,f){uhr.push(setTimeout(f,ms))}
+  function ende(){if(fertig)return;fertig=true;uhr.forEach(clearTimeout);el.classList.add("auf2");h.classList.remove("intro");setTimeout(function(){el.remove()},900)}
+  var t0=performance.now(),dauer=1250;
+  (function lauf(t){var x=Math.min(1,(t-t0)/dauer),e=1-Math.pow(1-x,2.2),n=Math.round(e*7200);
+    rpm.textContent=("000"+n).slice(-4);var an=Math.round(e*li.length);
+    for(var i=0;i<li.length;i++)li[i].classList.toggle("an",i<an);
+    if(x<1&&!fertig)requestAnimationFrame(lauf)})(t0);
+  nach(450,function(){st.textContent="Kennfelder · Optimieren …"});
+  nach(950,function(){st.textContent="Checksumme · OK"});
+  nach(1300,function(){el.classList.add("shift")});
+  nach(1420,function(){el.classList.add("slam")});
+  nach(2250,function(){el.classList.add("auf")});
+  nach(2600,ende);
+  el.addEventListener("click",ende);
+  addEventListener("keydown",function(e){if(e.key==="Escape"||e.key===" "||e.key==="Enter")ende()},{once:true});
+})()</script>
 
 <header class="kopf" id="kopf">
   <div class="wrap">
