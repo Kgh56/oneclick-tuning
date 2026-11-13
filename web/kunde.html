@@ -2214,7 +2214,28 @@ $("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.targ
 const ecuSichtbar = () => aktuelle === "v-upload" && $("#seite-ecu").classList.contains("aktiv");
 ["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (ecuSichtbar()) zone.classList.add("ziehen"); }));
 ["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || e.target === zone) zone.classList.remove("ziehen"); }));
-document.addEventListener("drop", e => { if (ecuSichtbar() && e.dataTransfer.files.length) pruefen(e.dataTransfer.files[0]); });
+/* Gezogene Datei holen. Auf dem Mac (WebKit) kommt sie manchmal leer oder gar nicht an: dann die Datei
+   im Programm einlesen bzw. ueber das Programm direkt aus der Drag-Ablage von macOS holen. */
+async function gezogeneDatei(e) {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];   // vor jedem await lesen
+  const mac = /Macintosh/.test(navigator.userAgent);
+  if (f && (!mac || f.size > 16 * 1024 * 1024)) return f;
+  if (f) { try { const b = await f.arrayBuffer(); if (b.byteLength) return new File([b], f.name, {type: f.type}); } catch (x) { /* weiter unten */ } }
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.gezogene_datei) {
+    try {
+      const d = await window.pywebview.api.gezogene_datei();
+      if (d && d.daten) return new File([Uint8Array.from(atob(d.daten), c => c.charCodeAt(0))], d.name);
+      if (d && d.fehler) { toast("fehler", "Datei nicht geladen", d.fehler, 7000); return null; }
+    } catch (x) { /* aeltere Programmversion */ }
+  }
+  return f || null;
+}
+document.addEventListener("drop", async e => {
+  if (!ecuSichtbar()) return;
+  const f = await gezogeneDatei(e);
+  if (f) pruefen(f);
+  else if (/Macintosh/.test(navigator.userAgent)) toast("fehler", "Datei nicht geladen", "Bitte nochmal ziehen oder auf „Datei wählen“ klicken.", 7000);
+});
 $("#senden").addEventListener("click", senden);
 $("#abbrechen").addEventListener("click", () => zeige("v-upload"));
 $("#nochmal").addEventListener("click", () => zeige("v-upload"));
@@ -2412,13 +2433,14 @@ function tkAnhangWahl(box, klammer, flaeche) {
   input.addEventListener("change", () => w.setzen(input.files[0]));
   chip.querySelector(".tk-weg").addEventListener("click", () => w.setzen(null));
   let tiefe = 0;
-  const istDatei = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  const istDatei = e => e.dataTransfer && ([...e.dataTransfer.types].includes("Files") || (/Macintosh/.test(navigator.userAgent) && !e.dataTransfer.types.length));
   flaeche.addEventListener("dragenter", e => { if (!istDatei(e)) return; e.preventDefault(); tiefe++; flaeche.classList.add("ziehen-tk"); });
   flaeche.addEventListener("dragover", e => { if (istDatei(e)) e.preventDefault(); });
   flaeche.addEventListener("dragleave", () => { if (--tiefe <= 0) { tiefe = 0; flaeche.classList.remove("ziehen-tk"); } });
-  flaeche.addEventListener("drop", e => {
+  flaeche.addEventListener("drop", async e => {
     if (!istDatei(e)) return; e.preventDefault(); e.stopPropagation(); tiefe = 0; flaeche.classList.remove("ziehen-tk");
-    if (e.dataTransfer.files.length) w.setzen(e.dataTransfer.files[0]);
+    const f = await gezogeneDatei(e);
+    if (f) w.setzen(f);
   });
   return w;
 }

@@ -14,6 +14,7 @@ Unter Windows nutzt pywebview Microsoft Edge WebView2 (in Windows 10/11 enthalte
 Bauen macht GitHub automatisch: .github/workflows/windows-programm.yml und mac-programm.yml
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -211,6 +212,28 @@ class Bruecke:
 
     def plattform(self):
         return "mac" if MAC else "windows"
+
+    def gezogene_datei(self):
+        """Mac: zuletzt ins Fenster gezogene Datei direkt aus der Drag-Ablage von macOS lesen
+        (WebKit gibt sie der Seite nicht immer mit). {"name", "daten" (Base64)} oder {"fehler"}."""
+        if not MAC:
+            return None
+        try:
+            import AppKit
+            name = getattr(AppKit, "NSPasteboardNameDrag", None) or AppKit.NSDragPboard
+            ablage = AppKit.NSPasteboard.pasteboardWithName_(name)
+            urls = ablage.readObjectsForClasses_options_(
+                [AppKit.NSURL], {AppKit.NSPasteboardURLReadingFileURLsOnlyKey: True}) or []
+        except Exception:
+            return None
+        for url in urls:
+            pfad = url.path()
+            if pfad and os.path.isfile(pfad):
+                if os.path.getsize(pfad) > 16 * 1024 * 1024:
+                    return {"fehler": "Die Datei ist größer als 16 MB."}
+                with open(pfad, "rb") as f:
+                    return {"name": os.path.basename(pfad), "daten": base64.b64encode(f.read()).decode()}
+        return None
 
     def minimieren(self):
         self._fenster.minimize()
