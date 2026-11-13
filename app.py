@@ -370,6 +370,51 @@ def merken(art: str):
     versuche.setdefault((art, request.remote_addr or "?"), []).append(time.time())
 
 
+# Mac-Admin-App: "angemeldet bleiben" (30 Tage). Nach vollstaendiger Anmeldung (Passwort + Code)
+# bekommt die App einen zufaelligen Geraeteschluessel; der Server speichert nur dessen Hash.
+GERAET_COOKIE = "oc_geraet"
+GERAET_TAGE = 30
+
+
+def geraet_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def aktive_geraete(b: dict) -> list:
+    jetzt = time.time()
+    return [g for g in b.get("geraete", []) if g.get("bis", 0) > jetzt]
+
+
+def geraet_merken(antwort, name: str):
+    """Nur in der Mac-Admin-App: Schluessel ausstellen, damit die App beim naechsten Start angemeldet ist."""
+    if not ist_admin_app():
+        return antwort
+    benutzer = lade_benutzer()
+    b = benutzer.get(name)
+    if not b:
+        return antwort
+    token = secrets.token_urlsafe(32)
+    jetzt = time.time()
+    b["geraete"] = aktive_geraete(b)[-9:] + [{"hash": geraet_hash(token), "seit": jetzt, "bis": jetzt + GERAET_TAGE * 86400}]
+    json_speichern(BENUTZER_DATEI, benutzer)
+    antwort.set_cookie(GERAET_COOKIE, f"{name}:{token}", max_age=GERAET_TAGE * 86400, httponly=True, samesite="Lax",
+                       secure=bool(app.config.get("SESSION_COOKIE_SECURE")), path="/")
+    return antwort
+
+
+def geraet_vergessen():
+    """Schluessel dieses Geraets ungueltig machen (beim Abmelden)."""
+    name, _, token = request.cookies.get(GERAET_COOKIE, "").rpartition(":")
+    if not name or not token:
+        return
+    benutzer = lade_benutzer()
+    b = benutzer.get(name)
+    if b and b.get("geraete"):
+        h = geraet_hash(token)
+        b["geraete"] = [g for g in aktive_geraete(b) if not hmac.compare_digest(g["hash"], h)]
+        json_speichern(BENUTZER_DATEI, benutzer)
+
+
 @app.after_request
 def sicherheits_header(antwort):
     if request.path.startswith(("/admin", "/login", "/api/", "/auftrag/", "/download/", "/logout")):
@@ -468,7 +513,7 @@ def login():
                 session["zfa_name"], session["zfa_seit"] = name, time.time()
                 return redirect(url_for("login_code"))
             session["benutzer"], session["admin"] = name, True
-            return redirect(url_for("admin"))
+            return geraet_merken(redirect(url_for("admin")), name)
         merken("login")
         flash("Benutzername oder Passwort falsch.")
     return render_template("login.html")
@@ -494,7 +539,7 @@ def login_code():
             session["csrf"] = secrets.token_hex(16)
             if not b.get("ersatz"):
                 flash("Hinweis: Du hast keine Ersatzcodes mehr – bitte unter Einstellungen neue erzeugen.")
-            return redirect(url_for("admin"))
+            return geraet_merken(redirect(url_for("admin")), name)
         merken("login_code")
         flash("Code falsch oder abgelaufen.")
     return render_template("login_code.html")
@@ -557,9 +602,12 @@ def rechtstext_html(text: str):
 
 @app.route("/logout")
 def logout():
+    geraet_vergessen()
     session.pop("benutzer", None)
     session.pop("admin", None)
-    return redirect(url_for("login"))
+    antwort = redirect(url_for("login"))
+    antwort.delete_cookie(GERAET_COOKIE, path="/")
+    return antwort
 
 
 @app.route("/fonts/<name>")
@@ -595,6 +643,25 @@ def nur_ueber_programm():
     Werbeseite und den Admin-Bereich."""
     if request.path.startswith("/api/") and not ist_programm() and not session.get("admin"):
         return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
+
+
+@app.before_request
+def geraet_anmelden():
+    """Mac-Admin-App mit gueltigem Geraeteschluessel: ohne erneute Eingabe angemeldet."""
+    if session.get("admin") or not ist_admin_app() or not request.cookies.get(GERAET_COOKIE):
+        return
+    if zu_viele("geraet", 10, 15 * 60):
+        return
+    name, _, token = request.cookies.get(GERAET_COOKIE, "").rpartition(":")
+    b = lade_benutzer().get(name) if name and token else None
+    if b and b.get("rolle") == "admin":
+        h = geraet_hash(token)
+        if any(hmac.compare_digest(g["hash"], h) for g in aktive_geraete(b)):
+            session.clear()
+            session["benutzer"], session["admin"] = name, True
+            session["csrf"] = secrets.token_hex(16)
+            return
+    merken("geraet")
 
 
 @app.route("/favicon.svg")
@@ -2942,7 +3009,7 @@ def einstellungen():
             elif not check_password_hash(ich["pw"], request.form.get("pw", "")) or not zweiter_faktor_ok(ich, request.form.get("code", "")):
                 flash("Passwort oder Code stimmt nicht.")
             elif aktion == "2fa_aus":
-                for k in ("totp", "totp_zuletzt", "ersatz"):
+                for k in ("totp", "totp_zuletzt", "ersatz", "geraete"):
                     ich.pop(k, None)
                 json_speichern(BENUTZER_DATEI, benutzer)
                 flash("Zwei-Faktor-Anmeldung ist aus.")
@@ -2953,6 +3020,11 @@ def einstellungen():
                 session["ersatz_anzeigen"] = codes
                 flash("Neue Ersatzcodes erzeugt – die alten gelten nicht mehr.")
             return redirect(url_for("einstellungen") + "#zfa")
+        elif aktion == "geraete_aus":
+            benutzer = lade_benutzer()
+            benutzer.get(session["benutzer"], {}).pop("geraete", None)
+            json_speichern(BENUTZER_DATEI, benutzer)
+            flash("Alle gemerkten Geräte sind abgemeldet. Die Mac-App fragt beim nächsten Start wieder nach Passwort und Code.")
         elif aktion == "passwort":
             benutzer = lade_benutzer()
             ich = benutzer.get(session["benutzer"])
@@ -2965,6 +3037,7 @@ def einstellungen():
                 flash("Die beiden neuen Passwörter sind nicht gleich.")
             else:
                 ich["pw"] = generate_password_hash(neu)
+                ich.pop("geraete", None)   # gemerkte Geraete muessen sich neu anmelden
                 json_speichern(BENUTZER_DATEI, benutzer)
                 flash("Passwort geändert.")
         return redirect(url_for("einstellungen"))
@@ -2977,7 +3050,7 @@ def einstellungen():
     uri = (f"otpauth://totp/{urllib.parse.quote(PROGRAMM_NAME + ':' + session['benutzer'])}?secret={zfa_neu}"
            f"&issuer={urllib.parse.quote(PROGRAMM_NAME)}&digits=6&period=30") if zfa_neu else ""
     return render_template("einstellungen.html", homepage_status=homepage_status, cfg=lade_config(), chats=dict(telegram_chats), standard_whatsapp=STANDARD_WHATSAPP,
-                           rechtliches=RECHTLICHES, zfa_aktiv=bool(ich.get("totp")), zfa_ersatz_rest=len(ich.get("ersatz", [])),
+                           rechtliches=RECHTLICHES, zfa_aktiv=bool(ich.get("totp")), zfa_ersatz_rest=len(ich.get("ersatz", [])), geraete=len(aktive_geraete(ich)),
                            zfa_neu=zfa_neu, zfa_qr=qr_svg(uri) if uri else None,
                            zfa_geheim=" ".join(zfa_neu[i:i + 4] for i in range(0, len(zfa_neu), 4)) if zfa_neu else "",
                            ersatz_anzeigen=session.pop("ersatz_anzeigen", None),
@@ -4173,6 +4246,13 @@ Ablauf: Kunde bestellt → du gibst frei → Kunde bezahlt bei Stripe → Downlo
 {% else %}<p class="leise">Updates per Knopf gibt es nur auf dem Server (Installation über das Installations-Skript).</p>{% endif %}
 </div>
 
+<div class="karte" id="geraete"><h2>Mac-App: angemeldet bleiben</h2>
+<p>Die Mac-App „OneClick Admin“ bleibt nach dem Anmelden <b>30 Tage</b> angemeldet – kein Passwort und Code bei jedem Start.
+„Abmelden“ in der App beendet das sofort für diesen Mac.</p>
+<p class="leise">Gemerkte Geräte: <b>{{ geraete }}</b>. Passwort ändern oder Zwei-Faktor ausschalten meldet ebenfalls alle ab.</p>
+<form method="post" class="inline"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="geraete_aus">
+<button class="btn grau" onclick="return confirm('Alle gemerkten Geräte abmelden?')"{% if not geraete %} disabled{% endif %}>Alle Geräte abmelden</button></form></div>
+
 <div class="karte" id="zfa"><h2>Zwei-Faktor-Anmeldung</h2>
 {% if ersatz_anzeigen %}<div class="hinweis" style="border-color:#2fd35a"><b>Deine Ersatzcodes</b> – jeder funktioniert genau einmal, falls das Handy weg ist.
 Jetzt aufschreiben oder ausdrucken, sie werden nicht nochmal angezeigt:
@@ -4358,7 +4438,7 @@ if __name__ == "__main__":
     elif befehl == "2fa-aus" and len(sys.argv) >= 3:
         benutzer = lade_benutzer()
         if sys.argv[2] in benutzer:
-            for k in ("totp", "totp_zuletzt", "ersatz"):
+            for k in ("totp", "totp_zuletzt", "ersatz", "geraete"):
                 benutzer[sys.argv[2]].pop(k, None)
             json_speichern(BENUTZER_DATEI, benutzer)
             print(f"Zwei-Faktor-Anmeldung für {sys.argv[2]} ist aus. Bitte danach neu einrichten.")

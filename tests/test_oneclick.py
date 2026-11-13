@@ -656,6 +656,60 @@ class WebTests(Basis):
         f = self.client()
         self.assertTrue(f.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": f.csrf}).headers["Location"].endswith("/admin"))
 
+    def test_mac_app_bleibt_angemeldet(self):
+        app_ua = {"User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 OneClickAdmin/7"}
+        def app_client():
+            c = A.app.test_client(); c.environ_base.update(HTTP_USER_AGENT=app_ua["User-Agent"])
+            c.get("/login")
+            with c.session_transaction() as s:
+                c.csrf = s.setdefault("csrf", "x")
+            return c
+        def neu_gestartet(alt):     # App zu und wieder auf: Sitzung weg, nur der gespeicherte Schluessel bleibt
+            c = A.app.test_client(); c.environ_base.update(HTTP_USER_AGENT=app_ua["User-Agent"])
+            k = alt.get_cookie(A.GERAET_COOKIE)
+            if k:
+                c.set_cookie(A.GERAET_COOKIE, k.value)
+            return c
+        # Browser-Anmeldung merkt sich nichts
+        b = self.client(); b.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": b.csrf})
+        self.assertIsNone(b.get_cookie(A.GERAET_COOKIE))
+        # Mac-App: nach dem Anmelden bleibt sie angemeldet
+        c = app_client()
+        self.assertTrue(c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf}).headers["Location"].endswith("/admin"))
+        k = c.get_cookie(A.GERAET_COOKIE)
+        self.assertIsNotNone(k)
+        self.assertNotIn(k.value.split(":")[1], json.dumps(A.lade_benutzer()))   # nur der Hash liegt auf dem Server
+        d = neu_gestartet(c)
+        self.assertEqual(d.get("/admin").status_code, 200)
+        self.assertIn("Gemerkte Geräte: <b>1</b>", d.get("/admin/einstellungen").text)
+        # ohne Schluessel / mit falschem / im Browser mit kopiertem Schluessel: nicht drin
+        self.assertEqual(neu_gestartet(A.app.test_client()).get("/admin").status_code, 302)
+        f = A.app.test_client(); f.environ_base.update(HTTP_USER_AGENT=app_ua["User-Agent"])
+        f.set_cookie(A.GERAET_COOKIE, "chef:falsch")
+        self.assertEqual(f.get("/admin").status_code, 302)
+        g = A.app.test_client(); g.set_cookie(A.GERAET_COOKIE, k.value)
+        self.assertEqual(g.get("/admin").status_code, 302)
+        A.versuche.clear()
+        # abgelaufen nach 30 Tagen
+        alles = A.lade_benutzer(); alles["chef"]["geraete"][0]["bis"] = time.time() - 1; A.json_speichern(A.BENUTZER_DATEI, alles)
+        self.assertEqual(neu_gestartet(c).get("/admin").status_code, 302)
+        # Abmelden in der App macht den Schluessel ungueltig
+        c = app_client(); c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
+        alter = c.get_cookie(A.GERAET_COOKIE).value
+        c.get("/logout")
+        self.assertIsNone(c.get_cookie(A.GERAET_COOKIE))
+        h = A.app.test_client(); h.environ_base.update(HTTP_USER_AGENT=app_ua["User-Agent"]); h.set_cookie(A.GERAET_COOKIE, alter)
+        self.assertEqual(h.get("/admin").status_code, 302)
+        # "Alle Geraete abmelden"
+        c = app_client(); c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
+        a = self.admin()
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "geraete_aus"})
+        self.assertEqual(neu_gestartet(c).get("/admin").status_code, 302)
+        # Passwort aendern meldet ebenfalls ab
+        c = app_client(); c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "passwort", "alt": "Geheim123", "neu": "Geheim456", "neu2": "Geheim456"})
+        self.assertEqual(neu_gestartet(c).get("/admin").status_code, 302)
+
     def test_totp_rfc_testwerte(self):
         g = base64.b32encode(b"12345678901234567890").decode().rstrip("=")
         self.assertEqual(A.totp_code(g, 59 // 30), "287082")
