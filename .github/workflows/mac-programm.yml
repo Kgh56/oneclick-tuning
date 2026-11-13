@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   bauen:
-    runs-on: macos-15
+    runs-on: macos-15-intel   # Intel-Rechner: bei GitHub meist sofort frei; gebaut wird trotzdem fuer Intel + Apple-Chip
     steps:
       - uses: actions/checkout@v4
 
