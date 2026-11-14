@@ -1126,6 +1126,20 @@ button.hilfe svg{width:15px;height:15px}
 #zahl-dialog input[type=checkbox]{accent-color:#2f7bff}
 #af-nachricht{margin-top:14px}#af-kontakt{margin-top:10px}
 .ansicht:not(.aktiv){pointer-events:none}   /* ausblendende Ansicht faengt keine Klicks ab */
+/* Reiter "Preise" */
+.pr-live{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--leise)}
+.pr-live i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pr-puls 1.6s ease-in-out infinite}
+.pr-live.aus i{background:var(--dunkel);box-shadow:none;animation:none}
+@keyframes pr-puls{50%{opacity:.35}}
+.pr-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.pr-k{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-radius:14px;border:1px solid var(--rand);background:rgba(255,255,255,.03);transition:border-color .4s,box-shadow .4s,background .4s}
+.pr-k b{font-size:16px}
+.pr-k .pr-p{font-size:28px;font-weight:800;letter-spacing:-.01em;color:var(--text)}
+.pr-k .pr-p.anfrage{font-size:17px;font-weight:600;color:var(--leise)}
+.pr-k.orig{border-style:dashed}
+.pr-k.neu{border-color:var(--blau);box-shadow:0 0 0 3px rgba(47,107,255,.25);background:rgba(47,107,255,.10)}
+.pr-hinweise{margin-top:20px;display:grid;gap:8px;font-size:14px}
+.pr-hinweise p{margin:0}
 </style>
 </head>
 <body>
@@ -1190,6 +1204,7 @@ button.hilfe svg{width:15px;height:15px}
         <button type="button" id="sn-auftraege"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Meine Aufträge</button>
         <button type="button" id="sn-anfragen"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg>Anfragen</button>
         <button type="button" id="sn-original"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>Original wiederherstellen</button>
+        <button type="button" id="sn-preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</button>
         <button type="button" id="sn-support"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg>Support<b class="nx-badge" id="sn-support-badge"></b></button>
       </nav>
       <div class="nx-zaehler">
@@ -1360,6 +1375,19 @@ button.hilfe svg{width:15px;height:15px}
       <button type="button" class="btn grau" id="nx-info-support">Support-Ticket öffnen</button>
     </section>
       </div>
+    </section>
+    <section class="nx-seite" id="seite-preise">
+      <div class="nx-kopfzeile"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><div><h2 class="nx-h">Preise</h2>
+        <span class="leise">Was welche Lösung kostet – feste Preise pro File, ohne Abo.</span></div>
+        <span class="pr-live" id="pr-live"><i></i>Live</span></div>
+      <section class="karte">
+        <div class="pr-liste" id="pr-liste"><p class="leise">Preise werden geladen …</p></div>
+        <div class="pr-hinweise">
+          <p><b>Mehrere Lösungen in einem File?</b> Du zahlst die Summe der gewählten Lösungen – den Gesamtpreis siehst du vor dem Bezahlen.</p>
+          <p><b>Nichts Passendes im Archiv?</b> Bei einer Anfrage nennen wir dir den Preis, bevor du bezahlst.</p>
+          <p class="leise">Endpreise. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>
+        </div>
+      </section>
     </section>
     <section class="nx-seite" id="seite-support">
       <div class="nx-kopfzeile"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></span><div><h2 class="nx-h">Support</h2>
@@ -2509,6 +2537,44 @@ function statistikFragen() {
   document.body.appendChild(d);
 }
 
+/* ---------- Preise (live) ---------- */
+let prStand = "", prAlt = {};
+async function preiseLaden() {
+  let d;
+  try { d = (await server("/api/preise?t=" + Date.now())).daten; }
+  catch (e) { $("#pr-live").classList.add("aus"); return; }
+  $("#pr-live").classList.remove("aus");
+  if (d.stand === prStand) return;
+  const ersterLauf = !prStand; prStand = d.stand;
+  zustand.zahlung = !!d.zahlung_aktiv;
+  zustand.preise = Object.fromEntries(d.liste.filter(o => o.preis > 0).map(o => [o.key, o.preis]));
+  const box = $("#pr-liste"); box.innerHTML = "";
+  if (!d.liste.length) box.innerHTML = '<p class="leise">Gerade sind keine Lösungen hinterlegt.</p>';
+  d.liste.forEach(o => {
+    const k = document.createElement("div"); k.className = "pr-k" + (o.original ? " orig" : "");
+    const n = document.createElement("b"); n.textContent = o.original && !/rückrüst/i.test(o.name) ? o.name + " (Rückrüsten)" : o.name;
+    const p = document.createElement("div"); p.className = "pr-p" + (o.preis ? "" : " anfrage");
+    p.textContent = o.preis ? euro(o.preis) : "Preis auf Anfrage";
+    k.append(n, p); box.appendChild(k);
+    const merk = o.name + "|" + o.preis;
+    if (!ersterLauf && prAlt[o.key] !== merk) { k.classList.add("neu"); setTimeout(() => k.classList.remove("neu"), 4000); }
+    prAlt[o.key] = merk;
+  });
+  if (ersterLauf) return;
+  // offene Auswahl: Preise an den Loesungen und die Summe sofort mitziehen
+  document.querySelectorAll("#aw-loesungen .loesung").forEach(k => {
+    const ziel = k.querySelector("span:last-child"); let p = ziel.querySelector(".preis");
+    const wert = zustand.zahlung && zustand.preise[k.dataset.key];
+    if (wert) { if (!p) { p = document.createElement("span"); p.className = "preis"; ziel.appendChild(p); } p.textContent = euro(wert); }
+    else if (p) p.remove();
+  });
+  if (zustand.entwurf) auswahlMalen();
+  if ($("#seite-preise").classList.contains("aktiv")) toast("info", "Preise aktualisiert", "Die Preisliste wurde gerade aktualisiert.", 5000);
+}
+$("#sn-preise").addEventListener("click", () => { seite("preise"); $("#sn-preise").classList.add("an"); preiseLaden(); });
+setInterval(() => { if (!document.hidden) preiseLaden(); }, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) preiseLaden(); });
+
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
   zustand.original = d.original || "original";
@@ -2525,6 +2591,7 @@ function starten(d, mitIntro) {
   verbindung(!d.verbindung, d.verbindung ? "Offline" : "Verbunden");
   if (d.verbindung && !mitIntro) toast("fehler", "Keine Verbindung", d.verbindung, 7000);
   listeMalen();
+  preiseLaden();
 }
 async function init() {
   const beginn = Date.now();

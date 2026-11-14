@@ -599,6 +599,25 @@ class WebTests(Basis):
         # Admin-Ticketseite verlinkt den Auftrag
         self.assertIn(f"/auftrag/{aid}", a.get(f"/admin/ticket/{tid}").text)
 
+    def test_preisliste_live(self):
+        c = A.app.test_client()
+        # ohne Bezahlung: keine Preise, alles "auf Anfrage"
+        d = c.get("/api/preise").get_json()
+        self.assertTrue(d["liste"] and all(o["preis"] == 0 for o in d["liste"]))
+        self.assertEqual(d["liste"][-1]["key"], oneclick.ORIGINAL)
+        A.speichere_config({"stripe_key": "sk_test_x", "preise": {"stage1": 14900}})
+        d1 = c.get("/api/preise").get_json()
+        self.assertEqual(next(o["preis"] for o in d1["liste"] if o["key"] == "stage1"), 14900)
+        self.assertNotEqual(d1["stand"], d["stand"])
+        # Admin aendert den Preis -> neuer Stand, neuer Preis
+        A.speichere_config({"preise": {"stage1": 12900}})
+        d2 = c.get("/api/preise").get_json()
+        self.assertEqual(next(o["preis"] for o in d2["liste"] if o["key"] == "stage1"), 12900)
+        self.assertNotEqual(d2["stand"], d1["stand"])
+        self.assertEqual(c.get("/api/preise").get_json()["stand"], d2["stand"])   # unveraendert -> gleicher Stand
+        # im Browser (nicht das Programm) gibt es die Schnittstelle nicht
+        self.assertEqual(FlaskClient(A.app).get("/api/preise").status_code, 403)
+
     def test_zwei_faktor_anmeldung(self):
         a = self.admin()
         csrf = lambda c: c.session_transaction().__enter__()["csrf"]

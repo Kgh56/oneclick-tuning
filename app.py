@@ -1285,6 +1285,20 @@ def api_info():
                    support_whatsapp=lade_config().get("support_whatsapp", STANDARD_WHATSAPP))
 
 
+@app.route("/api/preise")
+def api_preise():
+    """Preisliste fuer den Reiter "Preise" im Programm. Das Programm fragt regelmaessig nach;
+    "stand" aendert sich, sobald der Admin einen Preis oder Namen aendert."""
+    namen, p = option_namen(), preise()
+    zahlung = zahlung_aktiv()
+    liste = [{"key": k, "name": namen[k], "preis": p.get(k, 0) if zahlung else 0, "original": k == oneclick.ORIGINAL}
+             for k in [*oneclick.optionen(), oneclick.ORIGINAL]]
+    stand = hashlib.sha1(json.dumps([liste, zahlung], sort_keys=True).encode()).hexdigest()[:12]
+    antwort = jsonify(liste=liste, zahlung_aktiv=zahlung, stand=stand)
+    antwort.headers["Cache-Control"] = "no-store"
+    return antwort
+
+
 @app.route("/api/pruefen", methods=["POST"])
 def api_pruefen():
     datei = request.files.get("datei")
