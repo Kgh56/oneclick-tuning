@@ -2485,7 +2485,8 @@ def loesungen_verwalten():
             flash(f"Nicht gespeichert – {e}")
             return redirect(url_for("admin_archiv") + "#preise")
         speichere_config({"preise": neu})
-        flash("Gespeichert." + (f" {umbenannt} Name(n) geändert – Kunden sehen die neuen Namen sofort im Programm." if umbenannt else ""))
+        flash("Gespeichert – Kunden sehen die Preise im Programm unter „Preise“ (spätestens nach 15 Sekunden)."
+              + (f" {umbenannt} Name(n) geändert." if umbenannt else ""))
         return redirect(url_for("admin_archiv") + "#preise")
     try:
         with index_sperre:
@@ -3308,6 +3309,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht','auftrag_suche') }}><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg>Tickets{% if tickets_offen %}<i>{{ tickets_offen }}</i>{% endif %}</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archiv</a>
+<a href="{{ url_for('admin_archiv') }}#preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<i>{{ zu_sortieren }}</i></a>{% endif %}
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>Eigenes File</a>
 <a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</a>
@@ -3318,6 +3320,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}>Tickets{% if tickets_offen %} ({{ tickets_offen }}){% endif %}</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
+<a href="{{ url_for('admin_archiv') }}#preise">Preise</a>
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}>Sortieren ({{ zu_sortieren }})</a>{% endif %}
 <a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}>Einstellungen</a>
