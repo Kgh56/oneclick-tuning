@@ -712,10 +712,6 @@ WERBE_FAQ = [
 ]
 
 
-def basis_adresse() -> str:
-    return (lade_config().get("basis_url") or request.url_root).rstrip("/")
-
-
 def werbe_daten() -> str:
     """Strukturierte Daten (schema.org) der Werbeseite als JSON-LD."""
     b = basis_adresse()

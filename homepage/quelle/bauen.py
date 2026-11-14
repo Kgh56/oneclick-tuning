@@ -1,4 +1,4 @@
-import json, html, os, re, sys
+import json, html, os, re
 H=os.path.dirname(os.path.abspath(__file__))  # Ordner "quelle"; fertige Seite landet in ../seite
 v=open(H+"/vorlage.html",encoding="utf-8").read()
 
