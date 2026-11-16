@@ -697,8 +697,8 @@ WERBE_FAQ = [
     ("Brauche ich ein Konto?", "Nein. Deine Aufträge merkt sich das Programm auf deinem PC."),
     ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
      "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
-    ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem Tool auf – "
-     "zum Beispiel mit dem Magic Motorsport Flex. Die Checksumme korrigiert dein Flash-Tool beim Schreiben."),
+    ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem eigenen "
+     "Flash-Tool auf. Die Checksumme korrigiert dein Flash-Tool beim Schreiben."),
     ("Was mache ich, wenn es ein Problem mit dem File gibt?", "Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. "
      "Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat."),
     ("Bekomme ich Launch Control, Antilag oder Mapswitch?", "Ja, für VAG: 2-Step / Launch Control, Antilag und No-Lift-Shift "

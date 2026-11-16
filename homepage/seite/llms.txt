@@ -9,7 +9,7 @@
 - Start/Stopp aus und Launch Control, auch kombiniert mit Stage 1.
 - Rückrüsten: getuntes File hochladen, passendes Original zurückbekommen.
 - Individuelle Anpassungen auf Basis von Prüfstandsdaten und Logs.
-- Magic Motorsport Flex als Slave (in Zusammenarbeit mit Magic Motorsport).
+- VAG-Sonderfunktionen auf Anfrage per Ticket im Programm: 2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 sowie Mapswitch (nur Motorsport).
 
 ## So funktioniert eine Bestellung
 1. Steuergerät auslesen (OBD, Bench oder Boot).
@@ -49,7 +49,7 @@ Die Preise hängen von der Lösung ab und werden im Programm direkt nach dem Lad
 Liegt Ihr File bereits in unserem Archiv, laden Sie es direkt nach der Zahlung herunter – rund um die Uhr. Bei einer Anfrage erstellen wir das File individuell; das Programm meldet sich, sobald es fertig ist.
 
 ### Welches Werkzeug brauche ich zum Auslesen und Aufspielen?
-Ein Flash-Tool, mit dem Sie das Steuergerät per OBD, Bench oder Boot auslesen und beschreiben können – zum Beispiel das Magic Motorsport Flex, das wir als Slave anbieten. Laden Sie immer das unveränderte Original hoch und sichern Sie es vor dem Aufspielen.
+Ein Flash-Tool, mit dem Sie das Steuergerät per OBD, Bench oder Boot auslesen und beschreiben können. Laden Sie immer das unveränderte Original hoch und sichern Sie es vor dem Aufspielen.
 
 ### Für welche Fahrzeuge und Steuergeräte gibt es Files?
 Für alle Fahrzeuge, deren Original-File Sie auslesen können. Ob es für Ihr Steuergerät und Ihre Software bereits eine fertige Lösung gibt, zeigt OneClick sofort nach dem Laden. Ist noch nichts im Archiv, stellen Sie im Programm eine Anfrage mit Ihren Fahrzeugdaten.

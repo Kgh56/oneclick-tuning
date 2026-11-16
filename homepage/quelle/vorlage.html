@@ -173,12 +173,6 @@ p{max-width:62ch}
 .download-zeile{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .download-zeile .mono{color:var(--grau)}
 
-/* Flex */
-.flex-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(36px,6vw,96px)}
-.flex-karte{border:1px solid var(--linie-hell);background:#fff;padding:34px}
-.flex-karte dl{display:grid;grid-template-columns:auto 1fr;gap:12px 24px;margin:20px 0 28px}
-.flex-karte dt{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--grau-dunkel);padding-top:3px}
-.flex-karte dd{font-weight:600}
 
 /* FAQ */
 .faq-raster{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr);gap:clamp(36px,6vw,96px)}
@@ -251,7 +245,7 @@ p{max-width:62ch}
   .kopf.offen .nav a{padding:14px 0;border-bottom:1px solid var(--linie);font-size:17px}
   .kopf.offen .nav .nav-mobil{display:flex}
   .hero{padding-top:120px}
-  .hero-raster,.werkstatt-raster,.oc-raster,.flex-raster,.faq-raster,.kontakt-raster,.kopfzeile{grid-template-columns:1fr}
+  .hero-raster,.werkstatt-raster,.oc-raster,.faq-raster,.kontakt-raster,.kopfzeile{grid-template-columns:1fr}
   .screenshot img{max-height:560px;object-fit:cover;object-position:top left}
   .hero-bild{min-height:380px;max-height:460px;border-bottom:1px solid var(--linie);margin-bottom:40px}
   .hero .aktionen{margin-bottom:40px}
@@ -384,7 +378,6 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
       <a href="#werkstatt" data-en="Workshop">Werkstatt</a>
       <a href="#ablauf" data-en="Process">Ablauf</a>
       <a href="#oneclick">OneClick</a>
-      <a href="#flex">Flex</a>
       <a href="#faq">FAQ</a>
       <a href="#kontakt" data-en="Contact">Kontakt</a>
       <div class="nav-mobil"><div class="sprache" role="group" aria-label="Sprache"><button type="button" data-lang="de" aria-pressed="true">DE</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div></div>
@@ -515,30 +508,10 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
   </div>
 </section>
 
-<section class="abschnitt hell" id="flex">
-  <div class="wrap flex-raster">
-    <div class="rein">
-      <p class="kapitel mono"><b>05</b><span data-en="Tool">Werkzeug</span></p>
-      <h2 data-en-html="Magic Motorsport<br>Flex – from us.">Magic Motorsport<br>Flex – bei uns.</h2>
-      <p style="margin-top:26px;font-size:18px;color:#3d3b37" data-en="We work with Magic Motorsport and offer the Flex as a slave: the tool for reading and writing ECUs – ideal for workshops that read and flash themselves and get their files from us.">Wir arbeiten mit Magic Motorsport zusammen und bieten das Flex als Slave an: das Werkzeug zum Auslesen und Beschreiben von Steuergeräten – ideal für Werkstätten, die selbst auslesen und aufspielen und ihre Files von uns beziehen.</p>
-    </div>
-    <div class="flex-karte rein">
-      <p class="mono grau" data-en="At a glance">Auf einen Blick</p>
-      <dl>
-        <dt data-en="Version">Variante</dt><dd>Magic Motorsport Flex · Slave</dd>
-        <dt data-en="For">Für</dt><dd data-en="Workshops &amp; tuners" data-en-html="Workshops &amp; tuners">Werkstätten &amp; Tuner</dd>
-        <dt data-en="Files">Files</dt><dd data-en="Directly from GH-MAPPING">Direkt von GH-MAPPING</dd>
-        <dt data-en="Advice">Beratung</dt><dd data-en="Personally via WhatsApp">Persönlich per WhatsApp</dd>
-      </dl>
-      <a class="knopf dunkel" href="https://wa.me/4915568540674?text=Hallo%20GH-MAPPING%2C%20ich%20interessiere%20mich%20f%C3%BCr%20das%20Magic%20Motorsport%20Flex%20(Slave)." target="_blank" rel="noopener" data-en="Ask about the Flex">Flex anfragen</a>
-    </div>
-  </div>
-</section>
-
 <section class="abschnitt" id="faq">
   <div class="wrap faq-raster">
     <div class="rein">
-      <p class="kapitel mono"><b>06</b><span>FAQ</span></p>
+      <p class="kapitel mono"><b>05</b><span>FAQ</span></p>
       <h2 data-en-html="Frequently<br>asked.">Häufige<br>Fragen.</h2>
       <p style="margin-top:22px;color:var(--grau)" data-en="Your question is not listed? Write to us directly.">Ihre Frage ist nicht dabei? Schreiben Sie uns direkt.</p>
     </div>
