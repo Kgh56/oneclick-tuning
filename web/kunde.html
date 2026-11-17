@@ -1639,8 +1639,8 @@ const EN = {
   "Bitte mindestens eine gewünschte Lösung auswählen.": "Please choose at least one solution.", "Fahrzeugdaten fehlen": "Vehicle details missing",
   "Anfrage gesendet": "Request sent", "Nachricht an uns (optional), z. B. Umbauten, Wünsche …": "Message to us (optional), e.g. modifications, wishes …",
   "Name / Firma / Telefon (optional, falls wir dich erreichen müssen)": "Name / company / phone (optional, in case we need to reach you)",
-  "Wir machen dir das File. Sobald es fertig ist, meldet sich diese Seite – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.":
-    "We’ll make the file for you. As soon as it’s ready, you’ll be notified here and can download it right away. You can also close the program and come back later.",
+  "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail – du kannst es dann direkt herunterladen. Du kannst das Programm auch schließen und später wiederkommen.":
+    "We’ll make the file for you. As soon as it’s ready, you’ll be notified here and by email and can download it right away. You can also close the program and come back later.",
   "Das File ist nicht mehr auf dem Server. Bitte nochmal hochladen.": "The file is no longer on the server. Please upload it again.",
   "Zu viele Anfragen in kurzer Zeit. Bitte später nochmal versuchen.": "Too many requests in a short time. Please try again later.",
   "Zu viele Anfragen. Bitte kurz warten.": "Too many requests. Please wait a moment.",
@@ -2622,7 +2622,7 @@ async function anfrageSenden() {
   zustand.auftraege = erg.auftraege;
   listeMalen(erg.auftrag.id);
   $("#erfolg-titel").textContent = "Anfrage gesendet";
-  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich diese Seite – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.";
+  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail – du kannst es dann direkt herunterladen. Du kannst das Programm auch schließen und später wiederkommen.";
   zeige("v-erfolg");
   ton(true);
 }
