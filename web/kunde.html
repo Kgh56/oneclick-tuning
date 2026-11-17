@@ -1144,6 +1144,11 @@ button.hilfe svg{width:15px;height:15px}
 .kd-fehler{min-height:20px;margin:2px 0 10px;color:#ff6b6b;font-size:13.5px;font-weight:600}
 #kd-los{width:100%}
 #konto-dialog [hidden]{display:none!important}
+.sprachwahl{display:inline-flex;align-self:center;padding:3px;gap:2px;border-radius:9px;border:1px solid var(--rand);background:rgba(255,255,255,.04)}
+.sprachwahl button{border:0;border-radius:7px;padding:5px 9px;background:none;color:var(--leise);font:inherit;font-size:12px;font-weight:800;letter-spacing:.04em;cursor:pointer}
+.sprachwahl button.an{background:var(--blau);color:#fff}
+#konto-dialog .karte{position:relative}
+.kd-sprache{position:absolute;top:22px;right:22px}
 .kd-links{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin:14px 0 0}
 .kd-link{border:0;background:none;padding:0;font:inherit;font-size:13px;color:var(--leise);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .kd-link:hover{color:#fff}
@@ -1194,6 +1199,7 @@ button.hilfe svg{width:15px;height:15px}
   </svg>
 </div></div>
 <div id="konto-dialog" aria-modal="true" role="dialog" aria-labelledby="kd-titel"><div class="karte">
+  <div class="sprachwahl kd-sprache" data-kein-ueb role="group" aria-label="Sprache / Language"><button type="button" data-sprache="de">DE</button><button type="button" data-sprache="en">EN</button></div>
   <div class="kd-marke" id="kd-marke"></div>
   <h2 id="kd-titel">Willkommen bei OneClick Solutions</h2>
   <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.</p>
@@ -1243,6 +1249,7 @@ button.hilfe svg{width:15px;height:15px}
       <div class="nx-pille"><i></i>Automatische Prüfung <b class="blau">24/7</b></div>
       <div class="nx-pille"><i></i>Ticket-Service <b class="gruen">Online</b></div>
       <div class="nx-pille verbindung"><span class="punkt" id="punkt"></span><span id="verbindung-text">Verbinde …</span></div>
+      <div class="sprachwahl" data-kein-ueb role="group" aria-label="Sprache / Language"><button type="button" data-sprache="de">DE</button><button type="button" data-sprache="en">EN</button></div>
       <button type="button" class="nx-pille nx-update nur-app" id="nx-update" title="Nach Updates suchen"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span>Update</span></button>
       <button type="button" class="nx-glocke" id="nx-glocke" title="Offene Aufträge"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><b id="kp-offen">0</b></button>
       <div class="nx-fenster nur-app"><button type="button" data-fenster="minimieren" title="Minimieren"><svg viewBox="0 0 24 24"><path d="M6 17h12"/></svg></button>
@@ -1503,6 +1510,289 @@ button.hilfe svg{width:15px;height:15px}
 const $ = s => document.querySelector(s);
 /* ---------- Verbindung zum Server ----------
    Meine Auftraege merkt sich der Browser (localStorage), Zugriff auf einen Auftrag nur ueber seine geheime Nummer. */
+
+/* ---------- Sprache: Deutsch / English ----------
+   Die Oberflaeche ist deutsch geschrieben. Auf Englisch uebersetzt ein Woerterbuch jeden angezeigten Text
+   (auch spaeter eingefuegte Meldungen) - fehlt ein Eintrag, bleibt der Text einfach deutsch.
+   Kundeneingaben (Ticket-Nachrichten) sind mit data-kein-ueb ausgenommen. */
+const EN = {
+  // Start / Konto
+  "Verbindung wird geprüft …": "Checking connection …", "Verbunden": "Connected", "Keine Verbindung": "No connection", "Offline": "Offline",
+  "Verbinde …": "Connecting …", "Keine Verbindung zum Server": "No connection to the server",
+  "Keine Verbindung zum Server. Bitte Internetverbindung prüfen.": "No connection to the server. Please check your internet connection.",
+  "Keine Verbindung zum Server – bitte Seite neu laden.": "No connection to the server – please reload.",
+  "Willkommen bei OneClick Solutions": "Welcome to OneClick Solutions",
+  "Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.":
+    "Sign in once – the program remembers you. Your orders and tickets are linked to your account.",
+  "Anmelden": "Sign in", "Registrieren": "Register", "E-Mail-Adresse": "Email address", "Code aus der E-Mail": "Code from the email",
+  "Passwort": "Password", "Neues Passwort": "New password", "Passwort wiederholen": "Repeat password",
+  "Passwort: mindestens 8 Zeichen.": "Password: at least 8 characters.", "Ich habe die": "I have read the", "Datenschutzerklärung": "privacy policy",
+  "gelesen.": "", "Passwort vergessen?": "Forgot your password?", "← Zurück zur Anmeldung": "← Back to sign in",
+  "Ich habe schon einen Code": "I already have a code", "Konto erstellen": "Create account", "Code senden": "Send code",
+  "Passwort ändern": "Change password", "Passwort zurücksetzen": "Reset password", "Anmelden …": "Signing in …",
+  "Konto wird erstellt …": "Creating account …", "Code wird gesendet …": "Sending code …", "Wird gespeichert …": "Saving …",
+  "Gib deine E-Mail-Adresse ein – wir schicken dir einen Code, mit dem du ein neues Passwort festlegst.":
+    "Enter your email address – we’ll send you a code to set a new password.",
+  "Bitte zuerst deine E-Mail-Adresse eingeben.": "Please enter your email address first.",
+  "Bitte eine gültige E-Mail-Adresse eingeben.": "Please enter a valid email address.", "Bitte deine E-Mail-Adresse eingeben.": "Please enter your email address.",
+  "Bitte ein neues Passwort eingeben.": "Please enter a new password.", "Bitte dein Passwort eingeben.": "Please enter your password.",
+  "Die beiden Passwörter sind nicht gleich.": "The two passwords don’t match.",
+  "Bitte bestätige, dass du die Datenschutzerklärung gelesen hast.": "Please confirm that you have read the privacy policy.",
+  "Bitte den 6-stelligen Code aus der E-Mail eingeben.": "Please enter the 6-digit code from the email.",
+  "Das Passwort muss mindestens 8 Zeichen haben.": "The password must be at least 8 characters long.",
+  "Das neue Passwort muss mindestens 8 Zeichen haben.": "The new password must be at least 8 characters long.",
+  "Angemeldet": "Signed in", "Konto erstellt": "Account created", "Passwort geändert": "Password changed", "Angemeldet als": "Signed in as",
+  "Abmelden": "Sign out", "Abmelden?": "Sign out?", "Jetzt abmelden": "Sign out now",
+  "Beim nächsten Start musst du dich wieder anmelden.": "You’ll need to sign in again next time.",
+  "Bitte melde dich an.": "Please sign in.", "Bitte melde dich im Programm an.": "Please sign in to the program.",
+  "Mit dieser E-Mail-Adresse gibt es schon ein Konto. Bitte melde dich an.": "There’s already an account with this email address. Please sign in.",
+  "Zu viele Fehlversuche. Bitte 15 Minuten warten.": "Too many failed attempts. Please wait 15 minutes.",
+  "E-Mail-Adresse oder Passwort falsch.": "Wrong email address or password.",
+  "Dieses Konto ist gesperrt. Bitte melde dich beim Support.": "This account is locked. Please contact support.",
+  "Passwort zurücksetzen per E-Mail ist gerade nicht möglich. Bitte melde dich beim Support.": "Resetting the password by email isn’t possible right now. Please contact support.",
+  "Zu viele Versuche. Bitte später nochmal versuchen.": "Too many attempts. Please try again later.", "Zu viele Versuche. Bitte später nochmal.": "Too many attempts. Please try again later.",
+  "Der Code ist abgelaufen oder falsch. Bitte einen neuen Code anfordern.": "The code has expired or is wrong. Please request a new code.",
+  "Der Code stimmt nicht. Bitte nochmal prüfen.": "The code is wrong. Please check it again.",
+  "Zu viele Registrierungen in kurzer Zeit. Bitte später nochmal versuchen.": "Too many registrations in a short time. Please try again later.",
+  "Gute Nacht": "Good night", "Guten Morgen": "Good morning", "Guten Tag": "Hello", "Guten Abend": "Good evening",
+  // Kopf + Menue
+  "Automatische Prüfung": "Automatic check", "Ticket-Service": "Ticket service", "Online": "Online", "Update": "Update", "Menü": "Menu",
+  "ECU File": "ECU file", "Meine Aufträge": "My orders", "Anfragen": "Requests", "Original wiederherstellen": "Restore original", "Preise": "Prices",
+  "Support": "Support", "Aufträge": "Orders", "In Prüfung": "In review", "Freigegeben": "Approved", "Nach Updates suchen": "Check for updates",
+  "Offene Aufträge": "Open orders", "Minimieren": "Minimize", "Maximieren": "Maximize", "Schließen": "Close",
+  "Impressum": "Legal notice", "Datenschutz": "Privacy", "AGB": "Terms", "Widerruf": "Cancellation", "Haftung": "Liability", "Strg": "Ctrl",
+  "File öffnen": "Open file", "Server": "Server", "System bereit": "System ready",
+  // File laden + Auswahl
+  "Zurück": "Back", "File laden": "Load file", "Original-File laden – wir prüfen sofort, welche Lösungen es dafür gibt.":
+    "Load your original file – we’ll check right away which solutions are available.",
+  "Getuntes File laden – wir suchen das passende Original, damit du dein Fahrzeug zurückrüsten kannst.":
+    "Load your tuned file – we’ll look for the matching original so you can restore your vehicle.",
+  "Datei hierher ziehen": "Drag your file here", "oder klicken zum Auswählen · .bin / .ori · max. 16 MB": "or click to choose · .bin / .ori · max. 16 MB",
+  "File wird verarbeitet …": "Processing file …", "File wird verarbeitet": "Processing file", "Lese Steuergerät …": "Reading ECU …",
+  "Erkenne Software …": "Detecting software …", "Suche im Archiv …": "Searching the archive …", "Prüfe Tuning-Stellen …": "Checking tuning areas …",
+  "Fast fertig …": "Almost done …", "Datei": "File", "Ändern": "Change", "Steuergerät · Software": "ECU · Software", "Zurücksetzen": "Reset",
+  "Anfrage stellen": "Send a request", "Auftrag senden": "Send order", "Verfügbare Lösungen": "Available solutions", "Preis": "Price",
+  "Verfügbare Lösungen – eine oder mehrere wählen": "Available solutions – choose one or more", "Verfügbare Lösung": "Available solution",
+  "Sofort bezahlen und herunterladen – ohne Wartezeit.": "Pay and download right away – no waiting.",
+  "Wähle oben eine oder mehrere Lösungen.": "Choose one or more solutions above.", "Lösung wählen": "Choose a solution",
+  "Wir prüfen diesen Auftrag kurz und geben ihn frei – danach bezahlen und herunterladen.": "We’ll check this order briefly and approve it – then pay and download.",
+  "Jetzt kaufen": "Buy now", "Jetzt holen": "Get it now", "Wird gesendet …": "Sending …", "Nicht gesendet": "Not sent",
+  "File-Analyse": "File analysis", "File analysiert": "File analyzed", "Details": "Details", "Hinweis:": "Note:", "Lösungen": "Solutions",
+  "Software": "Software", "Original": "Original", "File hochgeladen und analysiert": "File uploaded and analyzed",
+  "Checksumme beim Schreiben vom Flash-Tool korrigieren lassen. Es gelten unsere": "Have your flash tool correct the checksum when writing. Our",
+  "Checksumme beim Schreiben vom Flash-Tool korrigieren lassen": "Have your flash tool correct the checksum when writing",
+  "Kein passendes Original im Archiv gefunden": "No matching original found in the archive", "Kein Original gefunden": "No original found",
+  "Für dieses File liegt bei uns (noch) kein passendes Original. Ist es vielleicht schon das Original? Sonst stell uns eine Anfrage – wir kümmern uns darum.":
+    "We don’t have a matching original for this file (yet). Maybe it already is the original? Otherwise send us a request – we’ll take care of it.",
+  "Noch nicht im Archiv": "Not in the archive yet", "Das hat nicht geklappt": "That didn’t work", "Datei zu groß": "File too large",
+  "Die Datei konnte nicht gelesen werden.": "The file could not be read.", "Die Datei ist größer als 16 MB.": "The file is larger than 16 MB.",
+  "Die Datei ist zu groß (max. 16 MB).": "The file is too large (max. 16 MB).", "Die Datei ist zu klein für ein ECU-File.": "The file is too small for an ECU file.",
+  "Dein File ist bereit 🎉": "Your file is ready 🎉", "Auftrag gesendet": "Order sent", "Keine Lösung gefunden": "No solution found",
+  "Anderes File wählen": "Choose another file", "Anderes File laden": "Load another file", "Unerwartete Antwort. Bitte nochmal versuchen.": "Unexpected response. Please try again.",
+  "Bitte eine Originaldatei auswählen.": "Please choose an original file.",
+  "Bitte eine oder mehrere der angezeigten Lösungen wählen.": "Please choose one or more of the solutions shown.",
+  "Zu viele Uploads in kurzer Zeit. Bitte später nochmal versuchen.": "Too many uploads in a short time. Please try again later.",
+  "Laut Dateiname ist in diesem File die Abgasreinigung abgeschaltet (z. B. DPF, AGR, AdBlue). Solche Files bearbeiten wir nicht. Bitte das unveränderte Original laden.":
+    "According to the file name, emission control is disabled in this file (e.g. DPF, EGR, AdBlue). We don’t work on such files. Please load the unmodified original.",
+  // Anfrage
+  "Dein Original ist schon bei uns. Wir machen dir das File und du bekommst es hier, sobald es fertig ist.":
+    "We already have your original. We’ll make the file for you and you’ll get it here as soon as it’s ready.",
+  "Fahrzeug": "Vehicle", "Was brauchst du?": "What do you need?", "– eine oder mehrere": "– one or more", "Anfrage senden": "Send request",
+  "Felder mit": "Fields marked", "bitte ausfüllen. Checksumme bitte beim Schreiben vom Flash-Tool korrigieren lassen. Es gelten unsere":
+    "are required. Please have your flash tool correct the checksum when writing. Our",
+  "Marke": "Make", "Modell": "Model", "Baujahr": "Year", "Motor / Leistung": "Engine / power", "Motorcode": "Engine code", "Getriebe": "Gearbox",
+  "Schaltgetriebe": "Manual", "Automatik": "Automatic", "DSG / Doppelkupplung": "DSG / dual clutch", "z. B. Golf 7": "e.g. Golf 7",
+  "Weiß ich nicht": "I don’t know", "– bitte wählen –": "– please choose –", "Steuergerät": "ECU", "(optional)": "(optional)",
+  "Wir konnten das Steuergerät im File nicht erkennen. Wenn du es weißt, trag es hier ein.": "We couldn’t detect the ECU in the file. If you know it, enter it here.",
+  "Bitte alle Felder mit * ausfüllen.": "Please fill in all fields marked *.", "Bitte mindestens eine Lösung auswählen.": "Please choose at least one solution.",
+  "Bitte mindestens eine gewünschte Lösung auswählen.": "Please choose at least one solution.", "Fahrzeugdaten fehlen": "Vehicle details missing",
+  "Anfrage gesendet": "Request sent", "Nachricht an uns (optional), z. B. Umbauten, Wünsche …": "Message to us (optional), e.g. modifications, wishes …",
+  "Name / Firma / Telefon (optional, falls wir dich erreichen müssen)": "Name / company / phone (optional, in case we need to reach you)",
+  "Wir machen dir das File. Sobald es fertig ist, meldet sich diese Seite – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.":
+    "We’ll make the file for you. As soon as it’s ready, you’ll be notified here and can download it right away. You can also close the program and come back later.",
+  "Das File ist nicht mehr auf dem Server. Bitte nochmal hochladen.": "The file is no longer on the server. Please upload it again.",
+  "Zu viele Anfragen in kurzer Zeit. Bitte später nochmal versuchen.": "Too many requests in a short time. Please try again later.",
+  "Zu viele Anfragen. Bitte kurz warten.": "Too many requests. Please wait a moment.",
+  // Auftraege
+  "Status, Bezahlung und Download deiner Files": "Status, payment and download of your files", "+ Neues File": "+ New file", "Gesamt": "Total",
+  "Zu bezahlen": "To pay", "Fertig": "Done", "Alle": "All", "Wartend": "Waiting", "Abgelehnt": "Rejected", "So läuft dein Auftrag": "How your order works",
+  "Original laden und Lösungen wählen": "Load the original and choose solutions", "Sofort bezahlen und File herunterladen": "Pay right away and download the file",
+  "Nichts dabei? Anfrage stellen – wir erstellen dein File und geben es frei": "Nothing suitable? Send a request – we’ll create your file and approve it",
+  "Alle Files im Archiv sind von uns erstellt und geprüft – darum geht der Kauf sofort.": "All files in the archive were created and checked by us – that’s why you can buy instantly.",
+  "Support-Ticket öffnen": "Open a support ticket", "Datei oder Lösung suchen …": "Search file or solution …", "Keine passenden Aufträge": "No matching orders",
+  "Noch keine Aufträge": "No orders yet", "Bitte bezahlen": "Please pay", "Wir machen dein File – du bekommst hier Bescheid.": "We’re making your file – you’ll be notified here.",
+  "Wird gerade von uns geprüft …": "We’re checking it right now …", "Freigegeben – nach der Zahlung kannst du herunterladen.": "Approved – you can download after payment.",
+  "Nachrichten zu diesem Auftrag": "Messages about this order", "Aus der Liste entfernen": "Remove from list", "Entfernen": "Remove",
+  "Hallo, ich habe ein Problem mit meinem File.": "Hello, I have a problem with my file.",
+  "Fehler am Auto oder etwas funktioniert nicht? Öffne ein Support-Ticket zu diesem Auftrag.": "Problem with the car or something not working? Open a support ticket for this order.",
+  "Probleme am Auto? Support-Ticket öffnen": "Problems with the car? Open a support ticket", "Dein File ist fertig! 🎉": "Your file is ready! 🎉",
+  "Anfrage": "Request", "In Bearbeitung": "In progress", "Bei Fragen melde dich gerne bei uns.": "If you have questions, just get in touch.",
+  "Bezahlt ✓": "Paid ✓", "Herunterladen": "Download", "💬 Neue Nachricht": "💬 New message", "💬 Chat": "💬 Chat",
+  "Was passiert (Fehlermeldung, Fehlercode, Verhalten):": "What happens (error message, fault code, behavior):", "Wird geladen …": "Loading …",
+  "Download fehlgeschlagen": "Download failed", "Heruntergeladen": "Downloaded", "Datei speichern": "Save file", "Ungültige Adresse.": "Invalid address.",
+  "Option wählen": "Choose option", "Wartet auf Freigabe": "Waiting for approval",
+  "Das File ist noch nicht freigegeben.": "The file hasn’t been approved yet.", "Auftrag nicht gefunden (vielleicht schon gelöscht).": "Order not found (maybe already deleted).",
+  "Auftrag nicht gefunden.": "Order not found.",
+  // Bezahlen
+  "Jetzt bezahlen": "Pay now", "Du wirst zur sicheren Bezahlseite von Stripe weitergeleitet (Karte, Apple Pay, PayPal …). Danach kommst du automatisch hierher zurück und kannst dein File herunterladen. Die Rechnung kommt per E-Mail.":
+    "You’ll be taken to Stripe’s secure payment page (card, Apple Pay, PayPal …). Afterwards you’ll come back here automatically and can download your file. The invoice is sent by email.",
+  "und die": "and the", "Hinweise zu Einsatz und Haftung": "notes on use and liability", "gelesen und akzeptiere sie.": "and accept them.",
+  "Ich verlange ausdrücklich, dass ihr vor Ablauf der Widerrufsfrist mit der Ausführung beginnt. Mir ist bekannt, dass ich mit Beginn der Ausführung mein Widerrufsrecht verliere (":
+    "I expressly request that you begin before the cancellation period ends. I am aware that I lose my right of withdrawal once performance begins (",
+  "Widerrufsbelehrung": "cancellation policy", "Weiter zur Bezahlung": "Continue to payment", "Abbrechen": "Cancel",
+  "Bezahlseite wird geöffnet …": "Opening payment page …", "Bezahlen nicht möglich": "Payment not possible", "Bitte gleich nochmal versuchen.": "Please try again in a moment.",
+  "Zahlung wird bestätigt …": "Confirming payment …", "Dein File kann jetzt heruntergeladen werden.": "Your file can be downloaded now.",
+  "Zahlung noch nicht bestätigt": "Payment not confirmed yet", "Freigegeben! 🎉": "Approved! 🎉", "Bezahlt – danke! 🎉": "Paid – thank you! 🎉",
+  "Anfrage abgelehnt": "Request rejected", "Zahlung abgebrochen": "Payment canceled",
+  "Kein Problem – du kannst jederzeit erneut auf „Jetzt bezahlen“ klicken.": "No problem – you can click “Pay now” again at any time.",
+  "Einen Moment, gleich kannst du herunterladen.": "One moment, you can download shortly.",
+  "Das kann bei manchen Zahlarten etwas dauern. Die Seite meldet sich automatisch.": "This can take a little while for some payment methods. You’ll be notified automatically.",
+  "Für diesen Auftrag ist nichts zu bezahlen.": "There’s nothing to pay for this order.", "Bitte bestätige vorher den Hinweis zum Widerrufsrecht.": "Please confirm the note on the right of withdrawal first.",
+  "Schon bezahlt – du kannst jetzt herunterladen.": "Already paid – you can download now.",
+  "Die Bezahlseite ist gerade nicht erreichbar. Bitte gleich nochmal versuchen.": "The payment page isn’t available right now. Please try again in a moment.",
+  "Bitte zuerst bezahlen – danach kannst du das File herunterladen.": "Please pay first – then you can download the file.",
+  // Preise
+  "Was welche Lösung kostet – feste Preise pro File, ohne Abo.": "What each solution costs – fixed prices per file, no subscription.", "Live": "Live",
+  "Preise werden geladen …": "Loading prices …", "Mehrere Lösungen in einem File?": "Several solutions in one file?",
+  "Du zahlst die Summe der gewählten Lösungen – den Gesamtpreis siehst du vor dem Bezahlen.": "You pay the sum of the chosen solutions – you’ll see the total before paying.",
+  "Nichts Passendes im Archiv?": "Nothing suitable in the archive?", "Bei einer Anfrage nennen wir dir den Preis, bevor du bezahlst.": "For a request, we’ll tell you the price before you pay.",
+  "Endpreise. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.": "Final prices. No VAT is charged (small business, § 19 UStG).",
+  "Preis auf Anfrage": "Price on request", "Preise aktualisiert": "Prices updated", "Die Preisliste wurde gerade aktualisiert.": "The price list has just been updated.",
+  "Gerade sind keine Lösungen hinterlegt.": "No solutions available at the moment.",
+  "Start/Stopp aus": "Start/stop off", "Vmax offen": "Vmax off", "Original (Rückrüsten)": "Original (restore)", "Getriebe / TCU": "Gearbox / TCU",
+  // Support
+  "Problem mit einem File oder eine Frage? Schreib uns – die Antwort kommt hier ins Programm.": "A problem with a file or a question? Write to us – the answer comes right here in the program.",
+  "+ Neues Ticket": "+ New ticket", "Meine Tickets": "My tickets", "Wie können wir helfen?": "How can we help?",
+  "Wähle links ein Ticket oder öffne ein neues. Bei Problemen mit einem File am besten den Auftrag auswählen und Fehlercodes mitschicken.":
+    "Choose a ticket on the left or open a new one. For problems with a file, it’s best to select the order and include fault codes.",
+  "Neues Ticket öffnen": "Open new ticket", "Sonderfunktion anfragen": "Request a special function",
+  "VAG: 2-Step / Launch, Antilag und No-Lift-Shift für Bosch ME7 · Mapswitch": "VAG: 2-step / launch, antilag and no-lift-shift for Bosch ME7 · map switch",
+  "Neues Ticket": "New ticket", "Thema": "Topic", "Problem mit einem File": "Problem with a file", "Fehler am Auto nach dem Aufspielen": "Fault on the car after flashing",
+  "Frage zu Bestellung / Zahlung": "Question about order / payment", "Sonderfunktion anfragen (Launch, Antilag, NLS, Mapswitch)": "Request a special function (launch, antilag, NLS, map switch)",
+  "Anfrage Sonderfunktion (Launch, Antilag, NLS, Mapswitch)": "Special function request (launch, antilag, NLS, map switch)",
+  "Sonstiges": "Other", "Rückfrage zu deinem Auftrag": "Question about your order", "Auftrag (optional)": "Order (optional)", "– kein bestimmter Auftrag –": "– no specific order –",
+  "Deine Nachricht": "Your message", "Datei anhängen": "Attach file", "ausgelesenes File, Screenshot … · max. 16 MB · oder hierher ziehen": "read-out file, screenshot … · max. 16 MB · or drag it here",
+  "Ticket senden": "Send ticket", "Senden": "Send", "Datei loslassen zum Anhängen": "Drop the file to attach it",
+  "Name / Telefon (optional, falls wir dich erreichen müssen)": "Name / phone (optional, in case we need to reach you)",
+  "Was ist passiert? Fehlercodes, Verhalten des Autos, was du schon versucht hast …": "What happened? Fault codes, how the car behaves, what you’ve already tried …",
+  "Datei anhängen (oder in den Chat ziehen)": "Attach file (or drag it into the chat)", "Antwort schreiben … (Dateien einfach hierher ziehen)": "Write a reply … (just drag files here)",
+  "Fahrzeug, Motor, Steuergerät (z. B. Bosch ME7.5) und gewünschte Funktion: 2-Step / Launch, Antilag, No-Lift-Shift oder Mapswitch. Am besten das Original-File anhängen.":
+    "Vehicle, engine, ECU (e.g. Bosch ME7.5) and the function you want: 2-step / launch, antilag, no-lift-shift or map switch. Ideally attach the original file.",
+  "Noch keine Tickets": "No tickets yet", "Neue Antwort": "New reply", "Neue Antwort vom Support": "New reply from support", "Jetzt antworten": "Reply now",
+  "Antwort lesen": "Read reply", "neue Nachricht": "new message", "Neues File vom Support": "New file from support", "File ansehen": "View file",
+  "Bitte kurz antworten, dann geht's weiter.": "Please reply briefly so we can continue.", "Ticket gesendet": "Ticket sent",
+  "Wir melden uns hier im Programm – du bekommst Bescheid, sobald wir antworten.": "We’ll get back to you here in the program – you’ll be notified as soon as we reply.",
+  "Bitte höchstens 16 MB anhängen.": "Please attach at most 16 MB.", "Datei ist leer": "File is empty", "Die Datei ist leer.": "The file is empty.",
+  "Wird hochgeladen …": "Uploading …", "Offen": "Open", "Beantwortet": "Answered", "Geschlossen": "Closed",
+  "Bitte beschreibe kurz dein Anliegen.": "Please briefly describe your issue.", "Bitte ein Thema wählen.": "Please choose a topic.",
+  "Zu viele Dateien in kurzer Zeit. Bitte kurz warten.": "Too many files in a short time. Please wait a moment.",
+  "Zu viele Tickets in kurzer Zeit. Bitte später nochmal versuchen.": "Too many tickets in a short time. Please try again later.",
+  "Ticket nicht gefunden (vielleicht schon gelöscht).": "Ticket not found (maybe already deleted).", "Datei nicht gefunden (vielleicht schon gelöscht).": "File not found (maybe already deleted).",
+  "Zu viele Nachrichten in kurzer Zeit. Bitte kurz warten.": "Too many messages in a short time. Please wait a moment.",
+  "Dieses Ticket ist voll. Bitte ein neues Ticket öffnen.": "This ticket is full. Please open a new ticket.",
+  "In diesem Ticket sind schon genug Dateien. Bitte ein neues Ticket öffnen.": "This ticket already has enough files. Please open a new ticket.",
+  "Files zur Abschaltung der Abgasreinigung werden nicht unterstützt.": "Files that disable emission control are not supported.",
+  "Datei nicht geladen": "File not loaded", "Bitte nochmal ziehen oder auf „Datei wählen“ klicken.": "Please drag it again or click “Choose file”.", "Lädt …": "Loading …",
+  // Updates + Sonstiges
+  "Update verfügbar": "Update available", "Du hast schon die neueste Version.": "You already have the latest version.", "Neue Version der Oberfläche": "New version of the interface",
+  "Update-Prüfung": "Update check", "Du hast die neueste Version": "You have the latest version", "Wird installiert …": "Installing …",
+  "Update fehlgeschlagen": "Update failed", "Alles aktuell": "All up to date", "Update installiert": "Update installed",
+  "Das Programm startet jetzt neu …": "The program is restarting now …", "Wird jetzt geladen …": "Loading now …", "Files": "Files",
+  "Kurze Frage": "Quick question", "Ja, gern": "Yes, sure", "Nein": "No",
+  "Darf das Programm anonym mitzählen, dass es installiert ist? Dabei wird nur eine zufällige Nummer, Windows/Mac und die Programmversion übertragen – keine Daten zu dir oder deinen Files.":
+    "May the program count anonymously that it is installed? Only a random number, Windows/Mac and the program version are sent – no data about you or your files.",
+  "Unbekannte Funktion.": "Unknown function.", "Nur über das Programm OneClick Solutions.": "Only via the OneClick Solutions program.",
+  "name@beispiel.de": "name@example.com", "z. B. 2.0 TDI 150 PS": "e.g. 2.0 TDI 150 hp",
+};
+const EN_MUSTER = [
+  [/^Upload gestartet: (.+)$/, "Upload started: $1"],
+  [/^Steuergerät: (.*) · Software: (.*)$/, "ECU: $1 · Software: $2"],
+  [/^(\d+) Lösung(?:en)? im Archiv gefunden$/, m => m[1] + (m[1] === "1" ? " solution" : " solutions") + " found in the archive"],
+  [/^Getuntes File erkannt – (.+) verfügbar$/, m => "Tuned file detected – " + T(m[1]) + " available"],
+  [/^File erkannt – (\d+) Lösung(?:en)? im Archiv verfügbar$/, m => "File detected – " + m[1] + (m[1] === "1" ? " solution" : " solutions") + " available in the archive"],
+  [/^Sofort verfügbar: (.+)$/, m => "Available now: " + T(m[1])],
+  [/^„(.+)“ kannst du jetzt herunterladen\.$/, m => "“" + T(m[1]) + "” is ready to download."],
+  [/^Auftrag gesendet: (.+)$/, m => "Order sent: " + T(m[1])],
+  [/^„(.+)“ wartet jetzt auf unsere Freigabe\. Du bekommst hier Bescheid\.$/, m => "“" + T(m[1]) + "” is now waiting for our approval. You’ll be notified here."],
+  [/^Grund: ([\s\S]+)$/, "Reason: $1"],
+  [/^Jetzt bezahlen · (.+)$/, "Pay now · $1"],
+  [/^Gespeichert: (.+?)( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => "Saved: " + m[1] + (m[2] ? " Have the checksum corrected when writing." : "")],
+  [/^(.+) liegt in deinem Download-Ordner\.( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => m[1] + " is in your Downloads folder." + (m[2] ? " Have the checksum corrected when writing." : "")],
+  [/^Ticket #(\w+) · (.+)$/, m => "Ticket #" + m[1] + " · " + T(m[2])],
+  [/^#(\w+) · (.+)$/, m => "#" + m[1] + " · " + T(m[2])],
+  [/^(?:Auftrag: (.+) · )?geöffnet am (.+)$/, m => (m[1] ? "Order: " + m[1] + " · " : "") + "opened " + m[2]],
+  [/^(Support|Du) · (.+)$/, m => (m[1] === "Du" ? "You" : "Support") + " · " + m[2]],
+  [/^(Wir|Du): ([\s\S]*)$/, m => (m[1] === "Du" ? "You: " : "Us: ") + m[2]],
+  [/^(.+) – Bitte kurz antworten, dann geht's weiter\.$/, "$1 – Please reply briefly so we can continue."],
+  [/^(.+) für (.+): jetzt bezahlen und herunterladen\.$/, m => T(m[1]) + " for " + m[2] + ": pay and download now."],
+  [/^(.+) für (.+) kann jetzt heruntergeladen werden\.$/, m => T(m[1]) + " for " + m[2] + " can be downloaded now."],
+  [/^(.+) kann jetzt heruntergeladen werden\.$/, "$1 can be downloaded now."],
+  [/^Du bist angemeldet als (.+)\.$/, "You are signed in as $1."],
+  [/^Code aus der E-Mail an (.+) eingeben\.$/, "Enter the code from the email sent to $1."],
+  [/^Falls es ein Konto mit (.+) gibt, haben wir dir gerade einen Code geschickt \(bitte auch im Spam-Ordner nachsehen\)\.$/,
+    "If there’s an account for $1, we’ve just sent you a code (please also check your spam folder)."],
+  [/^Für dieses File haben wir leider noch keine Lösung \(ECU: (.*), Software: (.*)\)\. Stell uns einfach eine Anfrage – wir machen dir das File\.$/,
+    "We don’t have a solution for this file yet (ECU: $1, software: $2). Just send us a request – we’ll make the file for you."],
+  [/^Bitte „(.+)“ angeben\.$/, m => "Please enter “" + T(m[1]) + "”."],
+  [/^„(.+)“ kann nicht mit anderen Lösungen kombiniert werden\.$/, m => "“" + T(m[1]) + "” can’t be combined with other solutions."],
+  [/^Die Kombination (.+) ist leider nicht möglich, weil sich die Lösungen gegenseitig überschneiden\. Bitte anders wählen\.$/,
+    m => "Unfortunately the combination " + T(m[1]) + " isn’t possible because the solutions overlap. Please choose differently."],
+  [/^Server-Fehler \((\d+)\)\.$/, "Server error ($1)."],
+  [/^Unerwarteter Fehler: ([\s\S]+)$/, "Unexpected error: $1"],
+  [/^Neue Programm-Version (\S+) ist da \(du hast (\S+)\)\.\n\nJetzt installieren\? Das Programm startet danach kurz neu\.$/,
+    "A new program version $1 is available (you have $2).\n\nInstall it now? The program will restart briefly."],
+  [/^(.+) \(Rückrüsten\)$/, "$1 (restore)"],
+  [/^z\. B\. (.+)$/, "e.g. $1"],
+];
+let sprache = "";
+try { sprache = localStorage.getItem("oneclick-sprache") || ""; } catch (e) {}
+if (sprache !== "de" && sprache !== "en") sprache = /^de\b/i.test(navigator.language || "de") ? "de" : "en";
+/* Deutschen Text -> Englisch (nur wenn Englisch eingestellt ist). Unbekanntes bleibt wie es ist. */
+function T(de) {
+  if (sprache !== "en" || typeof de !== "string") return de;
+  if (!de.trim()) return de;
+  const t = de.trim().includes("\n") ? de.trim().replace(/\s+/g, " ") : de.trim();   // Text ueber mehrere Zeilen im HTML
+  if (t !== de.trim()) { const en = T(t); return en === t ? de : de.replace(de.trim(), en); }
+  let en = Object.prototype.hasOwnProperty.call(EN, t) ? EN[t] : null;
+  if (en === null) for (const [re, r] of EN_MUSTER) { const m = t.match(re); if (m) { en = typeof r === "function" ? r(m) : t.replace(re, r); break; } }
+  if (en === null && t.includes(" + ")) {   // Kombinationen wie "Stage 1 + Start/Stopp aus"
+    const teile = t.split(" + "), neu = teile.map(x => Object.prototype.hasOwnProperty.call(EN, x) ? EN[x] : x);
+    if (neu.some((x, i) => x !== teile[i])) en = neu.join(" + ");
+  }
+  return en === null ? de : de.replace(t, en);
+}
+const UEB_TEXT = new WeakMap(), UEB_ATTR = new WeakMap(), UEB_ATTRIBUTE = ["placeholder", "title", "aria-label"];
+function uebAusgenommen(el) { return !el || (el.closest && el.closest("script,style,[data-kein-ueb]")); }
+function uebAttr(el, a) {
+  if (!el.hasAttribute(a)) return;
+  const st = UEB_ATTR.get(el) || {}; UEB_ATTR.set(el, st);
+  const jetzt = el.getAttribute(a), alt = st[a];
+  if (!alt || jetzt !== alt.gesetzt) st[a] = {de: jetzt};   // neuer deutscher Text vom Programm
+  const ziel = sprache === "en" ? T(st[a].de) : st[a].de;
+  st[a].gesetzt = ziel;
+  if (jetzt !== ziel) el.setAttribute(a, ziel);
+}
+function uebersetze(k) {
+  if (k.nodeType === 3) {
+    if (uebAusgenommen(k.parentElement)) return;
+    const alt = UEB_TEXT.get(k);
+    const de = alt && k.nodeValue === alt.gesetzt ? alt.de : k.nodeValue;
+    const ziel = sprache === "en" ? T(de) : de;
+    UEB_TEXT.set(k, {de, gesetzt: ziel});
+    if (k.nodeValue !== ziel) k.nodeValue = ziel;
+  } else if (k.nodeType === 1) {
+    if (uebAusgenommen(k)) return;
+    UEB_ATTRIBUTE.forEach(a => uebAttr(k, a));
+    k.childNodes.forEach(uebersetze);
+  }
+}
+function spracheSetzen(s) {
+  sprache = s === "en" ? "en" : "de";
+  try { localStorage.setItem("oneclick-sprache", sprache); } catch (e) {}
+  document.documentElement.lang = sprache;
+  document.querySelectorAll("[data-sprache]").forEach(b => b.classList.toggle("an", b.dataset.sprache === sprache));
+  uebersetze(document.body);
+}
 const SPEICHER = "oneclick-tuning";
 const lokal = {
   lesen() {
@@ -2411,7 +2701,7 @@ function zeigeTicket(id) {
   const v = $("#tk-verlauf"); v.innerHTML = "";
   t.nachrichten.forEach(n => {
     const b = document.createElement("div"); b.className = "tk-blase " + n.von;
-    b.innerHTML = '<span class="tk-wer"></span><div></div>';
+    b.innerHTML = '<span class="tk-wer"></span><div data-kein-ueb></div>';   // Nachrichtentext nie uebersetzen
     b.querySelector(".tk-wer").textContent = (n.von === "admin" ? "Support" : "Du") + " · " + zeitKurz(n.zeit);
     b.querySelector("div").textContent = n.text;
     if (!n.text) b.querySelector("div").remove();
@@ -2494,7 +2784,7 @@ async function updatePruefen(still) {
   knopf.querySelector("span").textContent = neuProg || neuUi ? "Update verfügbar" : "Update";
   if (still) return;
   if (neuProg) {
-    if (!confirm(`Neue Programm-Version 3.${prog.neu} ist da (du hast ${prog.version}).\n\nJetzt installieren? Das Programm startet danach kurz neu.`)) return;
+    if (!confirm(T(`Neue Programm-Version 3.${prog.neu} ist da (du hast ${prog.version}).\n\nJetzt installieren? Das Programm startet danach kurz neu.`))) return;
     knopf.disabled = true; knopf.querySelector("span").textContent = "Wird installiert …";
     let r; try { r = await api.update_installieren(); } catch (e) { r = {fehler: String(e)}; }
     knopf.disabled = false;
@@ -2808,6 +3098,16 @@ async function init() {
   ticketsLaden(false);
   kopfAktualisieren();
 }
+/* Sprache: Umschalter + alles, was spaeter angezeigt wird, automatisch mit uebersetzen */
+document.querySelectorAll("[data-sprache]").forEach(b => b.addEventListener("click", () => spracheSetzen(b.dataset.sprache)));
+spracheSetzen(sprache);
+new MutationObserver(liste => {
+  for (const m of liste) {
+    if (m.type === "characterData") uebersetze(m.target);
+    else if (m.type === "attributes") { if (!uebAusgenommen(m.target)) uebAttr(m.target, m.attributeName); }
+    else m.addedNodes.forEach(uebersetze);
+  }
+}).observe(document.body, {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: UEB_ATTRIBUTE});
 init();
 
 /* ===================== NEO: Animationen ===================== */
