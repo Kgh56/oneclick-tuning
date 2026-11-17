@@ -204,18 +204,22 @@ def entscheidung_mailen(a: dict):
     if not a.get("konto"):
         return
     datei = a.get("datei", "dein File")
-    loesung = f" ({option_namen()[a['option']]})" if a.get("option") else ""
+    loesung = option_namen()[a["option"]] if a.get("option") else ""
     if a["status"] == "FREIGEGEBEN":
-        weiter = (f"Du kannst es jetzt im Programm bezahlen ({euro(a['preis'])}) und herunterladen." if zahlung_offen(a)
+        offen = zahlung_offen(a)
+        weiter = ("Du kannst es jetzt im Programm bezahlen und herunterladen." if offen
                   else "Du kannst es jetzt im Programm herunterladen.")
         mail_im_hintergrund(a["konto"], f"Dein File ist fertig: {datei}",
-                            f"Hallo,\n\ndein File für „{datei}“{loesung} ist fertig und freigegeben.\n{weiter}\n\n"
-                            f"Öffne dazu {PROGRAMM_NAME} → „Meine Aufträge“.")
+                            f"Hallo,\n\ndein File für „{datei}“{f' ({loesung})' if loesung else ''} ist fertig und freigegeben. {weiter}\n\n"
+                            f"Öffne dazu {PROGRAMM_NAME} → „Meine Aufträge“.",
+                            titel="Dein File ist fertig 🎉", box=datei,
+                            box_unter=" · ".join(x for x in [loesung, f"{euro(a['preis'])} – jetzt bezahlen" if offen else "bereit zum Download"] if x))
     elif a["status"] == "ABGELEHNT":
         grund = f"\nGrund: {a['grund']}" if a.get("grund") else ""
         mail_im_hintergrund(a["konto"], f"Zu deinem Auftrag: {datei}",
-                            f"Hallo,\n\nzu deinem Auftrag „{datei}“{loesung} können wir dir leider kein File anbieten.{grund}\n\n"
-                            f"Bei Fragen öffne in {PROGRAMM_NAME} unter „Support“ ein Ticket – wir helfen gern.")
+                            f"Hallo,\n\nzu deinem Auftrag „{datei}“{f' ({loesung})' if loesung else ''} können wir dir leider kein File anbieten.{grund}\n\n"
+                            f"Bei Fragen öffne in {PROGRAMM_NAME} unter „Support“ ein Ticket – wir helfen gern.",
+                            titel="Zu deinem Auftrag", box=datei, box_unter=f"Grund: {a['grund']}" if a.get("grund") else loesung)
 
 
 def support_mailen(t: dict, rueckfrage: bool = False):
@@ -228,12 +232,16 @@ def support_mailen(t: dict, rueckfrage: bool = False):
     zu = f" zu „{a['datei']}“" if a else ""
     if rueckfrage:
         mail_im_hintergrund(t["konto"], "Rückfrage zu deinem Auftrag",
-                            f"Hallo,\n\nwir haben eine kurze Rückfrage zu deinem Auftrag{zu}.\n"
-                            f"Bitte öffne {PROGRAMM_NAME} → „Support“ und antworte uns – danach geht es direkt weiter.")
+                            f"Hallo,\n\nwir haben eine kurze Rückfrage zu deinem Auftrag{zu}.\n\n"
+                            f"Bitte öffne {PROGRAMM_NAME} → „Support“ und antworte uns – danach geht es direkt weiter.",
+                            titel="Kurze Rückfrage zu deinem Auftrag", box=a["datei"] if a else "",
+                            box_unter="Antwort im Programm unter „Support“" if a else "")
     else:
         mail_im_hintergrund(t["konto"], f"Neue Antwort vom Support (Ticket #{t['id'][:6]})",
-                            f"Hallo,\n\nwir haben dir im Support geantwortet (Ticket #{t['id'][:6]}{zu}).\n"
-                            f"Öffne {PROGRAMM_NAME} → „Support“, um die Nachricht zu lesen.")
+                            f"Hallo,\n\nwir haben dir im Support geantwortet.\n\n"
+                            f"Öffne {PROGRAMM_NAME} → „Support“, um die Nachricht zu lesen.",
+                            titel="Neue Antwort vom Support", box=f"Ticket #{t['id'][:6]}",
+                            box_unter=f"zu „{a['datei']}“" if a else TICKET_THEMEN.get(t.get("thema"), ""))
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +253,59 @@ def mail_aktiv() -> bool:
     return bool(cfg.get("smtp_host") and cfg.get("smtp_absender"))
 
 
-def mail_senden(an: str, betreff: str, text: str):
-    """Eine Text-E-Mail verschicken. Wirft RuntimeError mit verstaendlicher Meldung."""
+MAIL_LOGO = BASE / "web" / "bilder" / "mail-logo.png"
+def mail_hinweis() -> str:
+    return (f"Diese E-Mail wurde automatisch verschickt. Bitte nicht darauf antworten – schreib uns bei Fragen "
+            f"im Programm {PROGRAMM_NAME} unter „Support“.")
+
+
+def mail_html(titel: str, text: str, box: str = "", box_unter: str = "", code: bool = False, firma: str = "") -> str:
+    """Gestaltete HTML-Mail (Tabellen + Inline-Stile, damit Outlook/Gmail/Apple Mail sie gleich zeigen).
+    Das Logo kommt als eingebettetes Bild (cid:logo)."""
+    e = html.escape
+    absaetze = [f'<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3b4252">{e(a).replace(chr(10), "<br>")}</p>'
+                for a in text.split("\n\n") if a.strip() and not (code and box and box in a and len(a) < 40)]
+    box_html = ""
+    if box:
+        gross = ('font-family:Consolas,Menlo,monospace;font-size:32px;letter-spacing:10px;font-weight:700;color:#0d1424'
+                 if code else "font-size:17px;font-weight:700;color:#0d1424;word-break:break-word")
+        box_html = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 20px">'
+                    f'<tr><td style="background:#f0f5ff;border-left:4px solid #2f7bff;border-radius:8px;padding:16px 20px;'
+                    f'{"text-align:center" if code else ""}"><div style="{gross}">{e(box)}</div>'
+                    + (f'<div style="margin-top:6px;font-size:13px;color:#5b6475">{e(box_unter)}</div>' if box_unter else "")
+                    + "</td></tr></table>")
+    # Das Wichtige (Code, Datei) direkt nach dem ersten Satz zeigen
+    stelle = 2 if len(absaetze) > 2 else len(absaetze)
+    inhalt = "".join(absaetze[:stelle]) + box_html + "".join(absaetze[stelle:])
+    basis = (lade_config().get("basis_url") or "").rstrip("/")
+    links = (f' · <a href="{e(basis)}/impressum" style="color:#8b93a5">Impressum</a> · '
+             f'<a href="{e(basis)}/datenschutz" style="color:#8b93a5">Datenschutz</a>') if basis.startswith("https://") else ""
+    vorschau = e((box + " – " if box else "") + text.split("\n\n")[-1])[:140]
+    return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta name="color-scheme" content="light"><title>{e(titel)}</title></head>
+<body style="margin:0;padding:0;background:#eef1f6;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{vorschau}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(13,20,36,.08)">
+<tr><td style="background:#0d1424;padding:22px 28px">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td style="padding-right:12px"><img src="cid:logo" width="40" height="40" alt="" style="display:block;border:0;border-radius:9px"></td>
+<td style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:.2px">OneClick <span style="color:#6ea4ff">Solutions</span></td>
+</tr></table></td></tr>
+<tr><td style="height:4px;background:#2f7bff;line-height:4px;font-size:0">&nbsp;</td></tr>
+<tr><td style="padding:30px 28px 14px">
+<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3;color:#0d1424">{e(titel)}</h1>
+{inhalt}
+<p style="margin:4px 0 0;font-size:15px;line-height:1.6;color:#3b4252">Viele Grüße<br><b>{e(firma)}</b></p>
+</td></tr>
+<tr><td style="padding:18px 28px 24px;border-top:1px solid #e6e9f0;font-size:12px;line-height:1.6;color:#8b93a5">
+{e(mail_hinweis())}<br>{e(firma)}{links}</td></tr>
+</table></td></tr></table></body></html>"""
+
+
+def mail_senden(an: str, betreff: str, text: str, titel: str = "", box: str = "", box_unter: str = "", code: bool = False):
+    """E-Mail verschicken (gestaltete HTML-Fassung mit Logo + reine Textfassung).
+    Wirft RuntimeError mit verstaendlicher Meldung."""
     cfg = lade_config()
     if not mail_aktiv():
         raise RuntimeError("E-Mail-Versand ist nicht eingerichtet.")
@@ -258,8 +317,11 @@ def mail_senden(an: str, betreff: str, text: str):
     m["To"] = an
     m["Date"] = formatdate(localtime=True)
     m["Message-ID"] = make_msgid(domain=absender.rpartition("@")[2] or None)
-    m.set_content(f"{text}\n\nViele Grüße\n{firma}\n\n—\nDiese E-Mail wurde automatisch verschickt. Bitte nicht darauf antworten – "
-                  f"schreib uns bei Fragen im Programm {PROGRAMM_NAME} unter „Support“.")
+    kasten = f"\n\n{box}" + (f"\n{box_unter}" if box_unter else "") if box and not code else ""
+    m.set_content(f"{text}{kasten}\n\nViele Grüße\n{firma}\n\n—\n{mail_hinweis()}")
+    m.add_alternative(mail_html(titel or betreff, text, box, box_unter, code, firma), subtype="html")
+    if MAIL_LOGO.exists():
+        m.get_payload()[1].add_related(MAIL_LOGO.read_bytes(), "image", "png", cid="<logo>")
     port = int(cfg.get("smtp_port") or 587)
     kontext = ssl.create_default_context()
     try:
@@ -280,13 +342,13 @@ def mail_senden(an: str, betreff: str, text: str):
         raise RuntimeError(f"E-Mail konnte nicht gesendet werden: {e}")
 
 
-def mail_im_hintergrund(an: str, betreff: str, text: str):
+def mail_im_hintergrund(an: str, betreff: str, text: str, **gestaltung):
     """Verschicken, ohne die Seite aufzuhalten. Fehler landen nur im Server-Protokoll."""
     if not mail_aktiv() or not KONTO_EMAIL.fullmatch(an or ""):
         return
     def los():
         try:
-            mail_senden(an, betreff, text)
+            mail_senden(an, betreff, text, **gestaltung)
         except RuntimeError as e:
             print(f"E-Mail an Kunde: {e}", file=sys.stderr)
     threading.Thread(target=los, daemon=True).start()
@@ -1463,8 +1525,9 @@ def api_konto_passwort_vergessen():
     if code:
         mail_im_hintergrund(email, "Dein Code zum Zurücksetzen des Passworts",
                             f"Hallo,\n\njemand – hoffentlich du – möchte das Passwort für dein {PROGRAMM_NAME}-Konto zurücksetzen.\n\n"
-                            f"Dein Code: {code}\n\nGib ihn im Programm ein. Er gilt {RESET_MINUTEN} Minuten.\n"
-                            "Wenn du das nicht warst, ignoriere diese E-Mail einfach – dein Passwort bleibt unverändert.")
+                            f"Dein Code: {code}\n\nGib ihn im Programm ein. Er gilt {RESET_MINUTEN} Minuten.\n\n"
+                            "Wenn du das nicht warst, ignoriere diese E-Mail einfach – dein Passwort bleibt unverändert.",
+                            titel="Dein Code zum Zurücksetzen", box=code, box_unter=f"gültig {RESET_MINUTEN} Minuten", code=True)
     return jsonify(ok=True)
 
 
@@ -3556,7 +3619,8 @@ def einstellungen():
             an = request.form.get("test_an", "").strip() or lade_config().get("smtp_absender", "")
             try:
                 mail_senden(an, f"Test von {PROGRAMM_NAME}",
-                            "Hallo,\n\ndas ist eine Test-E-Mail. Der E-Mail-Versand an Kunden funktioniert.")
+                            "Hallo,\n\ndas ist eine Test-E-Mail. Der E-Mail-Versand an deine Kunden funktioniert.",
+                            titel="Alles eingerichtet ✓", box="E-Mail-Versand aktiv", box_unter=f"Absender: {lade_config().get('smtp_absender', '')}")
                 flash(f"Test-E-Mail an {an} gesendet. Bitte auch im Spam-Ordner nachsehen.")
             except RuntimeError as e:
                 flash(str(e))

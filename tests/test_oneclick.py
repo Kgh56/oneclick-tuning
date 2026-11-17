@@ -687,7 +687,7 @@ class WebTests(Basis):
         mails = []
         original = A.mail_im_hintergrund
         self.addCleanup(setattr, A, "mail_im_hintergrund", original)
-        A.mail_im_hintergrund = lambda an, betreff, text: mails.append((an, betreff, text))
+        A.mail_im_hintergrund = lambda an, betreff, text, **k: mails.append((an, betreff, text))
         def post(url, daten):
             c = A.app.test_client(); c.environ_base.pop("HTTP_X_KONTO", None)
             return c.post(url, data=json.dumps(daten), content_type="application/json")
@@ -730,7 +730,7 @@ class WebTests(Basis):
         mails = []
         original = A.mail_im_hintergrund
         self.addCleanup(setattr, A, "mail_im_hintergrund", original)
-        A.mail_im_hintergrund = lambda an, betreff, text: mails.append((an, betreff, text))
+        A.mail_im_hintergrund = lambda an, betreff, text, **k: mails.append((an, betreff, text))
         # Freigabe -> "Dein File ist fertig" an die Konto-Adresse, ohne Fahrzeugdaten
         aid = self.hochladen(self.golf, "golf_ori.bin")
         self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
@@ -783,6 +783,35 @@ class WebTests(Basis):
         seite = self.admin().get("/admin/umsatz").text
         self.assertIn("Umsatz pro Monat", seite)
         self.assertIn("Meistverkaufte Lösungen", seite)
+
+    def test_mail_aufbau(self):
+        """Gestaltete Mail: Text- und HTML-Fassung, Logo eingebettet, Code nur einmal, keine HTML-Einschleusung."""
+        gesendet = []
+        class FakeSMTP:
+            def __init__(self, *a, **k): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def login(self, *a): pass
+            def starttls(self, **k): pass
+            def send_message(self, m): gesendet.append(m)
+        alt = A.smtplib.SMTP_SSL
+        self.addCleanup(setattr, A.smtplib, "SMTP_SSL", alt)
+        A.smtplib.SMTP_SSL = FakeSMTP
+        A.speichere_config({"smtp_host": "smtp.example.com", "smtp_port": 465, "smtp_absender": "info@example.com"})
+        A.mail_senden("kunde@example.com", "Betreff", "Hallo,\n\nDein Code: 123456\n\nGib ihn ein.", titel="Code", box="123456", code=True)
+        A.mail_senden("kunde@example.com", "Betreff", "Hallo,\n\n<script>x</script>", titel="<b>T</b>", box="<i>a.bin</i>")
+        arten = [p.get_content_type() for p in gesendet[0].walk()]
+        self.assertEqual(arten, ["multipart/alternative", "text/plain", "multipart/related", "text/html", "image/png"])
+        text = next(p for p in gesendet[0].walk() if p.get_content_type() == "text/plain").get_content()
+        html_teil = next(p for p in gesendet[0].walk() if p.get_content_type() == "text/html").get_content()
+        self.assertEqual(text.count("123456"), 1)
+        self.assertNotIn("Dein Code: 123456", html_teil)                 # sichtbar nur groß in der Box
+        self.assertEqual(html_teil.count("123456"), 2)                     # Box + Vorschauzeile im Posteingang
+        self.assertIn("cid:logo", html_teil)
+        self.assertIn("nicht darauf antworten", text)
+        boese = next(p for p in gesendet[1].walk() if p.get_content_type() == "text/html").get_content()
+        self.assertNotIn("<script>", boese)
+        self.assertNotIn("<i>a.bin</i>", boese)
 
     def test_mail_einstellungen(self):
         a = self.admin()
