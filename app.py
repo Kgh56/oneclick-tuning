@@ -3719,7 +3719,7 @@ box-shadow:0 8px 30px rgba(255,55,95,.35);transition:transform .15s,box-shadow .
 .btn.grau{background:var(--glas2);border:1px solid var(--rand2);box-shadow:none}.btn.grau:hover{background:rgba(255,255,255,.12)}
 .btn.gruen{background:linear-gradient(135deg,#30d158,#0fb5a3);box-shadow:0 8px 30px rgba(48,209,88,.3)}
 .btn.klein{padding:7px 14px;font-size:13px;box-shadow:none}
-input[type=text],input[type=password],input[type=number],textarea{width:100%;font-family:inherit;padding:12px 14px;border-radius:12px;
+input[type=text],input[type=password],input[type=number],input[type=email],input[type=search],textarea{width:100%;box-sizing:border-box;font-family:inherit;padding:12px 14px;border-radius:12px;
 border:1px solid var(--rand);background:rgba(255,255,255,.06);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .2s,box-shadow .2s}
 input:focus,textarea:focus{outline:none;border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.25)}
 input::placeholder,textarea::placeholder{color:#6e6e73}
