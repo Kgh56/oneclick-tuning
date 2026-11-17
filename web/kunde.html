@@ -1126,6 +1126,32 @@ button.hilfe svg{width:15px;height:15px}
 #zahl-dialog input[type=checkbox]{accent-color:#2f7bff}
 #af-nachricht{margin-top:14px}#af-kontakt{margin-top:10px}
 .ansicht:not(.aktiv){pointer-events:none}   /* ausblendende Ansicht faengt keine Klicks ab */
+/* Kundenkonto: Anmelden / Registrieren */
+#konto-dialog{position:fixed;inset:0;z-index:49;display:grid;place-items:center;padding:16px;background:rgba(2,6,16,.82);backdrop-filter:blur(14px);
+  opacity:0;visibility:hidden;transition:opacity .35s,visibility .35s}
+#konto-dialog.offen{opacity:1;visibility:visible}
+#konto-dialog .karte{box-sizing:border-box;width:min(440px,100%);max-height:calc(100vh - 32px);overflow-y:auto;padding:30px 32px;animation:none}
+#konto-dialog h2{font-size:20px;margin:14px 0 6px;text-transform:none;letter-spacing:0}
+.kd-marke svg{width:52px;height:52px;filter:drop-shadow(0 0 16px rgba(47,123,255,.6))}
+.kd-unter{font-size:13.5px;margin:0 0 18px}
+.kd-reiter{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--rand);margin-bottom:16px}
+.kd-reiter button{border:0;border-radius:9px;padding:10px;background:none;color:var(--leise);font:inherit;font-weight:700;cursor:pointer}
+.kd-reiter button.an{background:var(--blau);color:#fff}
+#kd-form{display:flex;flex-direction:column}#kd-form .feld{margin:0 0 14px}#kd-form .nx-label{margin-bottom:6px}
+.kd-tipp{font-size:12.5px;margin:-6px 0 10px}
+.kd-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--leise);cursor:pointer;margin-bottom:8px}
+.kd-check input{flex:none;width:18px;height:18px;margin-top:1px;accent-color:var(--blau)}.kd-check a{color:inherit;text-decoration:underline}
+.kd-fehler{min-height:20px;margin:2px 0 10px;color:#ff6b6b;font-size:13.5px;font-weight:600}
+#kd-los{width:100%}
+.kd-hilfe{font-size:12.5px;margin:16px 0 0;text-align:center}
+.nx-konto{display:flex;align-items:center;gap:10px;margin-top:auto;margin-bottom:10px;padding:10px 12px;border-radius:12px;background:#151820;border:1px solid var(--nx-rand,var(--rand))}
+.nx-konto .nx-quadrat{width:32px;height:32px;flex:none}
+.nx-konto div{min-width:0;flex:1}.nx-konto small{display:block;font-size:11px;color:var(--leise)}
+.nx-konto b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nx-konto button{flex:none;width:34px;height:34px;border-radius:9px;border:1px solid var(--rand);background:none;color:var(--leise);cursor:pointer;display:grid;place-items:center}
+.nx-konto button:hover{color:#fff;border-color:var(--blau)}
+.nx-konto svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nx-konto:not([hidden])+.nx-zaehler{margin-top:0}
 /* Reiter "Preise" */
 .pr-live{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--leise)}
 .pr-live i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pr-puls 1.6s ease-in-out infinite}
@@ -1161,6 +1187,27 @@ button.hilfe svg{width:15px;height:15px}
     <g id="t-nadel"><path d="M108 112 L110 36 L112 112 Z"/><circle cx="110" cy="110" r="7"/><circle cx="110" cy="110" r="3" class="t-mitte"/></g>
     <text x="110" y="168" class="t-text" id="t-text">km/h</text>
   </svg>
+</div></div>
+<div id="konto-dialog" aria-modal="true" role="dialog" aria-labelledby="kd-titel"><div class="karte">
+  <div class="kd-marke" id="kd-marke"></div>
+  <h2 id="kd-titel">Willkommen bei OneClick Solutions</h2>
+  <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.</p>
+  <div class="kd-reiter" role="tablist"><button type="button" data-kd="anmelden" class="an" role="tab">Anmelden</button><button type="button" data-kd="registrieren" role="tab">Registrieren</button></div>
+  <form id="kd-form" autocomplete="on">
+    <label class="nx-label" for="kd-name">Benutzername</label>
+    <input class="feld" id="kd-name" autocomplete="username" maxlength="30" spellcheck="false" autocapitalize="off">
+    <label class="nx-label" for="kd-pw">Passwort</label>
+    <input class="feld" id="kd-pw" type="password" autocomplete="current-password" maxlength="200">
+    <div id="kd-reg" hidden>
+      <label class="nx-label" for="kd-pw2">Passwort wiederholen</label>
+      <input class="feld" id="kd-pw2" type="password" autocomplete="new-password" maxlength="200">
+      <p class="leise kd-tipp">Benutzername: 3–30 Zeichen (Buchstaben, Zahlen, . _ -). Passwort: mindestens 8 Zeichen.</p>
+      <label class="kd-check"><input type="checkbox" id="kd-ok"><span>Ich habe die <a href="/datenschutz" target="_blank">Datenschutzerklärung</a> gelesen.</span></label>
+    </div>
+    <p class="kd-fehler" id="kd-fehler" role="alert"></p>
+    <button class="btn" id="kd-los" type="submit">Anmelden</button>
+  </form>
+  <p class="leise kd-hilfe">Passwort vergessen? Schreib uns – wir setzen es zurück.</p>
 </div></div>
 <div id="zahl-dialog"><div class="karte">
   <h2>Jetzt bezahlen</h2>
@@ -1207,6 +1254,9 @@ button.hilfe svg{width:15px;height:15px}
         <button type="button" id="sn-preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</button>
         <button type="button" id="sn-support"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg>Support<b class="nx-badge" id="sn-support-badge"></b></button>
       </nav>
+      <div class="nx-konto" id="nx-konto" hidden><span class="nx-quadrat"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
+        <div><small>Angemeldet als</small><b id="nx-konto-name"></b></div>
+        <button type="button" id="nx-abmelden" title="Abmelden"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button></div>
       <div class="nx-zaehler">
         <div class="stat rot"><span class="s-kopf"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Aufträge</span><b id="stat-gesamt">0</b></div>
         <div class="stat gelb" id="stat-wartet-karte"><span class="s-kopf"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>In Prüfung</span><b id="stat-wartet">0</b></div>
@@ -1469,16 +1519,30 @@ const lokal = {
     if (t) t.gesehen = Math.max(t.gesehen || 0, n); else d.tickets.unshift({id, gesehen: n}); d.tickets = d.tickets.slice(0, 100); this.schreiben(d); },
   ticketEntfernen(id) { const d = this.lesen(); d.tickets = d.tickets.filter(x => x.id !== id); this.schreiben(d); },
 };
+/* Kundenkonto: nach der Anmeldung merkt sich das Programm Name + Schluessel (bis zum Abmelden) */
+const KONTO = "oneclick-konto";
+const konto = {
+  lesen() { try { const k = JSON.parse(localStorage.getItem(KONTO) || "null"); return k && k.schluessel ? k : null; } catch (e) { return null; } },
+  setzen(k) { try { localStorage.setItem(KONTO, JSON.stringify(k)); } catch (e) {} },
+  weg() { try { localStorage.removeItem(KONTO); } catch (e) {} },
+};
+const OHNE_KONTO = /^\/api\/(info|preise|hallo|konto\/(anmelden|registrieren))\b/;
 function formular(felder, datei) {
   const f = new FormData(); Object.entries(felder).forEach(([k, v]) => f.append(k, v || "")); f.append("datei", datei, datei.name);
   return {method: "POST", body: f};
 }
 async function server(pfad, optionen = {}) {
+  const k = konto.lesen();
+  if (!k && !OHNE_KONTO.test(pfad)) {   // ohne Anmeldung gar nicht erst fragen
+    const f = new Error("Bitte melde dich an."); f.status = 401; f.daten = {anmelden: true}; kontoNoetig(); throw f;
+  }
+  if (k) optionen = {...optionen, headers: {...(optionen.headers || {}), "X-Konto": k.schluessel}};
   let r;
   try { r = await fetch(pfad, {cache: "no-store", ...optionen}); }
   catch (e) { throw new Error("Keine Verbindung zum Server. Bitte Internetverbindung prüfen."); }
   let daten = null;
   if ((r.headers.get("Content-Type") || "").includes("json")) { try { daten = await r.json(); } catch (e) {} }
+  if (r.status === 401 && daten && daten.anmelden) { konto.weg(); kontoNoetig(); }   // abgemeldet oder gesperrt
   if (!r.ok) {
     const f = new Error((daten && daten.fehler) || {403: "Das File ist noch nicht freigegeben.",
       404: "Auftrag nicht gefunden (vielleicht schon gelöscht).", 413: "Die Datei ist zu groß (max. 16 MB).",
@@ -1497,6 +1561,7 @@ const WEB = {
       Object.assign(erg, {firma: i.firma, original: i.original || "original", optionen: i.optionen || [], fahrzeug_felder: i.fahrzeug_felder || [],
                           zahlung_aktiv: !!i.zahlung_aktiv, preise: i.preise || {}, support_whatsapp: i.support_whatsapp || "", ui: i.ui || ""});
     } catch (e) { erg.verbindung = e.message; }
+    if (!erg.verbindung && konto.lesen()) { await kontoAbgleich(); erg.auftraege = lokal.lesen().auftraege; }
     return erg;
   },
   async pruefen(name, datei) {
@@ -1565,7 +1630,9 @@ const WEB = {
   async dateiHolen(pfad) {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.speichern) {
       let erg;
-      try { erg = await window.pywebview.api.speichern(new URL(pfad, location.href).href); }
+      const url = new URL(pfad, location.href), k = konto.lesen();
+      if (k) url.searchParams.set("k", k.schluessel);   // das Programm laedt selbst herunter (ohne Kopfzeilen)
+      try { erg = await window.pywebview.api.speichern(url.href); }
       catch (e) { return {fehler: String(e && e.message || e)}; }
       // aeltere Programm-Versionen kennen nur Auftrags-Downloads -> dann normal herunterladen
       if (!(erg && erg.fehler === "Ungültige Adresse.")) return erg;
@@ -1591,6 +1658,8 @@ const WEB = {
   },
   async entfernen(aid) {
     const d = lokal.lesen(); d.auftraege = d.auftraege.filter(x => x.id !== aid); lokal.schreiben(d);
+    const k = konto.lesen();   // ausgeblendet lassen, auch wenn der Auftrag am Konto haengt
+    if (k) konto.setzen({...k, versteckt: [...new Set([aid, ...(k.versteckt || [])])].slice(0, 500)});
     return {auftraege: d.auftraege};
   },
 };
@@ -2575,6 +2644,80 @@ $("#sn-preise").addEventListener("click", () => { seite("preise"); $("#sn-preise
 setInterval(() => { if (!document.hidden) preiseLaden(); }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) preiseLaden(); });
 
+/* ---------- Kundenkonto ---------- */
+let kontoOffen = false, kontoNachIntro = null, kdModus = "anmelden";
+/* Auftraege und Tickets vom Konto holen (auch auf einem neuen PC). Beim ersten Mal werden Auftraege,
+   die nur auf diesem PC gemerkt waren (vor den Konten), ans Konto uebernommen. */
+async function kontoAbgleich() {
+  const k = konto.lesen(); if (!k) return;
+  const alt = lokal.lesen();
+  if (!k.uebernommen) {
+    for (const a of alt.auftraege) { try { await server(`/api/auftrag/${encodeURIComponent(a.id)}`); } catch (e) {} }
+    for (const t of alt.tickets) { try { await server(`/api/ticket/${encodeURIComponent(t.id)}`); } catch (e) {} }
+    konto.setzen({...konto.lesen(), uebernommen: true});
+  }
+  try {
+    const [{daten: a}, {daten: t}] = await Promise.all([server("/api/konto/auftraege"), server("/api/konto/tickets")]);
+    const versteckt = new Set((konto.lesen() || {}).versteckt || []);
+    const gesehen = Object.fromEntries(alt.tickets.map(x => [x.id, x.gesehen || 0]));
+    const d = lokal.lesen();
+    d.auftraege = [];
+    d.tickets = t.tickets.map(x => ({id: x.id, gesehen: x.id in gesehen ? gesehen[x.id] : x.nachrichten.length}));
+    lokal.schreiben(d);
+    [...a.auftraege].reverse().filter(x => !versteckt.has(x.id)).forEach(x => lokal.merken(x));
+  } catch (e) { /* offline: mit dem Stand auf diesem PC weiterarbeiten */ }
+}
+function kontoAnzeigen() {
+  const k = konto.lesen();
+  $("#nx-konto").hidden = !k;
+  if (k) $("#nx-konto-name").textContent = k.name;
+}
+function kontoNoetig() {
+  if (kontoOffen) return;
+  kontoOffen = true; $("#nx-konto").hidden = true;
+  const zeigen = () => { $("#konto-dialog").classList.add("offen"); setTimeout(() => $("#kd-name").focus(), 350); };
+  if ($("#intro").classList.contains("weg")) zeigen(); else kontoNachIntro = zeigen;
+}
+function kdUmschalten(m) {
+  kdModus = m; const reg = m === "registrieren";
+  document.querySelectorAll(".kd-reiter button").forEach(b => b.classList.toggle("an", b.dataset.kd === m));
+  $("#kd-reg").hidden = !reg;
+  $("#kd-pw").autocomplete = reg ? "new-password" : "current-password";
+  $("#kd-los").textContent = reg ? "Konto erstellen" : "Anmelden";
+  $("#kd-fehler").textContent = "";
+}
+document.querySelectorAll(".kd-reiter button").forEach(b => b.addEventListener("click", () => kdUmschalten(b.dataset.kd)));
+{ const m = $(".marke .logo"); if (m) $("#kd-marke").appendChild(m.cloneNode(true)); }
+$("#kd-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const reg = kdModus === "registrieren", name = $("#kd-name").value.trim(), pw = $("#kd-pw").value;
+  const fehler = t => { $("#kd-fehler").textContent = t; };
+  if (!name || !pw) return fehler("Bitte Benutzername und Passwort eingeben.");
+  if (reg && pw !== $("#kd-pw2").value) return fehler("Die beiden Passwörter sind nicht gleich.");
+  if (reg && !$("#kd-ok").checked) return fehler("Bitte bestätige, dass du die Datenschutzerklärung gelesen hast.");
+  fehler("");
+  const knopf = $("#kd-los"); knopf.disabled = true; knopf.textContent = reg ? "Konto wird erstellt …" : "Anmelden …";
+  try {
+    const {daten} = await server("/api/konto/" + (reg ? "registrieren" : "anmelden"), json("POST", {name, passwort: pw}));
+    konto.setzen({name: daten.name, schluessel: daten.schluessel});
+    kontoOffen = false; $("#konto-dialog").classList.remove("offen");
+    $("#kd-pw").value = ""; $("#kd-pw2").value = "";
+    const d = await rufe("start"); if (d.fehler) d.verbindung = d.fehler;
+    starten(d); kontoAnzeigen(); ticketsLaden(false); kopfAktualisieren();
+    toast("ok", reg ? "Konto erstellt" : "Angemeldet", "Willkommen, " + daten.name + "!", 5000);
+    setTimeout(installationMelden, 3000);
+  } catch (err) { fehler(err.message); }
+  finally { knopf.disabled = false; knopf.textContent = reg ? "Konto erstellen" : "Anmelden"; }
+});
+async function abmelden() {
+  try { await server("/api/konto/abmelden", {method: "POST"}); } catch (e) {}
+  konto.weg(); lokal.schreiben({});   // Auftraege dieses Kontos nicht auf dem PC liegen lassen
+  const d = await rufe("start"); if (d.fehler) d.verbindung = d.fehler;
+  starten(d); ticketsLaden(false); kopfAktualisieren(); kontoNoetig();
+}
+$("#nx-abmelden").addEventListener("click", () =>
+  toast("info", "Abmelden?", "Beim nächsten Start musst du dich wieder anmelden.", 8000, {text: "Jetzt abmelden", klick: abmelden}));
+
 /* ---------- Start ---------- */
 function starten(d, mitIntro) {
   zustand.original = d.original || "original";
@@ -2597,9 +2740,10 @@ async function init() {
   const beginn = Date.now();
   const d = await rufe("start");
   if (d.fehler) d.verbindung = d.fehler;
-  if (!d.verbindung) setTimeout(installationMelden, 4500);   // nach dem Startbildschirm
+  if (!d.verbindung) setTimeout(() => { if (konto.lesen()) installationMelden(); }, 4500);   // nach dem Startbildschirm (erst angemeldet)
   if (d.firma) intro(d.firma);
   starten(d, true);
+  if (konto.lesen()) kontoAnzeigen(); else kontoNoetig();
   const st = $("#intro-status");
   setTimeout(() => {
     st.classList.add(d.verbindung ? "fehler" : "ok");
@@ -2607,6 +2751,7 @@ async function init() {
   }, Math.max(0, 1500 - (Date.now() - beginn)));
   setTimeout(() => {
     $("#intro").classList.add("weg");
+    if (kontoNachIntro) { kontoNachIntro(); kontoNachIntro = null; }
     if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
   }, Math.max(300, 2700 - (Date.now() - beginn)));
   setInterval(aktualisieren, 8000);

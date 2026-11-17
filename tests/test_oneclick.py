@@ -26,11 +26,16 @@ import app as A
 from flask.testing import FlaskClient
 
 
+TEST_KONTO_SCHLUESSEL = "test-schluessel-fuer-das-kundenkonto-0000000000"
+
+
 class ProgrammClient(FlaskClient):
-    """Testet wie das Windows-Programm (die Kunden-Schnittstelle beantwortet nur das Programm)."""
+    """Testet wie das Windows-Programm (die Kunden-Schnittstelle beantwortet nur das Programm),
+    angemeldet mit dem Test-Kundenkonto "testkunde"."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.environ_base["HTTP_USER_AGENT"] = "Mozilla/5.0 (Windows NT 10.0) Edg/130.0 OneClickProgramm/test"
+        self.environ_base["HTTP_X_KONTO"] = TEST_KONTO_SCHLUESSEL
 
 
 A.app.test_client_class = ProgrammClient          # noqa: E402
@@ -68,6 +73,10 @@ class Basis(unittest.TestCase):
         A.telegram_api = lambda m, daten, timeout=15: self.telegram.append((m, daten)) or {
             "ok": True, "result": {"message_id": 1}}
         A.BENUTZER_DATEI.write_text(json.dumps({"chef": {"pw": generate_password_hash("Geheim123"), "rolle": "admin"}}))
+        A.KUNDEN_DATEI = d / "kunden.json"
+        A.KUNDEN_DATEI.write_text(json.dumps({"testkunde": {
+            "name": "testkunde", "pw": generate_password_hash("Kunde12345"), "seit": "2026-01-01T00:00:00",
+            "schluessel": [{"hash": A.geraet_hash(TEST_KONTO_SCHLUESSEL), "seit": "2026-01-01T00:00:00"}]}}))
 
         # Golf: Original mit Softwarenummer, Stage 1 (viele Aenderungen) und Start/Stopp
         self.golf = zufall(GROESSE, 1)
@@ -597,6 +606,122 @@ class WebTests(Basis):
         self.assertIn("💬 Chat", a.get("/admin").text)
         # Admin-Ticketseite verlinkt den Auftrag
         self.assertIn(f"/auftrag/{aid}", a.get(f"/admin/ticket/{tid}").text)
+
+    def test_kundenkonto(self):
+        def programm(schluessel=None):
+            c = A.app.test_client()
+            c.environ_base.pop("HTTP_X_KONTO", None)
+            if schluessel:
+                c.environ_base["HTTP_X_KONTO"] = schluessel
+            return c
+        def json_post(c, url, daten):
+            return c.post(url, data=json.dumps(daten), content_type="application/json")
+        neu = programm()
+        # ohne Anmeldung: nur Info/Preise, alles andere verlangt die Anmeldung
+        self.assertEqual(neu.get("/api/info").status_code, 200)
+        r = neu.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(self.golf)), "x.bin")}, content_type="multipart/form-data")
+        self.assertEqual((r.status_code, r.json.get("anmelden")), (401, True))
+        self.assertEqual(neu.get("/api/konto/auftraege").status_code, 401)
+        # Registrieren: Pruefungen
+        self.assertEqual(json_post(neu, "/api/konto/registrieren", {"name": "ab", "passwort": "geheim123"}).status_code, 422)
+        self.assertEqual(json_post(neu, "/api/konto/registrieren", {"name": "Werkstatt_1", "passwort": "kurz"}).status_code, 422)
+        self.assertEqual(json_post(neu, "/api/konto/registrieren", {"name": "TestKunde", "passwort": "geheim123"}).status_code, 409)
+        r = json_post(neu, "/api/konto/registrieren", {"name": "Werkstatt_1", "passwort": "geheim123"})
+        self.assertEqual(r.status_code, 200)
+        s1 = r.json["schluessel"]
+        konten = A.lade_kunden()
+        self.assertNotIn(s1, json.dumps(konten))                         # Schluessel nur als Hash
+        self.assertNotIn("geheim123", json.dumps(konten))                # Passwort nur als Hash
+        # Anmelden (Gross/Klein egal), falsches Passwort
+        self.assertEqual(json_post(programm(), "/api/konto/anmelden", {"name": "werkstatt_1", "passwort": "falsch!!"}).status_code, 401)
+        r = json_post(programm(), "/api/konto/anmelden", {"name": "WERKSTATT_1", "passwort": "geheim123"})
+        self.assertEqual((r.status_code, r.json["name"]), (200, "Werkstatt_1"))
+        s2 = r.json["schluessel"]
+        w1, w2 = programm(s1), programm(s2)
+        self.assertEqual(w1.get("/api/konto").json["name"], "Werkstatt_1")
+        # Auftrag gehoert dem Konto, das ihn hochgeladen hat
+        aid = w1.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(self.golf)), "golf.bin")},
+                      content_type="multipart/form-data").json["id"]
+        self.assertEqual(self.auftrag(aid)["konto"], "werkstatt_1")
+        json_post(w1, f"/api/auftrag/{aid}/bestellen", {"optionen": ["stage1"]})
+        self.assertEqual([a["id"] for a in w2.get("/api/konto/auftraege").json["auftraege"]], [aid])   # anderer PC, gleiches Konto
+        # fremdes Konto sieht nichts davon
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").status_code, 404)
+        self.assertEqual(json_post(self.kunde, f"/api/auftrag/{aid}/bestellen", {"optionen": ["stage1"]}).status_code, 404)
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}/download").status_code, 404)
+        self.assertEqual(self.kunde.get("/api/konto/auftraege").json["auftraege"], [])
+        # Tickets: eigenes ja, fremdes nein
+        tid = json_post(w1, "/api/ticket", {"thema": "file", "text": "Hallo, bitte prüfen", "auftrag": aid}).json["id"]
+        self.assertEqual(w2.get(f"/api/ticket/{tid}").status_code, 200)
+        self.assertEqual(self.kunde.get(f"/api/ticket/{tid}").status_code, 404)
+        self.assertEqual(json_post(self.kunde, f"/api/ticket/{tid}/nachricht", {"text": "fremd"}).status_code, 404)
+        self.assertEqual([t["id"] for t in w2.get("/api/konto/tickets").json["tickets"]], [tid])
+        # Ticket darf nicht mit einem fremden Auftrag verknuepft werden
+        t2 = json_post(self.kunde, "/api/ticket", {"thema": "file", "text": "fremder Auftrag", "auftrag": aid}).json
+        self.assertEqual(t2["auftrag"], "")
+        # alter Auftrag (ohne Konto) wird vom ersten Konto uebernommen, das seine Nummer kennt
+        alt = self.auftrag(aid); alt.pop("konto"); A.speichere_auftrag(alt)
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").status_code, 200)
+        self.assertEqual(self.auftrag(aid)["konto"], "testkunde")
+        self.assertEqual(w1.get(f"/api/auftrag/{aid}").status_code, 404)
+        # Download: Schluessel auch als ?k= (das Programm laedt selbst herunter), aber nur bei GET
+        self.assertEqual(programm().get(f"/api/auftrag/{aid}?k={s1}").status_code, 401)   # Status-Abfrage nur per Kopf
+        # Abmelden macht nur diesen Schluessel ungueltig
+        self.assertEqual(w2.post("/api/konto/abmelden").status_code, 200)
+        self.assertEqual(w2.get("/api/konto").status_code, 401)
+        self.assertEqual(w1.get("/api/konto").status_code, 200)
+        # gesperrtes Konto kommt nicht mehr rein
+        k = A.lade_kunden(); k["werkstatt_1"]["gesperrt"] = True; A.json_speichern(A.KUNDEN_DATEI, k)
+        self.assertEqual(w1.get("/api/konto").status_code, 401)
+        self.assertEqual(json_post(programm(), "/api/konto/anmelden", {"name": "werkstatt_1", "passwort": "geheim123"}).status_code, 403)
+        # Raten wird gebremst
+        A.versuche.clear()
+        for _ in range(11):
+            r = json_post(programm(), "/api/konto/anmelden", {"name": "testkunde", "passwort": "falsch!!"})
+        self.assertEqual(r.status_code, 429)
+
+    def test_admin_kunden(self):
+        aid = self.hochladen(self.golf)
+        self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        a = self.admin()
+        seite = a.get("/admin/kunden").text
+        self.assertIn("testkunde", seite)
+        self.assertIn("testkunde", a.get(f"/auftrag/{aid}").text)          # Kunde am Auftrag
+        self.assertIn("Kunden", a.get("/admin").text)                      # Menuepunkt
+        post = lambda aktion: a.post("/admin/kunden", data={"csrf": a.csrf, "konto": "testkunde", "aktion": aktion}, follow_redirects=True)
+        # neues Passwort: wird einmal angezeigt, alte Anmeldungen ungueltig
+        seite = post("passwort").text
+        pw = re.search(r'user-select:all;margin-left:6px">([A-Za-z0-9]{10})<', seite).group(1)
+        self.assertEqual(self.kunde.get("/api/konto").status_code, 401)
+        self.assertNotIn(pw, a.get("/admin/kunden").text)
+        neu = A.app.test_client(); neu.environ_base.pop("HTTP_X_KONTO", None)
+        r = neu.post("/api/konto/anmelden", data=json.dumps({"name": "testkunde", "passwort": pw}), content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        # sperren / entsperren
+        post("sperren")
+        self.assertTrue(A.lade_kunden()["testkunde"]["gesperrt"])
+        self.assertEqual(neu.post("/api/konto/anmelden", data=json.dumps({"name": "testkunde", "passwort": pw}),
+                                  content_type="application/json").status_code, 403)
+        post("entsperren")
+        self.assertNotIn("gesperrt", A.lade_kunden()["testkunde"])
+        # loeschen: Auftrag bleibt, gehoert aber niemandem mehr - auch nicht einem neuen Konto mit gleichem Namen
+        post("loeschen")
+        self.assertNotIn("testkunde", A.lade_kunden())
+        self.assertEqual(self.auftrag(aid)["konto"], "gelöscht:testkunde")
+        r = neu.post("/api/konto/registrieren", data=json.dumps({"name": "testkunde", "passwort": "neu12345"}), content_type="application/json")
+        n2 = A.app.test_client(); n2.environ_base["HTTP_X_KONTO"] = r.json["schluessel"]
+        self.assertEqual(n2.get(f"/api/auftrag/{aid}").status_code, 404)
+        self.assertEqual(n2.get("/api/konto/auftraege").json["auftraege"], [])
+
+    def test_kundenkonto_download_mit_schluessel(self):
+        aid = self.hochladen(self.golf)
+        self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        A.entscheide(aid, True, wer="test")
+        ohne = A.app.test_client(); ohne.environ_base.pop("HTTP_X_KONTO", None)
+        self.assertEqual(ohne.get(f"/api/auftrag/{aid}/download").status_code, 401)
+        r = ohne.get(f"/api/auftrag/{aid}/download?k={TEST_KONTO_SCHLUESSEL}")   # so laedt das Programm selbst herunter
+        self.assertEqual((r.status_code, r.data), (200, bytes(self.stage1)))
+        r.close()
 
     def test_preisliste_live(self):
         c = A.app.test_client()

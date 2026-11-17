@@ -39,7 +39,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path, PurePosixPath
 
-from flask import (Flask, abort, flash, jsonify, redirect, render_template,
+from flask import (Flask, abort, flash, g, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 from jinja2 import DictLoader
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -54,6 +54,7 @@ EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selb
 EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
 SICHERUNGEN = BASE / "sicherungen"   # Archiv-Stand vor "Alles löschen" / "Alles neu sortieren"
 BENUTZER_DATEI = BASE / "benutzer.json"
+KUNDEN_DATEI = BASE / "kunden.json"   # Kundenkonten aus dem Programm (Passwoerter nur als Hash)
 CONFIG_DATEI = BASE / "config.json"
 SECRET_DATEI = BASE / ".secret_key"
 KUNDENSEITE = BASE / "web" / "kunde.html"
@@ -694,7 +695,8 @@ WERBE_FAQ = [
     ("Wie lange dauert es, bis ich mein File habe?", "Liegt dein File schon in unserem Archiv, lädst du es direkt nach der Zahlung herunter – rund um die Uhr. "
      "Bei einer Anfrage erstellen wir das File individuell, das Programm meldet sich, sobald es fertig ist."),
     ("Wie bezahle ich?", "Sicher über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
-    ("Brauche ich ein Konto?", "Nein. Deine Aufträge merkt sich das Programm auf deinem PC."),
+    ("Brauche ich ein Konto?", "Ja, einmal kurz im Programm registrieren – nur Benutzername und Passwort, keine E-Mail. "
+     "Das Programm merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auch auf einem anderen PC wieder."),
     ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
      "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
     ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem eigenen "
@@ -828,7 +830,7 @@ class KeineLoesung(Abgelehnt):
         self.auftrag = auftrag
 
 
-def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
+def entwurf_anlegen(daten: bytes, dateiname: str, konto: str = "") -> dict:
     """Schritt 1: Original pruefen, 100-%-Treffer suchen, Entwurf mit den verfuegbaren Loesungen anlegen."""
     if zu_viele("upload", 30, 3600):
         raise Abgelehnt("Zu viele Uploads in kurzer Zeit. Bitte später nochmal versuchen.")
@@ -851,6 +853,7 @@ def entwurf_anlegen(daten: bytes, dateiname: str) -> dict:
     auftrag = {
         "id": aid,
         "kunde": "–",
+        "konto": konto,
         "datei": Path(dateiname).name or "datei.bin",
         "option": None,
         "status": "ENTWURF",
@@ -1162,6 +1165,252 @@ def stripe_webhook():
 
 
 # ---------------------------------------------------------------------------
+# Kundenkonten: Kunden registrieren sich einmal im Programm (Benutzername + Passwort).
+# Danach merkt sich das Programm einen zufaelligen Schluessel (auf dem Server nur als Hash) und
+# schickt ihn bei jeder Anfrage im Kopf "X-Konto" mit. Auftraege und Tickets haengen am Konto.
+# ---------------------------------------------------------------------------
+konto_sperre = threading.Lock()
+KONTO_NAME = re.compile(r"[A-Za-z0-9ÄÖÜäöüß._-]{3,30}")
+KONTO_DUMMY_HASH = generate_password_hash("dummy-passwort-nur-fuer-gleiche-laufzeit")
+
+
+def lade_kunden() -> dict:
+    try:
+        return json.loads(KUNDEN_DATEI.read_text()) if KUNDEN_DATEI.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def konto_schluessel_neu(k: dict) -> str:
+    """Neuen Anmelde-Schluessel fuer ein Geraet ausstellen (hoechstens 10 Geraete je Konto)."""
+    token = secrets.token_urlsafe(32)
+    k["schluessel"] = (k.get("schluessel") or [])[-9:] + [
+        {"hash": geraet_hash(token), "seit": datetime.now().isoformat(timespec="seconds")}]
+    return token
+
+
+def konto_aus_anfrage():
+    """(Schluessel, Konto) des angemeldeten Kunden oder None. Der Schluessel kommt im Kopf "X-Konto";
+    nur Downloads (GET) duerfen ihn als ?k=... mitgeben, weil das Programm dort selbst herunterlaedt."""
+    nur_download = request.method == "GET" and request.endpoint in ("download", "api_ticket_datei")
+    token = request.headers.get("X-Konto") or (request.args.get("k") if nur_download else "") or ""
+    if not token or len(token) > 100:
+        return None
+    h = geraet_hash(token)
+    for schluessel, k in lade_kunden().items():
+        if any(hmac.compare_digest(s["hash"], h) for s in k.get("schluessel", [])):
+            return None if k.get("gesperrt") else (schluessel, k)
+    return None
+
+
+def konto_noetig(f):
+    """Kunden-Schnittstelle nur fuer angemeldete Kunden. Der Admin (Sitzung) darf immer."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get("admin"):
+            g.konto = None
+            return f(*args, **kwargs)
+        gefunden = konto_aus_anfrage()
+        if not gefunden:
+            return jsonify(fehler="Bitte melde dich im Programm an.", anmelden=True), 401
+        g.konto = gefunden[0]
+        heute = datetime.now().strftime("%Y-%m-%d")
+        if gefunden[1].get("zuletzt") != heute:   # hoechstens einmal am Tag schreiben
+            with konto_sperre:
+                alle = lade_kunden()
+                if g.konto in alle:
+                    alle[g.konto]["zuletzt"] = heute
+                    json_speichern(KUNDEN_DATEI, alle)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def eigener_auftrag(aid: str, fehlt_ok: bool = False):
+    """Auftrag des angemeldeten Kunden (404 bei fremden). Alte Auftraege aus der Zeit vor den Konten
+    gehoeren dem ersten Konto, das ihre geheime Nummer kennt. fehlt_ok: unbekannte Nummer -> None,
+    damit die eigentliche Funktion ihre verstaendliche Meldung geben kann."""
+    with sperre:
+        a = finde_auftrag(aid)
+        if a is None:
+            if fehlt_ok:
+                return None
+            abort(404)
+        if g.get("konto") is None:   # Admin
+            return a
+        if not a.get("konto"):
+            a["konto"] = g.konto
+            speichere_auftrag(a)
+        elif a["konto"] != g.konto:
+            abort(404)
+    return a
+
+
+def eigenes_ticket(tid: str):
+    """Ticket des angemeldeten Kunden oder None (fremd/unbekannt). Alte Tickets werden uebernommen."""
+    with ticket_sperre:
+        t = finde_ticket(tid)
+        if t is None or g.get("konto") is None:
+            return t
+        if not t.get("konto"):
+            t["konto"] = g.konto
+            speichere_ticket(t)
+        elif t["konto"] != g.konto:
+            return None
+    return t
+
+
+def konto_melden(name: str):
+    chat = lade_config().get("telegram_chat_id")
+    if chat:
+        telegram_api("sendMessage", {"chat_id": chat, "text": f"👤 <b>Neuer Kunde registriert:</b> {html.escape(name)}",
+                                     "parse_mode": "HTML"})
+
+
+def konto_eingabe() -> tuple[str, str]:
+    daten = request.get_json(silent=True)
+    daten = daten if isinstance(daten, dict) else {}
+    return str(daten.get("name") or "").strip(), str(daten.get("passwort") or "")
+
+
+@app.route("/api/konto/registrieren", methods=["POST"])
+def api_konto_registrieren():
+    name, pw = konto_eingabe()
+    if not KONTO_NAME.fullmatch(name):
+        return jsonify(fehler="Der Benutzername muss 3–30 Zeichen lang sein (Buchstaben, Zahlen, Punkt, Strich, Unterstrich)."), 422
+    if not 8 <= len(pw) <= 200:
+        return jsonify(fehler="Das Passwort muss mindestens 8 Zeichen haben."), 422
+    if zu_viele("registrieren", 5, 3600):
+        return jsonify(fehler="Zu viele Registrierungen in kurzer Zeit. Bitte später nochmal versuchen."), 429
+    with konto_sperre:
+        alle = lade_kunden()
+        if name.casefold() in alle:
+            return jsonify(fehler="Diesen Benutzernamen gibt es schon. Bitte einen anderen wählen oder anmelden."), 409
+        heute = datetime.now().strftime("%Y-%m-%d")
+        k = {"name": name, "pw": generate_password_hash(pw), "seit": datetime.now().isoformat(timespec="seconds"),
+             "zuletzt": heute}
+        token = konto_schluessel_neu(k)
+        alle[name.casefold()] = k
+        json_speichern(KUNDEN_DATEI, alle)
+    merken("registrieren")
+    threading.Thread(target=konto_melden, args=(name,), daemon=True).start()
+    return jsonify(name=name, schluessel=token)
+
+
+@app.route("/api/konto/anmelden", methods=["POST"])
+def api_konto_anmelden():
+    name, pw = konto_eingabe()
+    if zu_viele("konto_login", 10, 15 * 60):
+        return jsonify(fehler="Zu viele Fehlversuche. Bitte 15 Minuten warten."), 429
+    with konto_sperre:
+        alle = lade_kunden()
+        k = alle.get(name.casefold())
+        if not (k and check_password_hash(k["pw"], pw)):
+            if not k:
+                check_password_hash(KONTO_DUMMY_HASH, pw)   # gleiche Laufzeit: verraet nicht, ob es den Namen gibt
+            merken("konto_login")
+            return jsonify(fehler="Benutzername oder Passwort falsch."), 401
+        if k.get("gesperrt"):
+            return jsonify(fehler="Dieses Konto ist gesperrt. Bitte melde dich beim Support."), 403
+        token = konto_schluessel_neu(k)
+        k["zuletzt"] = datetime.now().strftime("%Y-%m-%d")
+        json_speichern(KUNDEN_DATEI, alle)
+    return jsonify(name=k["name"], schluessel=token)
+
+
+@app.route("/api/konto")
+@konto_noetig
+def api_konto():
+    k = lade_kunden().get(g.konto or "", {})
+    return jsonify(name=k.get("name", ""))
+
+
+@app.route("/api/konto/abmelden", methods=["POST"])
+@konto_noetig
+def api_konto_abmelden():
+    """Nur dieses Geraet abmelden (Schluessel ungueltig machen)."""
+    h = geraet_hash(request.headers.get("X-Konto", ""))
+    with konto_sperre:
+        alle = lade_kunden()
+        if g.konto in alle:
+            alle[g.konto]["schluessel"] = [s for s in alle[g.konto].get("schluessel", []) if not hmac.compare_digest(s["hash"], h)]
+            json_speichern(KUNDEN_DATEI, alle)
+    return jsonify(ok=True)
+
+
+def konto_name(schluessel: str) -> str:
+    """Anzeigename eines Kontos (so geschrieben, wie der Kunde ihn registriert hat)."""
+    return lade_kunden().get(schluessel or "", {}).get("name") or (schluessel or "")
+
+
+app.jinja_env.globals["konto_name"] = konto_name
+
+
+@app.route("/admin/kunden", methods=["GET", "POST"])
+@admin_noetig
+def admin_kunden():
+    if request.method == "POST":
+        schluessel, aktion = request.form.get("konto", ""), request.form.get("aktion", "")
+        with konto_sperre:
+            alle = lade_kunden()
+            k = alle.get(schluessel)
+            if not k:
+                flash("Konto nicht gefunden.")
+                return redirect(url_for("admin_kunden"))
+            name = k["name"]
+            if aktion == "sperren":
+                k["gesperrt"], k["schluessel"] = True, []
+                flash(f"„{name}“ ist gesperrt und überall abgemeldet.")
+            elif aktion == "entsperren":
+                k.pop("gesperrt", None)
+                flash(f"„{name}“ ist wieder freigeschaltet. Der Kunde muss sich neu anmelden.")
+            elif aktion == "passwort":
+                neu = "".join(secrets.choice("abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(10))
+                k["pw"], k["schluessel"] = generate_password_hash(neu), []
+                session["neues_passwort"] = {"name": name, "pw": neu}
+            elif aktion == "loeschen":
+                del alle[schluessel]
+            else:
+                abort(400)
+            json_speichern(KUNDEN_DATEI, alle)
+        if aktion == "loeschen":   # Auftraege/Tickets bleiben, gehoeren aber niemandem mehr (auch nicht bei gleichem Namen)
+            with sperre:
+                for a in alle_auftraege():
+                    if a.get("konto") == schluessel:
+                        a["konto"] = f"gelöscht:{schluessel}"
+                        speichere_auftrag(a)
+            with ticket_sperre:
+                for t in alle_tickets():
+                    if t.get("konto") == schluessel:
+                        t["konto"] = f"gelöscht:{schluessel}"
+                        speichere_ticket(t)
+            flash(f"Konto „{name}“ gelöscht. Aufträge und Tickets bleiben im Admin erhalten.")
+        return redirect(url_for("admin_kunden") + (f"#k-{schluessel}" if aktion != "loeschen" else ""))
+    zahlen = {}
+    for a in alle_auftraege():
+        if a.get("konto") and a["status"] != "ENTWURF":
+            z = zahlen.setdefault(a["konto"], {"auftraege": 0, "umsatz": 0})
+            z["auftraege"] += 1
+            z["umsatz"] += a.get("preis", 0) if a.get("bezahlt") else 0
+    kunden = sorted(({"schluessel": s, **k, **zahlen.get(s, {"auftraege": 0, "umsatz": 0})} for s, k in lade_kunden().items()),
+                    key=lambda k: k.get("seit", ""), reverse=True)
+    return render_template("kunden.html", kunden=kunden, neues_passwort=session.pop("neues_passwort", None), euro=euro)
+
+
+@app.route("/api/konto/auftraege")
+@konto_noetig
+def api_konto_auftraege():
+    """Alle abgeschickten Auftraege und Anfragen des Kontos (auch auf einem neuen PC)."""
+    return jsonify(auftraege=[api_auftrag(a) for a in alle_auftraege()
+                              if a.get("konto") == g.konto and a["status"] != "ENTWURF"][:200])
+
+
+@app.route("/api/konto/tickets")
+@konto_noetig
+def api_konto_tickets():
+    return jsonify(tickets=[api_ticket(t) for t in alle_tickets() if t.get("konto") == g.konto][:100])
+
+
+# ---------------------------------------------------------------------------
 # Schnittstelle fuer die Kundenseite (JSON, ohne Cookies)
 # ---------------------------------------------------------------------------
 
@@ -1296,12 +1545,13 @@ def api_preise():
 
 
 @app.route("/api/pruefen", methods=["POST"])
+@konto_noetig
 def api_pruefen():
     datei = request.files.get("datei")
     if not datei or not datei.filename:
         return jsonify(fehler="Bitte eine Originaldatei auswählen."), 400
     try:
-        return jsonify(api_auftrag(entwurf_anlegen(datei.read(), datei.filename)))
+        return jsonify(api_auftrag(entwurf_anlegen(datei.read(), datei.filename, g.konto or "")))
     except KeineLoesung as e:   # Anfrage moeglich: Entwurf-Nummer mitschicken
         return jsonify(fehler=str(e), anfrage=True, **api_auftrag(e.auftrag)), 422
     except Abgelehnt as e:
@@ -1309,7 +1559,9 @@ def api_pruefen():
 
 
 @app.route("/api/auftrag/<aid>/bestellen", methods=["POST"])
+@konto_noetig
 def api_bestellen(aid):
+    eigener_auftrag(aid, fehlt_ok=True)
     daten = request.get_json(silent=True)
     daten = daten if isinstance(daten, dict) else {}
     optionen = daten.get("optionen")
@@ -1322,7 +1574,9 @@ def api_bestellen(aid):
 
 
 @app.route("/api/auftrag/<aid>/anfrage", methods=["POST"])
+@konto_noetig
 def api_anfrage(aid):
+    eigener_auftrag(aid, fehlt_ok=True)
     daten = request.get_json(silent=True)
     daten = daten if isinstance(daten, dict) else {}
     fahrzeug = daten.get("fahrzeug") if isinstance(daten.get("fahrzeug"), dict) else {}
@@ -1336,15 +1590,18 @@ def api_anfrage(aid):
 
 
 @app.route("/api/auftrag/<aid>")
+@konto_noetig
 def api_auftrag_status(aid):
-    auftrag = lade_auftrag(aid)
+    auftrag = eigener_auftrag(aid)
     if zahlung_offen(auftrag):   # falls die Meldung von Stripe (Webhook) noch fehlt: selbst nachfragen
         auftrag = stripe_pruefen(auftrag)
     return jsonify(api_auftrag(auftrag))
 
 
 @app.route("/api/auftrag/<aid>/bezahlen", methods=["POST"])
+@konto_noetig
 def api_bezahlen(aid):
+    eigener_auftrag(aid, fehlt_ok=True)
     daten = request.get_json(silent=True)
     daten = daten if isinstance(daten, dict) else {}
     try:
@@ -1372,7 +1629,14 @@ def auftrag_status(aid):
 @app.route("/auftrag/<aid>/download")
 @app.route("/api/auftrag/<aid>/download")
 def download(aid):
-    auftrag = lade_auftrag(aid)
+    if session.get("admin"):
+        auftrag = lade_auftrag(aid)
+    else:   # Kunde: nur mit Anmeldung und nur eigene Auftraege
+        gefunden = konto_aus_anfrage()
+        if not gefunden:
+            return jsonify(fehler="Bitte melde dich im Programm an.", anmelden=True), 401
+        g.konto = gefunden[0]
+        auftrag = eigener_auftrag(aid)
     if auftrag["status"] != "FREIGEGEBEN" and not (session.get("admin") and auftrag["status"] != "ENTWURF"):
         abort(403)
     if not hat_file(aid):
@@ -1553,6 +1817,7 @@ def kunde_ticket_datei(datei):
 
 
 @app.route("/api/ticket", methods=["POST"])
+@konto_noetig
 def api_ticket_neu():
     daten, datei = ticket_eingabe()
     try:
@@ -1567,9 +1832,12 @@ def api_ticket_neu():
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
     aid = str(daten.get("auftrag") or "")
+    a = finde_auftrag(aid)
+    if a and g.konto and a.get("konto") not in (None, "", g.konto):   # nur eigene Auftraege verknuepfen
+        a = None
     jetzt = datetime.now().isoformat(timespec="seconds")
-    t = {"id": uuid.uuid4().hex, "thema": thema, "status": "OFFEN", "zeit": jetzt,
-         "auftrag": aid if finde_auftrag(aid) else "", "kontakt": str(daten.get("kontakt") or "").strip()[:100],
+    t = {"id": uuid.uuid4().hex, "thema": thema, "status": "OFFEN", "zeit": jetzt, "konto": g.konto or "",
+         "auftrag": aid if a else "", "kontakt": str(daten.get("kontakt") or "").strip()[:100],
          "nachrichten": [{"von": "kunde", "text": text, "zeit": jetzt}]}
     with ticket_sperre:
         if gelesen:
@@ -1580,16 +1848,18 @@ def api_ticket_neu():
 
 
 @app.route("/api/ticket/<tid>")
+@konto_noetig
 def api_ticket_lesen(tid):
-    t = finde_ticket(tid)
+    t = eigenes_ticket(tid)
     if t is None:
         return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
     return jsonify(api_ticket(t))
 
 
 @app.route("/api/ticket/<tid>/datei/<fid>")
+@konto_noetig
 def api_ticket_datei(tid, fid):
-    t = finde_ticket(tid)
+    t = eigenes_ticket(tid)
     anhang = ticket_anhang(t, fid) if t else None
     if anhang is None:
         return jsonify(fehler="Datei nicht gefunden (vielleicht schon gelöscht)."), 404
@@ -1597,9 +1867,10 @@ def api_ticket_datei(tid, fid):
 
 
 @app.route("/api/ticket/<tid>/nachricht", methods=["POST"])
+@konto_noetig
 def api_ticket_nachricht(tid):
     daten, datei = ticket_eingabe()
-    if finde_ticket(tid) is None:
+    if eigenes_ticket(tid) is None:
         return jsonify(fehler="Ticket nicht gefunden (vielleicht schon gelöscht)."), 404
     try:
         text = str(daten.get("text") or "").strip()[:3000]
@@ -1634,7 +1905,8 @@ def api_ticket_nachricht(tid):
 def admin_tickets():
     tickets = alle_tickets()
     tickets.sort(key=lambda t: t["status"] != "OFFEN")   # offene zuerst (sonst neueste zuerst)
-    return render_template("tickets.html", tickets=[api_ticket(t) | {"kontakt": t.get("kontakt", "")} for t in tickets])
+    return render_template("tickets.html", tickets=[api_ticket(t) | {"kontakt": t.get("kontakt", ""), "konto": t.get("konto", "")}
+                                                    for t in tickets])
 
 
 @app.route("/admin/ticket/<tid>/daten")
@@ -1699,7 +1971,7 @@ def admin_ticket(tid):
                 flash("Ticket wieder geöffnet.")
             speichere_ticket(t)
         return redirect(url_for("admin_ticket", tid=tid))
-    return render_template("ticket.html", t=api_ticket(t) | {"kontakt": t.get("kontakt", "")},
+    return render_template("ticket.html", t=api_ticket(t) | {"kontakt": t.get("kontakt", ""), "konto": t.get("konto", "")},
                            auftrag=finde_auftrag(t.get("auftrag") or "") if t.get("auftrag") else None)
 
 
@@ -1725,7 +1997,7 @@ def admin_rueckfrage(aid):
             t = finde_ticket(auftrag.get("ticket") or "")
             if t is None:
                 t = {"id": uuid.uuid4().hex, "thema": "rueckfrage", "status": "BEANTWORTET", "zeit": jetzt, "auftrag": aid,
-                     "kontakt": auftrag.get("kunde", "") if auftrag.get("kunde") != "–" else "", "nachrichten": []}
+                     "konto": auftrag.get("konto", ""), "kontakt": auftrag.get("kunde", "") if auftrag.get("kunde") != "–" else "", "nachrichten": []}
             n = {"von": "admin", "text": text, "zeit": jetzt}
             if gelesen:
                 n["datei"] = ticket_datei_ablegen(t["id"], *gelesen)
@@ -2601,9 +2873,9 @@ def sortieren():
         if not gids:
             continue
         gruppen = [gruppe_auswerten(s, gid) for gid in gids]
-        for g in gruppen:
-            plan = auto_plan(g)
-            g["auto"] = plan if isinstance(plan, str) else "kann automatisch übernommen werden"
+        for gr in gruppen:
+            plan = auto_plan(gr)
+            gr["auto"] = plan if isinstance(plan, str) else "kann automatisch übernommen werden"
         stapel.append({**s, "gruppen": gruppen, "sichtbar": sum(1 for d in s["dateien"] if sichtbar(d))})
     return render_template("sortieren.html", stapel=stapel, ausgeblendet=ausgeblendet, archiv_optionen=oneclick.optionen(),
                            archiv_namen=[e["name"] for e in oneclick.lade_index()["eintraege"]])
@@ -3304,6 +3576,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <div class="aa-marke"><img src="/favicon.svg" alt=""><div><b>OneClick</b><span>ADMIN</span></div></div>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht','auftrag_suche') }}><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg>Tickets{% if tickets_offen %}<i>{{ tickets_offen }}</i>{% endif %}</a>
+<a href="{{ url_for('admin_kunden') }}"{{ ' class=an' if ep == 'admin_kunden' }}><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3c1.8.8 3 2.8 3 5.7"/></svg>Kunden</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archiv</a>
 <a href="{{ url_for('admin_archiv') }}#preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<i>{{ zu_sortieren }}</i></a>{% endif %}
@@ -3315,6 +3588,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}>Tickets{% if tickets_offen %} ({{ tickets_offen }}){% endif %}</a>
+<a href="{{ url_for('admin_kunden') }}"{{ ' class=an' if ep == 'admin_kunden' }}>Kunden</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
 <a href="{{ url_for('admin_archiv') }}#preise">Preise</a>
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
@@ -3390,7 +3664,8 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <tr><th>Gewünscht</th><td><b>{{ optionen[a.option] }}</b></td></tr>
 {% if a.nachricht %}<tr><th>Nachricht</th><td style="white-space:pre-wrap">{{ a.nachricht }}</td></tr>{% endif %}{% endif %}
 <tr><th>ECU</th><td>{{ ecu_text(a) }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
-<tr><th>Kontakt</th><td>{{ a.kunde }}</td></tr>
+<tr><th>Kunde</th><td>{% if a.konto %}<a href="{{ url_for('admin_kunden') }}#k-{{ a.konto }}"><b>{{ konto_name(a.konto) }}</b></a>{% else %}<span class="leise">ohne Konto (von vor der Anmeldung)</span>{% endif %}</td></tr>
+<tr><th>Kontakt</th><td>{% if a.konto %}<b>{{ konto_name(a.konto) }}</b>{% if a.kunde and a.kunde != '–' %}<br><span class="leise">{{ a.kunde }}</span>{% endif %}{% else %}{{ a.kunde }}{% endif %}</td></tr>
 {% if a.art and a.typ != 'anfrage' %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
 {% if a.typ != 'anfrage' %}<tr><th>Quelle</th><td>{{ a.quelle or '–' }}</td></tr>{% endif %}
 {% if zahlung or a.bezahlt %}<tr><th>Preis</th><td>{{ euro(a.preis or 0) if a.preis else 'kostenlos' }}</td></tr>
@@ -3505,7 +3780,7 @@ zufälligen Nummer gezählt (ohne Namen und Kundendaten) – jeder Laptop/Mac ei
 <p class="hinweis" style="margin-top:-6px">Telegram: {{ 'aktiv' if telegram else 'nicht eingerichtet' }} ·
 Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Browser-Benachrichtigungen erlauben</a></p>
 {% if wartend %}<div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>ECU</th><th>Treffer</th><th></th></tr>
-{% for a in wartend %}<tr><td>{{ a.zeit[8:10] }}.{{ a.zeit[5:7] }}. {{ a.zeit[11:16] }}</td><td>{{ a.kunde }}</td>
+{% for a in wartend %}<tr><td>{{ a.zeit[8:10] }}.{{ a.zeit[5:7] }}. {{ a.zeit[11:16] }}</td><td>{% if a.konto %}<b>{{ konto_name(a.konto) }}</b>{% if a.kunde and a.kunde != '–' %}<br><span class="leise">{{ a.kunde }}</span>{% endif %}{% else %}{{ a.kunde }}{% endif %}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
 <td>{{ ecu_text(a) }}</td><td class="leise">{% if a.typ == 'anfrage' %}<span class="status s-WARTET">📩 Anfrage</span>
 {{ a.fahrzeug.marke }} {{ a.fahrzeug.modell }}{% else %}{{ art_text.get(a.art, a.art) }}{% endif %}</td>
@@ -3522,7 +3797,7 @@ Diese Seite meldet neue Aufträge mit Ton. <a href="#" id="benachrichtigung">Bro
 <input type="text" name="q" placeholder="Auftrags-Nr. aus WhatsApp, z. B. 3f9a1c2e" style="flex:1;min-width:200px;margin:0" autocomplete="off">
 <button class="btn grau">Suchen</button></form>
 <div class="tabelle"><table><tr><th>Datum</th><th>Kontakt</th><th>Datei</th><th>Option</th><th>Quelle</th><th>Status</th>{% if zahlung %}<th>Zahlung</th>{% endif %}</tr>
-{% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{{ a.kunde }}</td>
+{% for a in alle %}<tr><td>{{ a.zeit[:16].replace('T',' ') }}</td><td>{% if a.konto %}<b>{{ konto_name(a.konto) }}</b>{% if a.kunde and a.kunde != '–' %}<br><span class="leise">{{ a.kunde }}</span>{% endif %}{% else %}{{ a.kunde }}{% endif %}</td>
 <td><a href="{{ url_for('auftrag_ansicht', aid=a.id) }}">{{ a.datei }}</a></td><td>{{ optionen[a.option] }}</td>
 <td class="leise">{% if a.typ == 'anfrage' %}📩 Anfrage{% else %}{{ a.quelle or '–' }}{% endif %}</td>
 <td><span class="status s-{{ a.status }}">{{ status_text[a.status] }}</span></td>
@@ -3936,7 +4211,7 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
   <figure><img src="/bilder/programm-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"><figcaption>Startbildschirm – Verbindung wird geprüft</figcaption></figure>
  </div></div></section>
 <section id="ablauf"><div class="breit">
- <h2>In vier Schritten zum File</h2><p class="unter">Ohne Konto, ohne Anmeldung.</p>
+ <h2>In vier Schritten zum File</h2><p class="unter">Einmal registrieren, dann bleibst du angemeldet.</p>
  <div class="schritte">
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen und starten. Fertig – keine Installation nötig.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
@@ -3974,11 +4249,36 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
  document.querySelectorAll('[data-dl-text]').forEach(function(t){t.textContent=t.textContent.replace('herunterladen','für Mac herunterladen')});})();
 </script>
 </body></html>""",
+"kunden.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1>Kunden</h1>
+<p class="leise" style="margin-top:-8px">Konten aus dem Programm. Kunden registrieren sich selbst mit Benutzername und Passwort;
+Aufträge, Anfragen und Tickets hängen am Konto. Passwörter siehst du nie – du kannst sie nur neu vergeben.</p>
+{% if neues_passwort %}<div class="hinweis" style="border-color:#2fd35a"><b>Neues Passwort für „{{ neues_passwort.name }}“:</b>
+<code style="font-size:18px;user-select:all;margin-left:6px">{{ neues_passwort.pw }}</code><br>
+Gib es dem Kunden (z. B. per WhatsApp). Es wird nur jetzt angezeigt. Er ist auf allen Geräten abgemeldet und meldet sich damit neu an.</div>{% endif %}
+{% if kunden %}<p><b>{{ kunden|length }}</b> Konto/Konten · <input type="search" id="kunden-suche" placeholder="Kunde suchen …" style="max-width:260px;margin:0 0 0 10px;display:inline-block"></p>
+<div class="tabelle"><table id="kunden-tabelle"><tr><th>Benutzername</th><th>Registriert</th><th>Zuletzt aktiv</th><th>Aufträge</th><th>Bezahlt</th><th>Status</th><th>Aktionen</th></tr>
+{% for k in kunden %}<tr id="k-{{ k.schluessel }}" data-name="{{ k.name|lower }}"><td><b>{{ k.name }}</b></td>
+<td>{{ k.seit[8:10] }}.{{ k.seit[5:7] }}.{{ k.seit[:4] }}</td>
+<td>{% if k.zuletzt %}{{ k.zuletzt[8:10] }}.{{ k.zuletzt[5:7] }}.{{ k.zuletzt[:4] }}{% else %}–{% endif %}</td>
+<td>{{ k.auftraege }}</td><td>{{ euro(k.umsatz) if k.umsatz else '–' }}</td>
+<td>{% if k.gesperrt %}<span class="status s-ABGELEHNT">Gesperrt</span>{% else %}<span class="status s-FREIGEGEBEN">Aktiv</span>{% endif %}</td>
+<td><form method="post" class="inline" style="display:inline-flex;gap:6px;flex-wrap:wrap"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="konto" value="{{ k.schluessel }}">
+<button class="btn klein grau" name="aktion" value="passwort" onclick="return confirm('Neues Passwort für „{{ k.name }}“ erzeugen? Das alte gilt dann nicht mehr.')">Neues Passwort</button>
+{% if k.gesperrt %}<button class="btn klein grau" name="aktion" value="entsperren">Entsperren</button>
+{% else %}<button class="btn klein grau" name="aktion" value="sperren" onclick="return confirm('„{{ k.name }}“ sperren? Der Kunde wird überall abgemeldet.')">Sperren</button>{% endif %}
+<button class="btn klein grau" name="aktion" value="loeschen" onclick="return confirm('Konto „{{ k.name }}“ endgültig löschen? Aufträge und Tickets bleiben im Admin erhalten.')">Löschen</button></form></td></tr>{% endfor %}</table></div>
+<script>(function(){var s=document.getElementById('kunden-suche');s.addEventListener('input',function(){var q=s.value.trim().toLowerCase();
+document.querySelectorAll('#kunden-tabelle tr[data-name]').forEach(function(r){r.style.display=!q||r.dataset.name.indexOf(q)>=0?'':'none';});});})();</script>
+{% else %}<p class="leise">Noch keine Kunden registriert. Sobald sich jemand im Programm registriert, erscheint er hier (und du bekommst eine Telegram-Meldung).</p>{% endif %}
+</div>
+{% endblock %}""",
+
 "tickets.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Support-Tickets</h1>
 <p class="leise" style="margin-top:-8px">Kunden schreiben aus dem Programm. Deine Antwort sehen sie dort, das Programm meldet sich bei ihnen.</p>
-{% if tickets %}<div class="tabelle"><table><tr><th>Nr.</th><th>Thema</th><th>Letzte Nachricht</th><th>Auftrag</th><th>Status</th><th></th></tr>
-{% for t in tickets %}{% set n = t.nachrichten[-1] %}<tr><td><code>#{{ t.kurz }}</code></td><td>{{ t.thema_text }}</td>
+{% if tickets %}<div class="tabelle"><table><tr><th>Nr.</th><th>Kunde</th><th>Thema</th><th>Letzte Nachricht</th><th>Auftrag</th><th>Status</th><th></th></tr>
+{% for t in tickets %}{% set n = t.nachrichten[-1] %}<tr><td><code>#{{ t.kurz }}</code></td><td>{{ konto_name(t.konto) if t.konto else '–' }}</td><td>{{ t.thema_text }}</td>
 <td><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }}, {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}. {{ n.zeit[11:16] }}:</span> {{ n.text[:80] }}{{ '…' if n.text|length > 80 }}</td>
 <td>{% if t.auftrag %}<a href="{{ url_for('auftrag_ansicht', aid=t.auftrag) }}">{{ t.datei or t.auftrag[:8] }}</a>{% else %}–{% endif %}</td>
 <td><span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span></td>
@@ -3996,6 +4296,7 @@ pruefen(); setInterval(pruefen,8000);})();
 <div class="karte"><p style="margin:0 0 6px"><a href="{{ url_for('admin_tickets') }}">← Alle Tickets</a></p>
 <h1>Ticket #{{ t.kurz }} · {{ t.thema_text }}</h1>
 <p class="leise" style="margin-top:-8px">Status: <span class="status {{ {'OFFEN':'s-WARTET','BEANTWORTET':'s-FREIGEGEBEN','GESCHLOSSEN':'s-ENTWURF'}[t.status] }}">{{ t.status_text }}</span>
+{% if t.konto %} · Kunde: <a href="{{ url_for('admin_kunden') }}#k-{{ t.konto }}"><b>{{ konto_name(t.konto) }}</b></a>{% endif %}
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
 {% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ ecu_text(auftrag) }}, #{{ auftrag.id[:8] }}){% endif %}</p>
 <div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
