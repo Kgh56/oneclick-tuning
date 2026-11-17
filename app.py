@@ -258,7 +258,8 @@ def mail_senden(an: str, betreff: str, text: str):
     m["To"] = an
     m["Date"] = formatdate(localtime=True)
     m["Message-ID"] = make_msgid(domain=absender.rpartition("@")[2] or None)
-    m.set_content(f"{text}\n\nViele Grüße\n{firma}\n\n—\nDiese E-Mail wurde automatisch verschickt.")
+    m.set_content(f"{text}\n\nViele Grüße\n{firma}\n\n—\nDiese E-Mail wurde automatisch verschickt. Bitte nicht darauf antworten – "
+                  f"schreib uns bei Fragen im Programm {PROGRAMM_NAME} unter „Support“.")
     port = int(cfg.get("smtp_port") or 587)
     kontext = ssl.create_default_context()
     try:
