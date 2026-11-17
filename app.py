@@ -864,12 +864,16 @@ def bild(name):
 
 # Fragen der Werbeseite: sichtbar als FAQ und gleichzeitig als strukturierte Daten fuer Google und KI-Antwortdienste
 WERBE_FAQ = [
-    ("Was kostet das Programm?", "Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo und ohne Credits."),
+    ("Was kostet das Programm?", "Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo und ohne Credits. "
+     "Alle Preise siehst du vorher im Programm im Reiter „Preise“, immer aktuell."),
     ("Wie lange dauert es, bis ich mein File habe?", "Liegt dein File schon in unserem Archiv, lädst du es direkt nach der Zahlung herunter – rund um die Uhr. "
-     "Bei einer Anfrage erstellen wir das File individuell, das Programm meldet sich, sobald es fertig ist."),
+     "Bei einer Anfrage erstellen wir das File individuell – sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail."),
     ("Wie bezahle ich?", "Sicher über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
     ("Brauche ich ein Konto?", "Ja, einmal kurz im Programm registrieren – mit E-Mail-Adresse und Passwort. "
-     "Das Programm merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auch auf einem anderen PC wieder."),
+     "Das Programm merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auch auf einem anderen PC wieder. "
+     "Passwort vergessen? Im Anmeldefenster auf „Passwort vergessen?“ klicken – du bekommst einen Code per E-Mail."),
+    ("Gibt es das Programm auf Englisch?", "Ja. OneClick Solutions gibt es auf Deutsch und Englisch – oben im Programm mit einem Klick "
+     "auf DE oder EN umschalten."),
     ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
      "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
     ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem eigenen "
@@ -904,11 +908,14 @@ def werbe_daten() -> str:
          "downloadUrl": [b + "/download/windows", b + "/download/mac"],
          "screenshot": [b + "/bilder/programm-auswahl.webp", b + "/bilder/programm-auftraege.webp", b + "/bilder/programm-support.webp"],
          "featureList": ["Automatische Erkennung von Steuergerät und Software", "Sofort-Kauf von Files aus dem Archiv",
-                         "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Automatische Updates"],
+                         "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Automatische Updates",
+                         "Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem PC", "E-Mail-Benachrichtigung, wenn das File fertig ist",
+                         "Live-Preisliste", "Deutsch und Englisch"],
+         "inLanguage": ["de", "en"],
          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
          "publisher": {"@id": "https://gh-mapping.de/#business"}},
         {"@type": "HowTo", "name": "Chiptuning-File mit OneClick Solutions bestellen", "step": [
-            {"@type": "HowToStep", "position": 1, "name": "Programm laden", "text": "OneClick Solutions für Windows oder Mac herunterladen und starten."},
+            {"@type": "HowToStep", "position": 1, "name": "Programm laden", "text": "OneClick Solutions für Windows oder Mac herunterladen, starten und einmal mit E-Mail registrieren."},
             {"@type": "HowToStep", "position": 2, "name": "Original laden", "text": "Das ausgelesene Original-File ins Programm ziehen."},
             {"@type": "HowToStep", "position": 3, "name": "Lösung wählen", "text": "Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken."},
             {"@type": "HowToStep", "position": 4, "name": "Bezahlen und laden", "text": "Über Stripe bezahlen und das File sofort herunterladen."}]},
@@ -972,6 +979,10 @@ def llms_txt():
             "für Windows und Mac. Kunden laden ihr ausgelesenes Original-File, das Programm erkennt Steuergerät und Software und zeigt die "
             "verfügbaren Lösungen. Files aus dem Archiv werden sofort gekauft (Stripe) und heruntergeladen; gibt es noch nichts, stellt der "
             "Kunde eine Anfrage. Kein Abo, keine Credits. Die Files werden in einer lizenzierten WinOLS-5-Umgebung erstellt.\n\n"
+            "## Funktionen\n- Kundenkonto mit E-Mail und Passwort: Aufträge und Tickets auf jedem PC, Passwort zurücksetzen per E-Mail-Code.\n"
+            "- E-Mail-Benachrichtigung, wenn ein angefragtes File fertig ist oder der Support antwortet.\n"
+            "- Reiter „Preise“ mit der aktuellen Preisliste (live).\n- Programm auf Deutsch und Englisch.\n"
+            "- Support-Tickets mit Datei-Anhängen, Updates mit einem Klick.\n\n"
             f"## Links\n- Programm und Download: {b}/\n- Windows: {b}/download/windows\n- Mac: {b}/download/mac\n"
             "- Fileservice-Website: https://gh-mapping.de/\n- Kontakt: chiptuning2002@gmail.com, WhatsApp +49 155 68540674\n\n"
             "## Häufige Fragen\n" + "".join(f"\n### {q}\n{a}\n" for q, a in WERBE_FAQ))
@@ -4583,6 +4594,10 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></div><b>Support im Programm</b><span>Problem mit einem File? Ticket öffnen, Logs oder Screenshots anhängen – wir antworten im Programm und schicken dir das angepasste File direkt in den Chat.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div><b>Updates mit einem Klick</b><span>Neue Funktionen kommen über den Update-Knopf im Programm – kein neuer Download nötig.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><b>Dein Konto – auf jedem PC</b><span>Einmal mit E-Mail registrieren. Aufträge und Tickets hängen an deinem Konto – auch am Zweit-PC oder Mac. Passwort vergessen? Code per E-Mail.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div><b>E-Mail, wenn's fertig ist</b><span>Ist dein angefragtes File fertig oder antwortet der Support, bekommst du eine E-Mail – du musst nicht ständig nachschauen.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></div><b>Preise immer aktuell</b><span>Im Reiter „Preise“ siehst du vorher, was jede Lösung kostet – live, ohne Neustart.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><b>Deutsch &amp; English</b><span>Das Programm gibt es auf Deutsch und Englisch – oben rechts mit einem Klick umschalten.</span></div>
  </div>
  <div class="sonder"><div><span class="marke">Neu · Auf Anfrage</span><b>VAG Sonderfunktionen</b>
   <span>2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 – und Mapswitch für VAG. Anfrage einfach per Ticket im Programm: Thema „Sonderfunktion“, Original-File anhängen, fertig.</span></div>
@@ -4600,9 +4615,9 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
   <figure><img src="/bilder/programm-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"><figcaption>Startbildschirm – Verbindung wird geprüft</figcaption></figure>
  </div></div></section>
 <section id="ablauf"><div class="breit">
- <h2>In vier Schritten zum File</h2><p class="unter">Einmal registrieren, dann bleibst du angemeldet.</p>
+ <h2>In vier Schritten zum File</h2><p class="unter">Einmal mit E-Mail registrieren, dann bleibst du angemeldet – auf jedem PC.</p>
  <div class="schritte">
-  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen und starten. Fertig – keine Installation nötig.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen, starten und einmal mit E-Mail registrieren – keine Installation nötig.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Sofort bezahlen und das File herunterladen. Anfragen nach unserer Freigabe.</span></div>
