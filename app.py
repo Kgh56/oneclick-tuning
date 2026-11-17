@@ -1225,6 +1225,7 @@ def zahlung_verbuchen(s: dict) -> bool:
                        betrag=s["amount_total"], zahlung_id=s.get("payment_intent") or s.get("id"),
                        stripe_session=s.get("id"))
         speichere_auftrag(auftrag)
+    umsatz_buchen(auftrag)
     def melden():
         chat = lade_config().get("telegram_chat_id")
         if chat:
@@ -1572,7 +1573,7 @@ def admin_kunden():
         if a.get("konto") and a["status"] != "ENTWURF":
             z = zahlen.setdefault(a["konto"], {"auftraege": 0, "umsatz": 0})
             z["auftraege"] += 1
-            z["umsatz"] += a.get("preis", 0) if a.get("bezahlt") else 0
+            z["umsatz"] += (a.get("betrag") or a.get("preis") or 0) if a.get("bezahlt") else 0
     kunden = sorted(({"schluessel": s, **k, **zahlen.get(s, {"auftraege": 0, "umsatz": 0})} for s, k in lade_kunden().items()),
                     key=lambda k: k.get("seit", ""), reverse=True)
     return render_template("kunden.html", kunden=kunden, neues_passwort=session.pop("neues_passwort", None), euro=euro)
@@ -1855,6 +1856,109 @@ def admin():
                            zahlung=zahlung_aktiv(), euro=euro,
                            bezahlt=sum(a.get("betrag") or 0 for a in alle if a.get("bezahlt")),
                            inst=installations_statistik(), downloads=download_statistik())
+
+
+# ---------------------------------------------------------------------------
+# Umsatz: eigenes Umsatzbuch, damit die Zahlen auch nach dem automatischen Loeschen
+# alter Auftraege erhalten bleiben (nur Datum, Betrag, Loesung, Konto - keine Dateien)
+# ---------------------------------------------------------------------------
+UMSATZ_DATEI = BASE / "umsatz.json"
+umsatz_sperre = threading.Lock()
+MONATE_KURZ = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+
+
+def lade_umsatz() -> list:
+    try:
+        return json.loads(UMSATZ_DATEI.read_text()) if UMSATZ_DATEI.exists() else []
+    except (OSError, ValueError):
+        return []
+
+
+def umsatz_eintrag(a: dict) -> dict:
+    return {"id": a["id"], "am": a.get("bezahlt_am") or a.get("zeit", ""), "betrag": a.get("betrag") or a.get("preis") or 0,
+            "option": a.get("option") or "", "konto": a.get("konto") or "", "typ": a.get("typ", "auftrag")}
+
+
+def umsatz_buchen(a: dict):
+    with umsatz_sperre:
+        alle = lade_umsatz()
+        if not any(e["id"] == a["id"] for e in alle):
+            alle.append(umsatz_eintrag(a))
+            json_speichern(UMSATZ_DATEI, alle)
+
+
+def umsatz_buchungen() -> list:
+    """Alle Zahlungen. Bezahlte Auftraege, die noch nicht im Umsatzbuch stehen (z. B. von vor dieser
+    Funktion), werden dabei nachgetragen."""
+    with umsatz_sperre:
+        alle = lade_umsatz()
+        bekannt = {e["id"] for e in alle}
+        neu = [umsatz_eintrag(a) for a in alle_auftraege() if a.get("bezahlt") and a["id"] not in bekannt]
+        if neu:
+            alle += neu
+            json_speichern(UMSATZ_DATEI, alle)
+    return alle
+
+
+def umsatz_auswertung(heute=None) -> dict:
+    heute = heute or datetime.now()
+    buchungen = umsatz_buchungen()
+    # die letzten 12 Monate inkl. des laufenden
+    schluessel = []
+    j, m = heute.year, heute.month
+    for _ in range(12):
+        schluessel.append(f"{j:04d}-{m:02d}")
+        j, m = (j, m - 1) if m > 1 else (j - 1, 12)
+    schluessel.reverse()
+    monate = {k: {"umsatz": 0, "anzahl": 0} for k in schluessel}
+    loesungen, kunden = {}, {}
+    namen = option_namen()
+    for b in buchungen:
+        k = (b.get("am") or "")[:7]
+        if k not in monate:
+            continue
+        monate[k]["umsatz"] += b["betrag"]
+        monate[k]["anzahl"] += 1
+        name = namen[b["option"]] if b.get("option") else "Sonstiges"
+        loesungen.setdefault(name, {"umsatz": 0, "anzahl": 0})
+        loesungen[name]["umsatz"] += b["betrag"]
+        loesungen[name]["anzahl"] += 1
+        konto = b.get("konto") or ""
+        anzeige = ("gelöschtes Konto" if konto.startswith("gelöscht:") else konto) or "ohne Konto"
+        kunden.setdefault(anzeige, {"umsatz": 0, "anzahl": 0})
+        kunden[anzeige]["umsatz"] += b["betrag"]
+        kunden[anzeige]["anzahl"] += 1
+    liste = [{"schluessel": k, "name": f"{MONATE_KURZ[int(k[5:]) - 1]} {k[2:4]}",
+              "lang": f"{MONATE_KURZ[int(k[5:]) - 1]} {k[:4]}", **v} for k, v in monate.items()]
+    # Achse in glatten Euro-Stufen (hoechstens 4 Linien ueber der Null)
+    hoechst = max(x["umsatz"] for x in liste)
+    stufe = 0
+    for s in (5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000):
+        stufe = s * 100
+        if hoechst <= stufe * 4:
+            break
+    achse_max = -(-hoechst // stufe) * stufe if hoechst else 0
+    linien = [achse_max - i * stufe for i in range(achse_max // stufe)] if achse_max else []
+    jetzt, vor = liste[-1], liste[-2]
+    summe = sum(x["umsatz"] for x in liste)
+    anzahl = sum(x["anzahl"] for x in liste)
+    monat_jetzt = heute.strftime("%Y-%m")
+    konten = lade_kunden()
+    return {
+        "monate": liste, "achse_max": achse_max, "linien": linien,
+        "monat": jetzt, "vormonat": vor,
+        "veraenderung": round((jetzt["umsatz"] - vor["umsatz"]) * 100 / vor["umsatz"]) if vor["umsatz"] else None,
+        "summe": summe, "anzahl": anzahl, "schnitt": summe // anzahl if anzahl else 0,
+        "kunden_gesamt": len(konten), "kunden_neu": sum((k.get("seit") or "").startswith(monat_jetzt) for k in konten.values()),
+        "loesungen": sorted(loesungen.items(), key=lambda x: -x[1]["umsatz"])[:8],
+        "kunden": sorted(kunden.items(), key=lambda x: -x[1]["umsatz"])[:10],
+    }
+
+
+@app.route("/admin/umsatz")
+@admin_noetig
+def admin_umsatz():
+    return render_template("umsatz.html", u=umsatz_auswertung(), euro=euro, zahlung=zahlung_aktiv())
 
 
 @app.route("/admin/suche")
@@ -3795,6 +3899,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht','auftrag_suche') }}><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg>Tickets{% if tickets_offen %}<i>{{ tickets_offen }}</i>{% endif %}</a>
 <a href="{{ url_for('admin_kunden') }}"{{ ' class=an' if ep == 'admin_kunden' }}><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3c1.8.8 3 2.8 3 5.7"/></svg>Kunden</a>
+<a href="{{ url_for('admin_umsatz') }}"{{ ' class=an' if ep == 'admin_umsatz' }}><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Umsatz</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archiv</a>
 <a href="{{ url_for('admin_archiv') }}#preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<i>{{ zu_sortieren }}</i></a>{% endif %}
@@ -3807,6 +3912,7 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
 <a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}>Tickets{% if tickets_offen %} ({{ tickets_offen }}){% endif %}</a>
 <a href="{{ url_for('admin_kunden') }}"{{ ' class=an' if ep == 'admin_kunden' }}>Kunden</a>
+<a href="{{ url_for('admin_umsatz') }}"{{ ' class=an' if ep == 'admin_umsatz' }}>Umsatz</a>
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
 <a href="{{ url_for('admin_archiv') }}#preise">Preise</a>
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
@@ -4467,6 +4573,77 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
  document.querySelectorAll('[data-dl-text]').forEach(function(t){t.textContent=t.textContent.replace('herunterladen','für Mac herunterladen')});})();
 </script>
 </body></html>""",
+"umsatz.html": """{% extends "basis.html" %}{% block inhalt %}
+{% macro eur(c) %}{{ '{:,}'.format(c // 100).replace(',', '.') }} €{% endmacro %}
+<style>
+.u-kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:6px}
+.u-kachel{padding:16px 18px;border-radius:12px;background:var(--glas2,rgba(255,255,255,.04));border:1px solid var(--rand)}
+.u-kachel span{display:block;font-size:13px;color:var(--leise)}
+.u-kachel b{display:block;font-size:26px;letter-spacing:-.02em;margin:4px 0 2px;white-space:nowrap}
+.u-kachel small{font-size:12.5px;color:var(--leise)}
+.u-diagramm{position:relative;height:240px;margin:18px 0 8px 56px}
+.u-linie{position:absolute;left:0;right:0;border-top:1px solid var(--rand)}
+.u-linie span{position:absolute;right:calc(100% + 8px);top:-9px;font-size:12px;color:var(--leise);white-space:nowrap}
+.u-spalten{position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,1fr)}
+.u-spalte{position:relative;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:default;outline:none}
+.u-balken{width:min(24px,60%);border-radius:4px 4px 0 0;background:var(--blau,#2f7bff);min-height:0;transition:filter .15s}
+.u-spalte:hover .u-balken,.u-spalte:focus .u-balken{filter:brightness(1.3)}
+.u-monat{position:absolute;top:calc(100% + 8px);font-size:12px;color:var(--leise);white-space:nowrap}
+.u-wert{font-size:12.5px;font-weight:700;margin-bottom:4px;white-space:nowrap}
+.u-tip{position:absolute;bottom:calc(var(--h) + 10px);left:50%;transform:translateX(-50%);z-index:2;padding:8px 11px;border-radius:9px;
+  background:#0b0d12;border:1px solid var(--rand2,#3a4150);font-size:12.5px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.u-tip b{display:block;font-size:14px}
+.u-spalte:hover .u-tip,.u-spalte:focus .u-tip{opacity:1}
+.u-unten{height:30px}
+.u-zwei{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px}
+.u-zeile{display:grid;grid-template-columns:minmax(90px,38%) 1fr;gap:12px;align-items:center;margin:10px 0}
+.u-zeile .u-name{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.u-band{display:flex;align-items:center;gap:8px;min-width:0}
+.u-band i{height:14px;border-radius:0 4px 4px 0;background:var(--blau,#2f7bff);flex:none}
+.u-band span{font-size:13px;color:var(--leise);white-space:nowrap}
+details.u-tabelle{margin-top:14px}details.u-tabelle summary{cursor:pointer;color:var(--leise);font-size:13.5px}
+@media(max-width:600px){.u-monat{font-size:10.5px;transform:rotate(-40deg);transform-origin:top center;top:calc(100% + 12px)}.u-diagramm{margin-left:44px}}
+</style>
+<div class="karte"><h1>Umsatz</h1>
+<p class="leise" style="margin-top:-8px">Bezahlte Files über Stripe in den letzten 12 Monaten. Die Zahlen bleiben erhalten, auch wenn alte Aufträge automatisch gelöscht werden.</p>
+{% if not zahlung and not u.summe %}<div class="hinweis">Bezahlen ist noch aus – sobald Stripe eingerichtet ist und Kunden bezahlen, erscheint hier der Umsatz.</div>{% endif %}
+<div class="u-kacheln">
+<div class="u-kachel"><span>Dieser Monat</span><b>{{ euro(u.monat.umsatz) }}</b>
+<small>{% if u.veraenderung is not none %}{{ '▲' if u.veraenderung >= 0 else '▼' }} {{ u.veraenderung|abs }} % ggü. {{ u.vormonat.lang }}{% else %}{{ u.monat.anzahl }} File(s){% endif %}</small></div>
+<div class="u-kachel"><span>Letzte 12 Monate</span><b>{{ euro(u.summe) }}</b><small>{{ u.anzahl }} bezahlte File(s)</small></div>
+<div class="u-kachel"><span>Ø pro File</span><b>{{ euro(u.schnitt) if u.anzahl else '–' }}</b><small>über 12 Monate</small></div>
+<div class="u-kachel"><span>Kunden</span><b>{{ u.kunden_gesamt }}</b><small>{{ u.kunden_neu }} neu in diesem Monat</small></div>
+</div></div>
+
+<div class="karte"><h2>Umsatz pro Monat</h2>
+{% if u.summe %}
+<div class="u-diagramm" role="img" aria-label="Umsatz pro Monat, letzte 12 Monate. Werte in der Tabelle darunter.">
+{% for l in u.linien %}<div class="u-linie" style="top:{{ 100 - l * 100 / u.achse_max }}%"><span>{{ eur(l) }}</span></div>{% endfor %}
+<div class="u-linie" style="top:100%"><span>0 €</span></div>
+<div class="u-spalten">{% for m in u.monate %}{% set h = (m.umsatz * 100 / u.achse_max) if u.achse_max else 0 %}
+<div class="u-spalte" tabindex="0" style="--h:{{ h }}%">{% if loop.last and m.umsatz %}<span class="u-wert">{{ eur(m.umsatz) }}</span>{% endif %}
+<div class="u-balken" style="height:{{ h }}%"></div>
+<div class="u-tip"><b>{{ euro(m.umsatz) }}</b>{{ m.lang }} · {{ m.anzahl }} File(s)</div>
+<span class="u-monat">{{ m.name }}</span></div>{% endfor %}</div>
+</div><div class="u-unten"></div>
+<details class="u-tabelle"><summary>Als Tabelle anzeigen</summary><table><tr><th>Monat</th><th>Umsatz</th><th>Files</th></tr>
+{% for m in u.monate|reverse %}<tr><td>{{ m.lang }}</td><td>{{ euro(m.umsatz) }}</td><td>{{ m.anzahl }}</td></tr>{% endfor %}</table></details>
+{% else %}<p class="leise">Noch keine Zahlungen in den letzten 12 Monaten.</p>{% endif %}
+</div>
+
+<div class="u-zwei">
+<div class="karte"><h2>Meistverkaufte Lösungen</h2>
+{% if u.loesungen %}{% set top = u.loesungen[0][1].umsatz or 1 %}
+{% for name, w in u.loesungen %}<div class="u-zeile"><span class="u-name" title="{{ name }}">{{ name }}</span>
+<div class="u-band"><i style="width:calc((100% - 120px) * {{ w.umsatz / top }})"></i><span>{{ euro(w.umsatz) }} · {{ w.anzahl }}×</span></div></div>{% endfor %}
+{% else %}<p class="leise">Noch keine Verkäufe.</p>{% endif %}</div>
+<div class="karte"><h2>Beste Kunden</h2>
+{% if u.kunden %}<div class="tabelle"><table><tr><th>Kunde</th><th>Files</th><th>Umsatz</th></tr>
+{% for name, w in u.kunden %}<tr><td>{% if '@' in name %}<a href="mailto:{{ name }}">{{ name }}</a>{% else %}<span class="leise">{{ name }}</span>{% endif %}</td><td>{{ w.anzahl }}</td><td><b>{{ euro(w.umsatz) }}</b></td></tr>{% endfor %}</table></div>
+{% else %}<p class="leise">Noch keine Verkäufe.</p>{% endif %}</div>
+</div>
+{% endblock %}""",
+
 "kunden.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Kunden</h1>
 <p class="leise" style="margin-top:-8px">Konten aus dem Programm. Kunden registrieren sich selbst mit E-Mail-Adresse und Passwort;

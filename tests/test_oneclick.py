@@ -64,6 +64,7 @@ class Basis(unittest.TestCase):
         A.TICKETS = d / "tickets"
         A.INSTALLATIONEN = d / "installationen.json"
         A.DOWNLOADS = d / "downloads.json"
+        A.UMSATZ_DATEI = d / "umsatz.json"
         A.speichere_config({"archiv_sofort": False})   # alte Tests pruefen den Ablauf mit Freigabe; Sofort-Kauf siehe test_sofort_kauf_*
         A.SICHERUNGEN = d / "sicherungen"
         A.neuaufbau.update(laeuft=False, text="")
@@ -756,6 +757,32 @@ class WebTests(Basis):
         alt = self.auftrag(aid3); alt["konto"] = ""; A.speichere_auftrag(alt)
         vorher = len(mails); A.entscheide(aid3, True, wer="test")
         self.assertEqual(len(mails), vorher)
+
+    def test_umsatz(self):
+        from datetime import datetime as dt
+        A.json_speichern(A.UMSATZ_DATEI, [
+            {"id": "a1", "am": "2026-11-03T10:00:00", "betrag": 14900, "option": "stage1", "konto": "kunde@example.com"},
+            {"id": "a2", "am": "2026-11-10T10:00:00", "betrag": 3900, "option": "startstopp", "konto": "kunde@example.com"},
+            {"id": "a3", "am": "2026-10-01T10:00:00", "betrag": 14900, "option": "stage1", "konto": "gelöscht:x@example.com"},
+            {"id": "a4", "am": "2025-10-01T10:00:00", "betrag": 99900, "option": "stage1", "konto": ""},   # aelter als 12 Monate
+        ])
+        u = A.umsatz_auswertung(dt(2026, 11, 17))
+        self.assertEqual([m["schluessel"] for m in u["monate"]][-2:], ["2026-10", "2026-11"])
+        self.assertEqual(len(u["monate"]), 12)
+        self.assertEqual((u["monat"]["umsatz"], u["vormonat"]["umsatz"], u["summe"], u["anzahl"]), (18800, 14900, 33700, 3))
+        self.assertEqual(u["veraenderung"], 26)
+        self.assertEqual(u["loesungen"][0][0], "Stage 1")
+        self.assertEqual(dict(u["kunden"])["gelöschtes Konto"]["umsatz"], 14900)
+        self.assertGreaterEqual(u["achse_max"], 18800)
+        # bezahlter Auftrag, der noch nicht im Umsatzbuch steht, wird nachgetragen
+        aid = self.hochladen(self.golf)
+        self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        a = self.auftrag(aid); a.update(bezahlt=True, bezahlt_am=dt.now().isoformat(timespec="seconds"), betrag=12345); A.speichere_auftrag(a)
+        self.assertIn(aid, [b["id"] for b in A.umsatz_buchungen()])
+        self.assertEqual(len([b for b in A.umsatz_buchungen() if b["id"] == aid]), 1)   # nicht doppelt
+        seite = self.admin().get("/admin/umsatz").text
+        self.assertIn("Umsatz pro Monat", seite)
+        self.assertIn("Meistverkaufte Lösungen", seite)
 
     def test_mail_einstellungen(self):
         a = self.admin()
