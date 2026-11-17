@@ -1194,14 +1194,14 @@ button.hilfe svg{width:15px;height:15px}
   <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.</p>
   <div class="kd-reiter" role="tablist"><button type="button" data-kd="anmelden" class="an" role="tab">Anmelden</button><button type="button" data-kd="registrieren" role="tab">Registrieren</button></div>
   <form id="kd-form" autocomplete="on">
-    <label class="nx-label" for="kd-name">Benutzername</label>
-    <input class="feld" id="kd-name" autocomplete="username" maxlength="30" spellcheck="false" autocapitalize="off">
+    <label class="nx-label" for="kd-name">E-Mail-Adresse</label>
+    <input class="feld" id="kd-name" type="email" autocomplete="email" maxlength="254" spellcheck="false" autocapitalize="off" placeholder="name@beispiel.de">
     <label class="nx-label" for="kd-pw">Passwort</label>
     <input class="feld" id="kd-pw" type="password" autocomplete="current-password" maxlength="200">
     <div id="kd-reg" hidden>
       <label class="nx-label" for="kd-pw2">Passwort wiederholen</label>
       <input class="feld" id="kd-pw2" type="password" autocomplete="new-password" maxlength="200">
-      <p class="leise kd-tipp">Benutzername: 3–30 Zeichen (Buchstaben, Zahlen, . _ -). Passwort: mindestens 8 Zeichen.</p>
+      <p class="leise kd-tipp">Passwort: mindestens 8 Zeichen.</p>
       <label class="kd-check"><input type="checkbox" id="kd-ok"><span>Ich habe die <a href="/datenschutz" target="_blank">Datenschutzerklärung</a> gelesen.</span></label>
     </div>
     <p class="kd-fehler" id="kd-fehler" role="alert"></p>
@@ -2670,7 +2670,7 @@ async function kontoAbgleich() {
 function kontoAnzeigen() {
   const k = konto.lesen();
   $("#nx-konto").hidden = !k;
-  if (k) $("#nx-konto-name").textContent = k.name;
+  if (k) { $("#nx-konto-name").textContent = k.name; $("#nx-konto-name").title = k.name; }
 }
 function kontoNoetig() {
   if (kontoOffen) return;
@@ -2692,19 +2692,20 @@ $("#kd-form").addEventListener("submit", async e => {
   e.preventDefault();
   const reg = kdModus === "registrieren", name = $("#kd-name").value.trim(), pw = $("#kd-pw").value;
   const fehler = t => { $("#kd-fehler").textContent = t; };
-  if (!name || !pw) return fehler("Bitte Benutzername und Passwort eingeben.");
+  if (!name || !pw) return fehler("Bitte E-Mail-Adresse und Passwort eingeben.");
+  if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(name)) return fehler("Bitte eine gültige E-Mail-Adresse eingeben.");
   if (reg && pw !== $("#kd-pw2").value) return fehler("Die beiden Passwörter sind nicht gleich.");
   if (reg && !$("#kd-ok").checked) return fehler("Bitte bestätige, dass du die Datenschutzerklärung gelesen hast.");
   fehler("");
   const knopf = $("#kd-los"); knopf.disabled = true; knopf.textContent = reg ? "Konto wird erstellt …" : "Anmelden …";
   try {
-    const {daten} = await server("/api/konto/" + (reg ? "registrieren" : "anmelden"), json("POST", {name, passwort: pw}));
+    const {daten} = await server("/api/konto/" + (reg ? "registrieren" : "anmelden"), json("POST", {email: name, passwort: pw}));
     konto.setzen({name: daten.name, schluessel: daten.schluessel});
     kontoOffen = false; $("#konto-dialog").classList.remove("offen");
     $("#kd-pw").value = ""; $("#kd-pw2").value = "";
     const d = await rufe("start"); if (d.fehler) d.verbindung = d.fehler;
     starten(d); kontoAnzeigen(); ticketsLaden(false); kopfAktualisieren();
-    toast("ok", reg ? "Konto erstellt" : "Angemeldet", "Willkommen, " + daten.name + "!", 5000);
+    toast("ok", reg ? "Konto erstellt" : "Angemeldet", "Du bist angemeldet als " + daten.name + ".", 5000);
     setTimeout(installationMelden, 3000);
   } catch (err) { fehler(err.message); }
   finally { knopf.disabled = false; knopf.textContent = reg ? "Konto erstellen" : "Anmelden"; }

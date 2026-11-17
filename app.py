@@ -695,7 +695,7 @@ WERBE_FAQ = [
     ("Wie lange dauert es, bis ich mein File habe?", "Liegt dein File schon in unserem Archiv, lädst du es direkt nach der Zahlung herunter – rund um die Uhr. "
      "Bei einer Anfrage erstellen wir das File individuell, das Programm meldet sich, sobald es fertig ist."),
     ("Wie bezahle ich?", "Sicher über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
-    ("Brauche ich ein Konto?", "Ja, einmal kurz im Programm registrieren – nur Benutzername und Passwort, keine E-Mail. "
+    ("Brauche ich ein Konto?", "Ja, einmal kurz im Programm registrieren – mit E-Mail-Adresse und Passwort. "
      "Das Programm merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auch auf einem anderen PC wieder."),
     ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
      "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
@@ -1165,12 +1165,19 @@ def stripe_webhook():
 
 
 # ---------------------------------------------------------------------------
-# Kundenkonten: Kunden registrieren sich einmal im Programm (Benutzername + Passwort).
+# Kundenkonten: Kunden registrieren sich einmal im Programm (E-Mail-Adresse + Passwort).
 # Danach merkt sich das Programm einen zufaelligen Schluessel (auf dem Server nur als Hash) und
 # schickt ihn bei jeder Anfrage im Kopf "X-Konto" mit. Auftraege und Tickets haengen am Konto.
+# Schluessel in kunden.json ist die E-Mail-Adresse in Kleinbuchstaben.
 # ---------------------------------------------------------------------------
 konto_sperre = threading.Lock()
-KONTO_NAME = re.compile(r"[A-Za-z0-9ÄÖÜäöüß._-]{3,30}")
+KONTO_EMAIL = re.compile(r"[^@\s\"'<>(),;:\\]{1,64}@[A-Za-z0-9ÄÖÜäöüß.-]{1,180}\.[A-Za-z]{2,24}")
+
+
+def email_kurz(email: str) -> str:
+    """Fuer Telegram (ausserhalb der EU): nur gekuerzt, z. B. ma***@gmail.com."""
+    lokal, _, domain = email.partition("@")
+    return f"{lokal[:2]}***@{domain}"
 KONTO_DUMMY_HASH = generate_password_hash("dummy-passwort-nur-fuer-gleiche-laufzeit")
 
 
@@ -1259,24 +1266,25 @@ def eigenes_ticket(tid: str):
     return t
 
 
-def konto_melden(name: str):
+def konto_melden(email: str):
     chat = lade_config().get("telegram_chat_id")
     if chat:
-        telegram_api("sendMessage", {"chat_id": chat, "text": f"👤 <b>Neuer Kunde registriert:</b> {html.escape(name)}",
+        telegram_api("sendMessage", {"chat_id": chat, "text": f"👤 <b>Neuer Kunde registriert:</b> {html.escape(email_kurz(email))}",
                                      "parse_mode": "HTML"})
 
 
 def konto_eingabe() -> tuple[str, str]:
+    """(E-Mail in Kleinbuchstaben, Passwort)."""
     daten = request.get_json(silent=True)
     daten = daten if isinstance(daten, dict) else {}
-    return str(daten.get("name") or "").strip(), str(daten.get("passwort") or "")
+    return str(daten.get("email") or daten.get("name") or "").strip().lower()[:254], str(daten.get("passwort") or "")
 
 
 @app.route("/api/konto/registrieren", methods=["POST"])
 def api_konto_registrieren():
     name, pw = konto_eingabe()
-    if not KONTO_NAME.fullmatch(name):
-        return jsonify(fehler="Der Benutzername muss 3–30 Zeichen lang sein (Buchstaben, Zahlen, Punkt, Strich, Unterstrich)."), 422
+    if not KONTO_EMAIL.fullmatch(name):
+        return jsonify(fehler="Bitte eine gültige E-Mail-Adresse eingeben."), 422
     if not 8 <= len(pw) <= 200:
         return jsonify(fehler="Das Passwort muss mindestens 8 Zeichen haben."), 422
     if zu_viele("registrieren", 5, 3600):
@@ -1284,7 +1292,7 @@ def api_konto_registrieren():
     with konto_sperre:
         alle = lade_kunden()
         if name.casefold() in alle:
-            return jsonify(fehler="Diesen Benutzernamen gibt es schon. Bitte einen anderen wählen oder anmelden."), 409
+            return jsonify(fehler="Mit dieser E-Mail-Adresse gibt es schon ein Konto. Bitte melde dich an."), 409
         heute = datetime.now().strftime("%Y-%m-%d")
         k = {"name": name, "pw": generate_password_hash(pw), "seit": datetime.now().isoformat(timespec="seconds"),
              "zuletzt": heute}
@@ -1306,9 +1314,9 @@ def api_konto_anmelden():
         k = alle.get(name.casefold())
         if not (k and check_password_hash(k["pw"], pw)):
             if not k:
-                check_password_hash(KONTO_DUMMY_HASH, pw)   # gleiche Laufzeit: verraet nicht, ob es den Namen gibt
+                check_password_hash(KONTO_DUMMY_HASH, pw)   # gleiche Laufzeit: verraet nicht, ob es die Adresse gibt
             merken("konto_login")
-            return jsonify(fehler="Benutzername oder Passwort falsch."), 401
+            return jsonify(fehler="E-Mail-Adresse oder Passwort falsch."), 401
         if k.get("gesperrt"):
             return jsonify(fehler="Dieses Konto ist gesperrt. Bitte melde dich beim Support."), 403
         token = konto_schluessel_neu(k)
@@ -4251,14 +4259,14 @@ if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.queryS
 </body></html>""",
 "kunden.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Kunden</h1>
-<p class="leise" style="margin-top:-8px">Konten aus dem Programm. Kunden registrieren sich selbst mit Benutzername und Passwort;
+<p class="leise" style="margin-top:-8px">Konten aus dem Programm. Kunden registrieren sich selbst mit E-Mail-Adresse und Passwort;
 Aufträge, Anfragen und Tickets hängen am Konto. Passwörter siehst du nie – du kannst sie nur neu vergeben.</p>
 {% if neues_passwort %}<div class="hinweis" style="border-color:#2fd35a"><b>Neues Passwort für „{{ neues_passwort.name }}“:</b>
 <code style="font-size:18px;user-select:all;margin-left:6px">{{ neues_passwort.pw }}</code><br>
 Gib es dem Kunden (z. B. per WhatsApp). Es wird nur jetzt angezeigt. Er ist auf allen Geräten abgemeldet und meldet sich damit neu an.</div>{% endif %}
 {% if kunden %}<p><b>{{ kunden|length }}</b> Konto/Konten · <input type="search" id="kunden-suche" placeholder="Kunde suchen …" style="max-width:260px;margin:0 0 0 10px;display:inline-block"></p>
-<div class="tabelle"><table id="kunden-tabelle"><tr><th>Benutzername</th><th>Registriert</th><th>Zuletzt aktiv</th><th>Aufträge</th><th>Bezahlt</th><th>Status</th><th>Aktionen</th></tr>
-{% for k in kunden %}<tr id="k-{{ k.schluessel }}" data-name="{{ k.name|lower }}"><td><b>{{ k.name }}</b></td>
+<div class="tabelle"><table id="kunden-tabelle"><tr><th>E-Mail-Adresse</th><th>Registriert</th><th>Zuletzt aktiv</th><th>Aufträge</th><th>Bezahlt</th><th>Status</th><th>Aktionen</th></tr>
+{% for k in kunden %}<tr id="k-{{ k.schluessel }}" data-name="{{ k.name|lower }}"><td><b><a href="mailto:{{ k.name }}">{{ k.name }}</a></b></td>
 <td>{{ k.seit[8:10] }}.{{ k.seit[5:7] }}.{{ k.seit[:4] }}</td>
 <td>{% if k.zuletzt %}{{ k.zuletzt[8:10] }}.{{ k.zuletzt[5:7] }}.{{ k.zuletzt[:4] }}{% else %}–{% endif %}</td>
 <td>{{ k.auftraege }}</td><td>{{ euro(k.umsatz) if k.umsatz else '–' }}</td>
