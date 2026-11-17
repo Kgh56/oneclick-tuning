@@ -24,7 +24,7 @@ jobs:
           /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 -m venv venv
 
       - name: Pakete installieren
-        run: venv/bin/pip install pyinstaller==6.11.1 "pywebview>=5.4,<6"
+        run: venv/bin/pip install pyinstaller==6.11.1 "pywebview>=5.4,<6" certifi
 
       - name: Versionsnummer festlegen (fortlaufend)
         run: echo "${{ github.run_number }}" > admin_app/version.txt
@@ -57,6 +57,7 @@ jobs:
           grep -q '"ui": true' selbsttest.json
           grep -q '"api": true' selbsttest.json
           grep -q '"kennung": true' selbsttest.json
+          grep -q '"https": true' selbsttest.json
 
       - name: ZIP erzeugen und bereitstellen
         env:

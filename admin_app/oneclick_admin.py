@@ -12,6 +12,7 @@ Bauen macht GitHub automatisch: .github/workflows/mac-admin.yml
 
 import json
 import os
+import ssl
 import subprocess
 import sys
 import time
@@ -79,13 +80,28 @@ background:linear-gradient(180deg,#3d86ff,#1d5fe6)}</style></head><body><div cla
 <button onclick="pywebview.api.neu_laden()">Erneut versuchen</button></div></body></html>"""
 
 
-def server_erreichbar() -> bool:
+def ssl_kontext() -> ssl.SSLContext:
+    """Das gebuendelte Python kennt die Zertifikate von macOS nicht - darum die Liste von certifi.
+    (Ohne sie scheiterte die Pruefung beim Start immer und es kam "Keine Verbindung".)"""
     try:
-        req = urllib.request.Request(SERVER + "/login", headers={"User-Agent": USER_AGENT})
-        urllib.request.urlopen(req, timeout=8).read(1)
-        return True
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
     except Exception:
-        return False
+        return ssl.create_default_context()
+
+
+def server_erreichbar(versuche: int = 3) -> bool:
+    """Beim Start: ein paar Versuche, falls das Netz z. B. nach dem Aufwachen noch kurz braucht."""
+    kontext = ssl_kontext()
+    for i in range(versuche):
+        try:
+            req = urllib.request.Request(SERVER + "/login", headers={"User-Agent": USER_AGENT})
+            urllib.request.urlopen(req, timeout=8, context=kontext).read(1)
+            return True
+        except Exception:
+            if i < versuche - 1:
+                time.sleep(1.5)
+    return False
 
 
 def selbsttest(fenster, ergebnis_datei: str):
@@ -104,6 +120,7 @@ def selbsttest(fenster, ergebnis_datei: str):
             time.sleep(1)
         erg["kennung"] = "OneClickAdmin/" in str(fenster.evaluate_js("navigator.userAgent"))
         erg["version"] = VERSION
+        erg["https"] = server_erreichbar(2)   # Server-Check mit Zertifikatspruefung (sonst "Keine Verbindung")
     finally:
         Path(ergebnis_datei).write_text(json.dumps(erg))
         fenster.destroy()

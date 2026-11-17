@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
 
       - name: Pakete installieren
-        run: pip install pyinstaller==6.11.1 "pywebview>=5.4,<6"
+        run: pip install pyinstaller==6.11.1 "pywebview>=5.4,<6" certifi
 
       - name: Versionsnummer festlegen (fortlaufend)
         shell: bash
@@ -47,6 +47,7 @@ jobs:
           grep -q '"api": true' selbsttest.json
           grep -q '"speichern": true' selbsttest.json
           grep -q '"kennung": true' selbsttest.json
+          grep -q '"https": true' selbsttest.json
           grep -q '"update": true' selbsttest.json
 
       - name: Versionsdatei für das Auto-Update erzeugen

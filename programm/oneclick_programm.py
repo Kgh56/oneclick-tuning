@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import threading
@@ -74,9 +75,26 @@ def datenordner() -> Path:
     return ordner
 
 
+def ssl_kontext() -> ssl.SSLContext:
+    """HTTPS-Pruefung fuer Python-Abrufe (Server-Check, Updates, Downloads). Das gebuendelte Python
+    auf dem Mac kennt die Zertifikate von macOS nicht - darum die mitgelieferte Liste von certifi."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+SSL = ssl_kontext()
+
+
+def oeffnen(req, timeout: int):
+    return urllib.request.urlopen(req, timeout=timeout, context=SSL)
+
+
 def holen(url: str, timeout: int = 30) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with oeffnen(req, timeout) as r:
         return r.read()
 
 
@@ -285,7 +303,7 @@ class Bruecke:
         import webview
         try:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with oeffnen(req, 120) as r:
                 daten, name = r.read(), dateiname_aus(r.headers.get("Content-Disposition", ""))
         except urllib.error.HTTPError as e:
             try:
@@ -314,12 +332,16 @@ background:linear-gradient(180deg,#3b86ff,#1f5fe0)}</style></head><body><div cla
 <button onclick="pywebview.api.neu_laden()">Erneut versuchen</button></div></body></html>"""
 
 
-def server_erreichbar() -> bool:
-    try:
-        holen(SERVER + "/api/info", 8)
-        return True
-    except Exception:
-        return False
+def server_erreichbar(versuche: int = 3) -> bool:
+    """Beim Start: ein paar Versuche, falls das Netz z. B. nach dem Aufwachen noch kurz braucht."""
+    for i in range(versuche):
+        try:
+            holen(SERVER + "/api/info", 8)
+            return True
+        except Exception:
+            if i < versuche - 1:
+                time.sleep(1.5)
+    return False
 
 
 def selbsttest(fenster, ergebnis_datei: str):
@@ -341,6 +363,7 @@ def selbsttest(fenster, ergebnis_datei: str):
         erg["update"] = bool(fenster.evaluate_js("typeof window.pywebview.api.update_pruefen === 'function'"))
         erg["plattform"] = "mac" if MAC else "windows"
         erg["version"] = VERSION
+        erg["https"] = server_erreichbar(2)   # Python-Abruf mit Zertifikatspruefung (Server-Check, Updates)
     finally:
         Path(ergebnis_datei).write_text(json.dumps(erg))
         fenster.destroy()
