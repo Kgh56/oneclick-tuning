@@ -682,6 +682,93 @@ class WebTests(Basis):
             r = json_post(programm(), "/api/konto/anmelden", {"email": "kunde@example.com", "passwort": "falsch!!"})
         self.assertEqual(r.status_code, 429)
 
+    def test_passwort_vergessen(self):
+        mails = []
+        original = A.mail_im_hintergrund
+        self.addCleanup(setattr, A, "mail_im_hintergrund", original)
+        A.mail_im_hintergrund = lambda an, betreff, text: mails.append((an, betreff, text))
+        def post(url, daten):
+            c = A.app.test_client(); c.environ_base.pop("HTTP_X_KONTO", None)
+            return c.post(url, data=json.dumps(daten), content_type="application/json")
+        # ohne eingerichtetes Postfach: klare Meldung
+        self.assertEqual(post("/api/konto/passwort-vergessen", {"email": "kunde@example.com"}).status_code, 503)
+        A.speichere_config({"smtp_host": "smtp.example.com", "smtp_absender": "info@example.com"})
+        # unbekannte Adresse: gleiche Antwort, aber keine Mail
+        self.assertEqual(post("/api/konto/passwort-vergessen", {"email": "gibtsnicht@example.com"}).json, {"ok": True})
+        self.assertEqual(mails, [])
+        # bekannte Adresse: Code per Mail, nur als Hash gespeichert
+        self.assertEqual(post("/api/konto/passwort-vergessen", {"email": "Kunde@Example.com"}).json, {"ok": True})
+        self.assertEqual(len(mails), 1)
+        an, betreff, text = mails[0]
+        code = re.search(r"Dein Code: (\d{6})", text).group(1)
+        self.assertEqual(an, "kunde@example.com")
+        self.assertNotIn(code, json.dumps(A.lade_kunden()))
+        # sofort nochmal anfordern: keine zweite Mail (hoechstens 1x pro Minute)
+        post("/api/konto/passwort-vergessen", {"email": "kunde@example.com"})
+        self.assertEqual(len(mails), 1)
+        # falscher Code, zu kurzes Passwort
+        self.assertEqual(post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": "000000", "passwort": "neues12345"}).status_code, 400)
+        self.assertEqual(post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": code, "passwort": "kurz"}).status_code, 422)
+        # richtiger Code: neues Passwort, neu angemeldet, alte Geraete abgemeldet, Code verbraucht
+        r = post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": code, "passwort": "neues12345"})
+        self.assertEqual(r.status_code, 200)
+        neu = A.app.test_client(); neu.environ_base["HTTP_X_KONTO"] = r.json["schluessel"]
+        self.assertEqual(neu.get("/api/konto").status_code, 200)
+        self.assertEqual(self.kunde.get("/api/konto").status_code, 401)
+        self.assertEqual(post("/api/konto/anmelden", {"email": "kunde@example.com", "passwort": "neues12345"}).status_code, 200)
+        self.assertEqual(post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": code, "passwort": "nochmal1234"}).status_code, 400)
+        # Raten: nach 5 falschen Codes ist auch der richtige ungueltig
+        A.versuche.clear()
+        post("/api/konto/passwort-vergessen", {"email": "kunde@example.com"})
+        code2 = re.search(r"Dein Code: (\d{6})", mails[-1][2]).group(1)
+        for _ in range(5):
+            post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": "111111" if code2 != "111111" else "222222", "passwort": "egal12345"})
+        self.assertEqual(post("/api/konto/passwort-neu", {"email": "kunde@example.com", "code": code2, "passwort": "egal12345"}).status_code, 400)
+
+    def test_status_mails(self):
+        mails = []
+        original = A.mail_im_hintergrund
+        self.addCleanup(setattr, A, "mail_im_hintergrund", original)
+        A.mail_im_hintergrund = lambda an, betreff, text: mails.append((an, betreff, text))
+        # Freigabe -> "Dein File ist fertig" an die Konto-Adresse, ohne Fahrzeugdaten
+        aid = self.hochladen(self.golf, "golf_ori.bin")
+        self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        A.entscheide(aid, True, wer="test")
+        self.assertEqual(mails[-1][0], "kunde@example.com")
+        self.assertIn("fertig", mails[-1][1])
+        self.assertIn("golf_ori.bin", mails[-1][2])
+        # Ablehnung mit Grund
+        aid2 = self.hochladen(self.bmw, "bmw.bin")
+        self.kunde.post(f"/api/auftrag/{aid2}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        A.entscheide(aid2, False, grund="Software passt nicht")
+        self.assertIn("Software passt nicht", mails[-1][2])
+        # Support-Antwort: Hinweis ohne Nachrichtentext, hoechstens alle 10 Minuten
+        tid = self.kunde.post("/api/ticket", data=json.dumps({"thema": "file", "text": "Hallo Support"}), content_type="application/json").json["id"]
+        a = self.admin(); vorher = len(mails)
+        for text in ["Antwort 1 – geheimer Inhalt", "Antwort 2"]:
+            a.post(f"/admin/ticket/{tid}", data={"csrf": a.csrf, "aktion": "antworten", "text": text})
+        self.assertEqual(len(mails), vorher + 1)
+        self.assertIn("Support", mails[-1][1])
+        self.assertNotIn("geheimer Inhalt", mails[-1][2])
+        # Auftraege ohne Konto (von vor den Konten) bekommen keine Mail
+        aid3 = self.hochladen(self.golf, "alt.bin")
+        self.kunde.post(f"/api/auftrag/{aid3}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")
+        alt = self.auftrag(aid3); alt["konto"] = ""; A.speichere_auftrag(alt)
+        vorher = len(mails); A.entscheide(aid3, True, wer="test")
+        self.assertEqual(len(mails), vorher)
+
+    def test_mail_einstellungen(self):
+        a = self.admin()
+        r = a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "mail", "smtp_host": "smtp.strato.de", "smtp_port": "465",
+                                                  "smtp_absender": "Info@Example.com", "smtp_passwort": "Pw-XyZ-98765"}, follow_redirects=True)
+        self.assertIn("gespeichert", r.text)
+        cfg = A.lade_config()
+        self.assertEqual((cfg["smtp_host"], cfg["smtp_port"], cfg["smtp_absender"], cfg["smtp_benutzer"]), ("smtp.strato.de", 465, "info@example.com", "info@example.com"))
+        self.assertNotIn("Pw-XyZ-98765", a.get("/admin/einstellungen").text)      # Passwort wird nie angezeigt
+        self.assertIn("Den Versand übernimmt STRATO GmbH", html.unescape(self.kunde.get("/datenschutz").text))   # Datenschutz nennt den Dienst
+        a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "mail_aus"})
+        self.assertNotIn("smtp_host", A.lade_config())
+
     def test_admin_kunden(self):
         aid = self.hochladen(self.golf)
         self.kunde.post(f"/api/auftrag/{aid}/bestellen", data=json.dumps({"optionen": ["stage1"]}), content_type="application/json")

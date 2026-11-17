@@ -25,6 +25,8 @@ import os
 import re
 import secrets
 import shutil
+import smtplib
+import ssl
 import struct
 import subprocess
 import sys
@@ -36,6 +38,8 @@ import urllib.request
 import uuid
 import zipfile
 from datetime import datetime, timedelta
+from email.message import EmailMessage
+from email.utils import formataddr, formatdate, make_msgid
 from functools import wraps
 from pathlib import Path, PurePosixPath
 
@@ -191,7 +195,113 @@ def entscheide(aid: str, freigeben: bool, grund: str = "", wer: str = "", preis:
         auftrag["entschieden_von"] = wer
         speichere_auftrag(auftrag)
     telegram_aktualisieren(auftrag)
+    entscheidung_mailen(auftrag)
     return "Freigegeben." if freigeben else "Abgelehnt."
+
+
+def entscheidung_mailen(a: dict):
+    """Kunde per E-Mail informieren, dass sein File fertig ist bzw. abgelehnt wurde (ohne Datei/Fahrzeugdaten)."""
+    if not a.get("konto"):
+        return
+    datei = a.get("datei", "dein File")
+    loesung = f" ({option_namen()[a['option']]})" if a.get("option") else ""
+    if a["status"] == "FREIGEGEBEN":
+        weiter = (f"Du kannst es jetzt im Programm bezahlen ({euro(a['preis'])}) und herunterladen." if zahlung_offen(a)
+                  else "Du kannst es jetzt im Programm herunterladen.")
+        mail_im_hintergrund(a["konto"], f"Dein File ist fertig: {datei}",
+                            f"Hallo,\n\ndein File für „{datei}“{loesung} ist fertig und freigegeben.\n{weiter}\n\n"
+                            f"Öffne dazu {PROGRAMM_NAME} → „Meine Aufträge“.")
+    elif a["status"] == "ABGELEHNT":
+        grund = f"\nGrund: {a['grund']}" if a.get("grund") else ""
+        mail_im_hintergrund(a["konto"], f"Zu deinem Auftrag: {datei}",
+                            f"Hallo,\n\nzu deinem Auftrag „{datei}“{loesung} können wir dir leider kein File anbieten.{grund}\n\n"
+                            f"Bei Fragen öffne in {PROGRAMM_NAME} unter „Support“ ein Ticket – wir helfen gern.")
+
+
+def support_mailen(t: dict, rueckfrage: bool = False):
+    """Hinweis-Mail bei einer Antwort im Support - hoechstens alle 10 Minuten pro Ticket, ohne Nachrichtentext.
+    Setzt t["mail_zuletzt"]; das Ticket speichert der Aufrufer."""
+    if not t.get("konto") or time.time() - t.get("mail_zuletzt", 0) < 600:
+        return
+    t["mail_zuletzt"] = time.time()
+    a = finde_auftrag(t.get("auftrag") or "") if t.get("auftrag") else None
+    zu = f" zu „{a['datei']}“" if a else ""
+    if rueckfrage:
+        mail_im_hintergrund(t["konto"], "Rückfrage zu deinem Auftrag",
+                            f"Hallo,\n\nwir haben eine kurze Rückfrage zu deinem Auftrag{zu}.\n"
+                            f"Bitte öffne {PROGRAMM_NAME} → „Support“ und antworte uns – danach geht es direkt weiter.")
+    else:
+        mail_im_hintergrund(t["konto"], f"Neue Antwort vom Support (Ticket #{t['id'][:6]})",
+                            f"Hallo,\n\nwir haben dir im Support geantwortet (Ticket #{t['id'][:6]}{zu}).\n"
+                            f"Öffne {PROGRAMM_NAME} → „Support“, um die Nachricht zu lesen.")
+
+
+# ---------------------------------------------------------------------------
+# E-Mails an Kunden (SMTP-Postfach, Zugangsdaten nur in Admin -> Einstellungen)
+# ---------------------------------------------------------------------------
+
+def mail_aktiv() -> bool:
+    cfg = lade_config()
+    return bool(cfg.get("smtp_host") and cfg.get("smtp_absender"))
+
+
+def mail_senden(an: str, betreff: str, text: str):
+    """Eine Text-E-Mail verschicken. Wirft RuntimeError mit verstaendlicher Meldung."""
+    cfg = lade_config()
+    if not mail_aktiv():
+        raise RuntimeError("E-Mail-Versand ist nicht eingerichtet.")
+    absender = cfg["smtp_absender"]
+    firma = cfg.get("firmenname") or PROGRAMM_NAME
+    m = EmailMessage()
+    m["Subject"] = betreff
+    m["From"] = formataddr((firma, absender))
+    m["To"] = an
+    m["Date"] = formatdate(localtime=True)
+    m["Message-ID"] = make_msgid(domain=absender.rpartition("@")[2] or None)
+    m.set_content(f"{text}\n\nViele Grüße\n{firma}\n\n—\nDiese E-Mail wurde automatisch verschickt.")
+    port = int(cfg.get("smtp_port") or 587)
+    kontext = ssl.create_default_context()
+    try:
+        if port == 465:
+            verbindung = smtplib.SMTP_SSL(cfg["smtp_host"], port, timeout=20, context=kontext)
+        else:
+            verbindung = smtplib.SMTP(cfg["smtp_host"], port, timeout=20)
+        with verbindung as s:
+            if port != 465:
+                s.starttls(context=kontext)
+            if cfg.get("smtp_benutzer"):
+                s.login(cfg["smtp_benutzer"], cfg.get("smtp_passwort", ""))
+            s.send_message(m)
+    except smtplib.SMTPAuthenticationError:
+        raise RuntimeError("Anmeldung am E-Mail-Postfach fehlgeschlagen – Benutzer/Passwort prüfen "
+                           "(bei Gmail ein App-Passwort verwenden).")
+    except (smtplib.SMTPException, OSError) as e:
+        raise RuntimeError(f"E-Mail konnte nicht gesendet werden: {e}")
+
+
+def mail_im_hintergrund(an: str, betreff: str, text: str):
+    """Verschicken, ohne die Seite aufzuhalten. Fehler landen nur im Server-Protokoll."""
+    if not mail_aktiv() or not KONTO_EMAIL.fullmatch(an or ""):
+        return
+    def los():
+        try:
+            mail_senden(an, betreff, text)
+        except RuntimeError as e:
+            print(f"E-Mail an Kunde: {e}", file=sys.stderr)
+    threading.Thread(target=los, daemon=True).start()
+
+
+def mail_dienst_text() -> str:
+    """Fuer die Datenschutzerklaerung: wer die E-Mails technisch verschickt."""
+    host = (lade_config().get("smtp_host") or "").lower()
+    if "strato" in host:
+        return "STRATO GmbH, Otto-Ostrowski-Straße 7, 10249 Berlin (Auftragsverarbeitung nach Art. 28 DSGVO)"
+    if "gmail" in host or "google" in host:
+        return ("Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland; dabei können Daten in die USA "
+                "übermittelt werden (EU-US Data Privacy Framework)")
+    if "ionos" in host or "1und1" in host:
+        return "IONOS SE, Elgendorfer Straße 57, 56410 Montabaur"
+    return "unseren E-Mail-Anbieter"
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +669,7 @@ def rechtstext(art: str) -> str:
     pfad = RECHTSTEXTE / f"{art}.txt"
     text = pfad.read_text(encoding="utf-8") if pfad.exists() else ""
     tage = int(lade_config().get("aufbewahrung_tage", 90) or 0)
-    return text.replace("{AUFBEWAHRUNG}", f"nach {tage} Tagen" if tage else "nicht")
+    return text.replace("{AUFBEWAHRUNG}", f"nach {tage} Tagen" if tage else "nicht").replace("{MAILDIENST}", mail_dienst_text())
 
 
 def rechtsseite(art: str):
@@ -1325,6 +1435,70 @@ def api_konto_anmelden():
     return jsonify(name=k["name"], schluessel=token)
 
 
+RESET_MINUTEN = 30
+
+
+@app.route("/api/konto/passwort-vergessen", methods=["POST"])
+def api_konto_passwort_vergessen():
+    """Code per E-Mail schicken. Antwortet immer gleich - verraet nicht, ob es die Adresse gibt."""
+    email, _ = konto_eingabe()
+    if not mail_aktiv():
+        return jsonify(fehler="Passwort zurücksetzen per E-Mail ist gerade nicht möglich. Bitte melde dich beim Support."), 503
+    if not KONTO_EMAIL.fullmatch(email):
+        return jsonify(fehler="Bitte eine gültige E-Mail-Adresse eingeben."), 422
+    if zu_viele("pw_vergessen", 5, 3600):
+        return jsonify(fehler="Zu viele Versuche. Bitte später nochmal versuchen."), 429
+    merken("pw_vergessen")
+    code = None
+    with konto_sperre:
+        alle = lade_kunden()
+        k = alle.get(email)
+        jetzt = time.time()
+        if k and not k.get("gesperrt") and jetzt - (k.get("reset") or {}).get("gesendet", 0) > 60:   # hoechstens 1x pro Minute
+            code = f"{secrets.randbelow(1000000):06d}"
+            k["reset"] = {"hash": geraet_hash(email + ":" + code), "bis": jetzt + RESET_MINUTEN * 60, "gesendet": jetzt, "versuche": 0}
+            json_speichern(KUNDEN_DATEI, alle)
+    if code:
+        mail_im_hintergrund(email, "Dein Code zum Zurücksetzen des Passworts",
+                            f"Hallo,\n\njemand – hoffentlich du – möchte das Passwort für dein {PROGRAMM_NAME}-Konto zurücksetzen.\n\n"
+                            f"Dein Code: {code}\n\nGib ihn im Programm ein. Er gilt {RESET_MINUTEN} Minuten.\n"
+                            "Wenn du das nicht warst, ignoriere diese E-Mail einfach – dein Passwort bleibt unverändert.")
+    return jsonify(ok=True)
+
+
+@app.route("/api/konto/passwort-neu", methods=["POST"])
+def api_konto_passwort_neu():
+    """Code aus der E-Mail + neues Passwort. Danach sind alle anderen Geraete abgemeldet."""
+    email, pw = konto_eingabe()
+    daten = request.get_json(silent=True)
+    code = re.sub(r"\D", "", str((daten or {}).get("code") or "") if isinstance(daten, dict) else "")
+    if not 8 <= len(pw) <= 200:
+        return jsonify(fehler="Das neue Passwort muss mindestens 8 Zeichen haben."), 422
+    if zu_viele("pw_code", 10, 3600):
+        return jsonify(fehler="Zu viele Versuche. Bitte später nochmal versuchen."), 429
+    with konto_sperre:
+        alle = lade_kunden()
+        k = alle.get(email)
+        r = (k or {}).get("reset") or {}
+        if not k or not r or time.time() > r.get("bis", 0) or r.get("versuche", 0) >= 5:
+            merken("pw_code")
+            return jsonify(fehler="Der Code ist abgelaufen oder falsch. Bitte einen neuen Code anfordern."), 400
+        if not hmac.compare_digest(r["hash"], geraet_hash(email + ":" + code)):
+            r["versuche"] = r.get("versuche", 0) + 1
+            json_speichern(KUNDEN_DATEI, alle)
+            merken("pw_code")
+            return jsonify(fehler="Der Code stimmt nicht. Bitte nochmal prüfen."), 400
+        if k.get("gesperrt"):
+            return jsonify(fehler="Dieses Konto ist gesperrt. Bitte melde dich beim Support."), 403
+        k["pw"] = generate_password_hash(pw)
+        k["schluessel"] = []   # alle anderen Geraete abmelden
+        k.pop("reset", None)
+        token = konto_schluessel_neu(k)
+        k["zuletzt"] = datetime.now().strftime("%Y-%m-%d")
+        json_speichern(KUNDEN_DATEI, alle)
+    return jsonify(name=k["name"], schluessel=token)
+
+
 @app.route("/api/konto")
 @konto_noetig
 def api_konto():
@@ -1968,6 +2142,7 @@ def admin_ticket(tid):
                         n["datei"] = anhang
                     t["nachrichten"].append(n)
                     t["status"] = "BEANTWORTET"
+                    support_mailen(t)
                     flash("Antwort gesendet – der Kunde sieht sie im Programm." + (f" Datei „{anhang['name']}“ ist angehängt." if anhang else ""))
                 else:
                     flash("Bitte eine Antwort eintippen oder eine Datei anhängen.")
@@ -2011,6 +2186,7 @@ def admin_rueckfrage(aid):
                 n["datei"] = ticket_datei_ablegen(t["id"], *gelesen)
             t["nachrichten"].append(n)
             t["status"] = "BEANTWORTET"
+            support_mailen(t, rueckfrage=True)
             speichere_ticket(t)
         if auftrag.get("ticket") != t["id"]:
             auftrag["ticket"] = t["id"]
@@ -3251,6 +3427,40 @@ def einstellungen():
             cfg.pop("stripe_webhook_secret", None)
             json_speichern(CONFIG_DATEI, cfg)
             flash("Stripe entfernt – Bezahlen ist aus, Downloads sind wieder ohne Zahlung möglich.")
+        elif aktion == "mail":
+            host = request.form.get("smtp_host", "").strip().lower()
+            absender = request.form.get("smtp_absender", "").strip().lower()
+            try:
+                port = int(request.form.get("smtp_port", "") or 587)
+            except ValueError:
+                port = 0
+            if not re.fullmatch(r"[a-z0-9.-]{3,200}", host):
+                flash("Bitte den Postausgangsserver eintragen, z. B. smtp.strato.de.")
+            elif port not in (25, 465, 587, 2525):
+                flash("Port bitte 465 (SSL) oder 587 (STARTTLS).")
+            elif not KONTO_EMAIL.fullmatch(absender):
+                flash("Bitte eine gültige Absender-Adresse eintragen.")
+            else:
+                aenderung = {"smtp_host": host, "smtp_port": port, "smtp_absender": absender,
+                             "smtp_benutzer": request.form.get("smtp_benutzer", "").strip() or absender}
+                if request.form.get("smtp_passwort", ""):
+                    aenderung["smtp_passwort"] = request.form["smtp_passwort"]
+                speichere_config(aenderung)
+                flash("E-Mail-Einstellungen gespeichert. Jetzt „Test-E-Mail senden“ drücken.")
+        elif aktion == "mail_test":
+            an = request.form.get("test_an", "").strip() or lade_config().get("smtp_absender", "")
+            try:
+                mail_senden(an, f"Test von {PROGRAMM_NAME}",
+                            "Hallo,\n\ndas ist eine Test-E-Mail. Der E-Mail-Versand an Kunden funktioniert.")
+                flash(f"Test-E-Mail an {an} gesendet. Bitte auch im Spam-Ordner nachsehen.")
+            except RuntimeError as e:
+                flash(str(e))
+        elif aktion == "mail_aus":
+            cfg = lade_config()
+            for k in ("smtp_host", "smtp_port", "smtp_benutzer", "smtp_passwort", "smtp_absender"):
+                cfg.pop(k, None)
+            json_speichern(CONFIG_DATEI, cfg)
+            flash("E-Mail-Versand ist aus.")
         elif aktion == "chat":
             speichere_config({"telegram_chat_id": request.form.get("chat_id", "")})
             flash("Chat übernommen. Jetzt „Telegram testen“ drücken.")
@@ -4539,6 +4749,34 @@ Ereignisse <code>checkout.session.completed</code> und <code>checkout.session.as
 <button class="btn grau">Stripe entfernen</button></form>{% endif %}
 <div class="hinweis">Die Schlüssel werden nur hier auf deinem Server gespeichert und nicht angezeigt. Bitte nirgendwo sonst weitergeben.
 Ablauf: Kunde bestellt → du gibst frei → Kunde bezahlt bei Stripe → Download wird automatisch freigeschaltet. Stripe schickt dem Kunden eine Rechnung per E-Mail.</div></div>
+
+<div class="karte" id="mail"><h2>E-Mails an Kunden</h2>
+<p class="leise" style="margin-top:-6px">Status: {% if cfg.smtp_host and cfg.smtp_absender %}<span class="status s-FREIGEGEBEN">aktiv</span> – Absender {{ cfg.smtp_absender }}
+{% else %}<span class="status s-ENTWURF">aus</span> – ohne Postfach gibt es kein „Passwort vergessen“ und keine Benachrichtigungen per E-Mail{% endif %}</p>
+<p>Damit verschickt der Server: den <b>Code bei „Passwort vergessen“</b>, die Meldung <b>„Dein File ist fertig“</b> (bzw. abgelehnt)
+und einen Hinweis, wenn du einem Kunden im Support <b>antwortest</b>.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="mail">
+<label class="feld">Postausgangsserver (SMTP)</label>
+<input type="text" name="smtp_host" value="{{ cfg.smtp_host or '' }}" placeholder="smtp.strato.de" autocomplete="off">
+<label class="feld">Port</label>
+<input type="text" name="smtp_port" value="{{ cfg.smtp_port or 465 }}" inputmode="numeric" style="max-width:120px">
+<label class="feld">Absender-Adresse (so sehen Kunden die E-Mail)</label>
+<input type="email" name="smtp_absender" value="{{ cfg.smtp_absender or '' }}" placeholder="z. B. info@deine-domain.de" autocomplete="off">
+<label class="feld">Benutzername am Postfach (meist dieselbe Adresse – leer = Absender-Adresse)</label>
+<input type="text" name="smtp_benutzer" value="{{ cfg.smtp_benutzer or '' }}" autocomplete="off">
+<label class="feld">Passwort des Postfachs</label>
+<input type="password" name="smtp_passwort" autocomplete="new-password" placeholder="{{ 'gespeichert ✓ – leer lassen zum Behalten' if cfg.smtp_passwort else 'Passwort' }}">
+<button class="btn">Speichern</button></form>
+<form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-top:14px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="mail_test">
+<input type="email" name="test_an" placeholder="Test an (leer = an die Absender-Adresse)" style="flex:1;min-width:240px;margin:0">
+<button class="btn gruen">Test-E-Mail senden</button></form>
+{% if cfg.smtp_host %}<form method="post" class="inline" onsubmit="return confirm('E-Mail-Versand ausschalten?')"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="mail_aus">
+<button class="btn grau">E-Mail-Versand ausschalten</button></form>{% endif %}
+<div class="hinweis"><b>Empfohlen: ein E-Mail-Postfach bei STRATO</b> (Server in Deutschland, Vertrag zur Auftragsverarbeitung hast du schon):
+Server <code>smtp.strato.de</code>, Port <code>465</code>, Benutzer = die E-Mail-Adresse, Passwort des Postfachs.<br>
+<b>Gmail geht auch:</b> Server <code>smtp.gmail.com</code>, Port <code>587</code>. Statt deines normalen Passworts brauchst du ein
+<b>App-Passwort</b> (Google-Konto → Sicherheit → Bestätigung in zwei Schritten → App-Passwörter). Dann verarbeitet Google die E-Mails (USA) –
+das steht dann automatisch so in der Datenschutzerklärung.<br>Das Passwort wird nur hier auf deinem Server gespeichert und nie angezeigt.</div></div>
 
 <div class="karte"><h2>Telegram einrichten</h2>
 <ol>

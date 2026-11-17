@@ -1143,7 +1143,12 @@ button.hilfe svg{width:15px;height:15px}
 .kd-check input{flex:none;width:18px;height:18px;margin-top:1px;accent-color:var(--blau)}.kd-check a{color:inherit;text-decoration:underline}
 .kd-fehler{min-height:20px;margin:2px 0 10px;color:#ff6b6b;font-size:13.5px;font-weight:600}
 #kd-los{width:100%}
-.kd-hilfe{font-size:12.5px;margin:16px 0 0;text-align:center}
+#konto-dialog [hidden]{display:none!important}
+.kd-links{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin:14px 0 0}
+.kd-link{border:0;background:none;padding:0;font:inherit;font-size:13px;color:var(--leise);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.kd-link:hover{color:#fff}
+.kd-info{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:rgba(47,123,255,.12);border:1px solid rgba(47,123,255,.35);font-size:13.5px}
+.kd-code{font-size:22px;letter-spacing:.35em;text-align:center;font-variant-numeric:tabular-nums}
 .nx-konto{display:flex;align-items:center;gap:10px;margin-top:auto;margin-bottom:10px;padding:10px 12px;border-radius:12px;background:#151820;border:1px solid var(--nx-rand,var(--rand))}
 .nx-konto .nx-quadrat{width:32px;height:32px;flex:none}
 .nx-konto div{min-width:0;flex:1}.nx-konto small{display:block;font-size:11px;color:var(--leise)}
@@ -1194,20 +1199,23 @@ button.hilfe svg{width:15px;height:15px}
   <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.</p>
   <div class="kd-reiter" role="tablist"><button type="button" data-kd="anmelden" class="an" role="tab">Anmelden</button><button type="button" data-kd="registrieren" role="tab">Registrieren</button></div>
   <form id="kd-form" autocomplete="on">
-    <label class="nx-label" for="kd-name">E-Mail-Adresse</label>
-    <input class="feld" id="kd-name" type="email" autocomplete="email" maxlength="254" spellcheck="false" autocapitalize="off" placeholder="name@beispiel.de">
-    <label class="nx-label" for="kd-pw">Passwort</label>
-    <input class="feld" id="kd-pw" type="password" autocomplete="current-password" maxlength="200">
-    <div id="kd-reg" hidden>
-      <label class="nx-label" for="kd-pw2">Passwort wiederholen</label>
-      <input class="feld" id="kd-pw2" type="password" autocomplete="new-password" maxlength="200">
-      <p class="leise kd-tipp">Passwort: mindestens 8 Zeichen.</p>
-      <label class="kd-check"><input type="checkbox" id="kd-ok"><span>Ich habe die <a href="/datenschutz" target="_blank">Datenschutzerklärung</a> gelesen.</span></label>
-    </div>
+    <p class="kd-info" id="kd-info" hidden></p>
+    <div id="kd-f-email"><label class="nx-label" for="kd-name">E-Mail-Adresse</label>
+    <input class="feld" id="kd-name" type="email" autocomplete="email" maxlength="254" spellcheck="false" autocapitalize="off" placeholder="name@beispiel.de"></div>
+    <div id="kd-f-code" hidden><label class="nx-label" for="kd-code">Code aus der E-Mail</label>
+    <input class="feld kd-code" id="kd-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456"></div>
+    <div id="kd-f-pw"><label class="nx-label" for="kd-pw" id="kd-pw-label">Passwort</label>
+    <input class="feld" id="kd-pw" type="password" autocomplete="current-password" maxlength="200"></div>
+    <div id="kd-f-pw2" hidden><label class="nx-label" for="kd-pw2">Passwort wiederholen</label>
+    <input class="feld" id="kd-pw2" type="password" autocomplete="new-password" maxlength="200">
+    <p class="leise kd-tipp">Passwort: mindestens 8 Zeichen.</p></div>
+    <label class="kd-check" id="kd-f-ok" hidden><input type="checkbox" id="kd-ok"><span>Ich habe die <a href="/datenschutz" target="_blank">Datenschutzerklärung</a> gelesen.</span></label>
     <p class="kd-fehler" id="kd-fehler" role="alert"></p>
     <button class="btn" id="kd-los" type="submit">Anmelden</button>
   </form>
-  <p class="leise kd-hilfe">Passwort vergessen? Schreib uns – wir setzen es zurück.</p>
+  <p class="kd-links"><button type="button" class="kd-link" id="kd-vergessen">Passwort vergessen?</button>
+    <button type="button" class="kd-link" id="kd-zurueck" hidden>← Zurück zur Anmeldung</button>
+    <button type="button" class="kd-link" id="kd-code-da" hidden>Ich habe schon einen Code</button></p>
 </div></div>
 <div id="zahl-dialog"><div class="karte">
   <h2>Jetzt bezahlen</h2>
@@ -1526,7 +1534,7 @@ const konto = {
   setzen(k) { try { localStorage.setItem(KONTO, JSON.stringify(k)); } catch (e) {} },
   weg() { try { localStorage.removeItem(KONTO); } catch (e) {} },
 };
-const OHNE_KONTO = /^\/api\/(info|preise|hallo|konto\/(anmelden|registrieren))\b/;
+const OHNE_KONTO = /^\/api\/(info|preise|hallo|konto\/(anmelden|registrieren|passwort-vergessen|passwort-neu))\b/;
 function formular(felder, datei) {
   const f = new FormData(); Object.entries(felder).forEach(([k, v]) => f.append(k, v || "")); f.append("datei", datei, datei.name);
   return {method: "POST", body: f};
@@ -2678,37 +2686,75 @@ function kontoNoetig() {
   const zeigen = () => { $("#konto-dialog").classList.add("offen"); setTimeout(() => $("#kd-name").focus(), 350); };
   if ($("#intro").classList.contains("weg")) zeigen(); else kontoNachIntro = zeigen;
 }
-function kdUmschalten(m) {
-  kdModus = m; const reg = m === "registrieren";
+/* Ansichten: anmelden | registrieren | vergessen (E-Mail fuer den Code) | code (Code + neues Passwort) */
+const KD_KNOPF = {anmelden: "Anmelden", registrieren: "Konto erstellen", vergessen: "Code senden", code: "Passwort ändern"};
+const KD_LAEUFT = {anmelden: "Anmelden …", registrieren: "Konto wird erstellt …", vergessen: "Code wird gesendet …", code: "Wird gespeichert …"};
+function kdUmschalten(m, info) {
+  kdModus = m;
+  const zeigen = (id, an) => { $(id).hidden = !an; };
   document.querySelectorAll(".kd-reiter button").forEach(b => b.classList.toggle("an", b.dataset.kd === m));
-  $("#kd-reg").hidden = !reg;
-  $("#kd-pw").autocomplete = reg ? "new-password" : "current-password";
-  $("#kd-los").textContent = reg ? "Konto erstellen" : "Anmelden";
+  zeigen(".kd-reiter", m === "anmelden" || m === "registrieren");
+  zeigen("#kd-f-email", m !== "code");
+  zeigen("#kd-f-code", m === "code");
+  zeigen("#kd-f-pw", m !== "vergessen");
+  zeigen("#kd-f-pw2", m === "registrieren" || m === "code");
+  zeigen("#kd-f-ok", m === "registrieren");
+  zeigen("#kd-vergessen", m === "anmelden");
+  zeigen("#kd-zurueck", m === "vergessen" || m === "code");
+  zeigen("#kd-code-da", m === "vergessen");
+  const zuruecksetzen = m === "vergessen" || m === "code";
+  $("#kd-titel").textContent = zuruecksetzen ? "Passwort zurücksetzen" : "Willkommen bei OneClick Solutions";
+  zeigen("#kd-unter", !zuruecksetzen);
+  $("#kd-pw-label").textContent = m === "code" ? "Neues Passwort" : "Passwort";
+  $("#kd-pw").autocomplete = m === "anmelden" ? "current-password" : "new-password";
+  $("#kd-los").textContent = KD_KNOPF[m];
+  $("#kd-info").hidden = !info; $("#kd-info").textContent = info || "";
   $("#kd-fehler").textContent = "";
+  setTimeout(() => (m === "code" ? $("#kd-code") : $("#kd-name")).focus(), 50);
 }
 document.querySelectorAll(".kd-reiter button").forEach(b => b.addEventListener("click", () => kdUmschalten(b.dataset.kd)));
+$("#kd-vergessen").addEventListener("click", () => kdUmschalten("vergessen", "Gib deine E-Mail-Adresse ein – wir schicken dir einen Code, mit dem du ein neues Passwort festlegst."));
+$("#kd-zurueck").addEventListener("click", () => kdUmschalten("anmelden"));
+$("#kd-code-da").addEventListener("click", () => {
+  if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test($("#kd-name").value.trim())) { $("#kd-fehler").textContent = "Bitte zuerst deine E-Mail-Adresse eingeben."; return; }
+  kdUmschalten("code", "Code aus der E-Mail an " + $("#kd-name").value.trim() + " eingeben.");
+});
 { const m = $(".marke .logo"); if (m) $("#kd-marke").appendChild(m.cloneNode(true)); }
+async function kdAngemeldet(daten, titel) {
+  konto.setzen({name: daten.name, schluessel: daten.schluessel});
+  kontoOffen = false; $("#konto-dialog").classList.remove("offen");
+  $("#kd-pw").value = ""; $("#kd-pw2").value = ""; $("#kd-code").value = "";
+  kdUmschalten("anmelden");
+  const d = await rufe("start"); if (d.fehler) d.verbindung = d.fehler;
+  starten(d); kontoAnzeigen(); ticketsLaden(false); kopfAktualisieren();
+  toast("ok", titel, "Du bist angemeldet als " + daten.name + ".", 5000);
+  setTimeout(installationMelden, 3000);
+}
 $("#kd-form").addEventListener("submit", async e => {
   e.preventDefault();
-  const reg = kdModus === "registrieren", name = $("#kd-name").value.trim(), pw = $("#kd-pw").value;
+  const m = kdModus, email = $("#kd-name").value.trim(), pw = $("#kd-pw").value;
   const fehler = t => { $("#kd-fehler").textContent = t; };
-  if (!name || !pw) return fehler("Bitte E-Mail-Adresse und Passwort eingeben.");
-  if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(name)) return fehler("Bitte eine gültige E-Mail-Adresse eingeben.");
-  if (reg && pw !== $("#kd-pw2").value) return fehler("Die beiden Passwörter sind nicht gleich.");
-  if (reg && !$("#kd-ok").checked) return fehler("Bitte bestätige, dass du die Datenschutzerklärung gelesen hast.");
+  const emailOk = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(email);
+  if (m !== "code" && !emailOk) return fehler(email ? "Bitte eine gültige E-Mail-Adresse eingeben." : "Bitte deine E-Mail-Adresse eingeben.");
+  if (m !== "vergessen" && !pw) return fehler(m === "code" ? "Bitte ein neues Passwort eingeben." : "Bitte dein Passwort eingeben.");
+  if ((m === "registrieren" || m === "code") && pw !== $("#kd-pw2").value) return fehler("Die beiden Passwörter sind nicht gleich.");
+  if ((m === "registrieren" || m === "code") && pw.length < 8) return fehler("Das Passwort muss mindestens 8 Zeichen haben.");
+  if (m === "registrieren" && !$("#kd-ok").checked) return fehler("Bitte bestätige, dass du die Datenschutzerklärung gelesen hast.");
+  const code = $("#kd-code").value.replace(/\D/g, "");
+  if (m === "code" && code.length !== 6) return fehler("Bitte den 6-stelligen Code aus der E-Mail eingeben.");
   fehler("");
-  const knopf = $("#kd-los"); knopf.disabled = true; knopf.textContent = reg ? "Konto wird erstellt …" : "Anmelden …";
+  const knopf = $("#kd-los"); knopf.disabled = true; knopf.textContent = KD_LAEUFT[m];
   try {
-    const {daten} = await server("/api/konto/" + (reg ? "registrieren" : "anmelden"), json("POST", {email: name, passwort: pw}));
-    konto.setzen({name: daten.name, schluessel: daten.schluessel});
-    kontoOffen = false; $("#konto-dialog").classList.remove("offen");
-    $("#kd-pw").value = ""; $("#kd-pw2").value = "";
-    const d = await rufe("start"); if (d.fehler) d.verbindung = d.fehler;
-    starten(d); kontoAnzeigen(); ticketsLaden(false); kopfAktualisieren();
-    toast("ok", reg ? "Konto erstellt" : "Angemeldet", "Du bist angemeldet als " + daten.name + ".", 5000);
-    setTimeout(installationMelden, 3000);
+    if (m === "vergessen") {
+      await server("/api/konto/passwort-vergessen", json("POST", {email}));
+      kdUmschalten("code", "Falls es ein Konto mit " + email + " gibt, haben wir dir gerade einen Code geschickt (bitte auch im Spam-Ordner nachsehen).");
+      return;
+    }
+    const pfad = {anmelden: "anmelden", registrieren: "registrieren", code: "passwort-neu"}[m];
+    const {daten} = await server("/api/konto/" + pfad, json("POST", {email, passwort: pw, code}));
+    await kdAngemeldet(daten, {anmelden: "Angemeldet", registrieren: "Konto erstellt", code: "Passwort geändert"}[m]);
   } catch (err) { fehler(err.message); }
-  finally { knopf.disabled = false; knopf.textContent = reg ? "Konto erstellen" : "Anmelden"; }
+  finally { knopf.disabled = false; knopf.textContent = KD_KNOPF[kdModus]; }
 });
 async function abmelden() {
   try { await server("/api/konto/abmelden", {method: "POST"}); } catch (e) {}
