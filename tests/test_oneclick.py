@@ -833,6 +833,10 @@ class WebTests(Basis):
         self.assertIn("kunde@example.com", seite)
         self.assertIn("kunde@example.com", a.get(f"/auftrag/{aid}").text)          # Kunde am Auftrag
         self.assertIn("Kunden", a.get("/admin").text)                      # Menuepunkt
+        # Die Knoepfe der Seite schicken die Konto-ID (nicht die Geraete-Liste des Kontos)
+        werte = re.findall(r'name="konto" value="([^"]*)"', seite)
+        self.assertEqual(werte, ["kunde@example.com"])
+        self.assertNotIn("hash", seite)
         post = lambda aktion: a.post("/admin/kunden", data={"csrf": a.csrf, "konto": "kunde@example.com", "aktion": aktion}, follow_redirects=True)
         # neues Passwort: wird einmal angezeigt, alte Anmeldungen ungueltig
         seite = post("passwort").text

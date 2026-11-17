@@ -593,6 +593,8 @@ def geraet_vergessen():
 def sicherheits_header(antwort):
     if request.path.startswith(("/admin", "/login", "/api/", "/auftrag/", "/download/", "/logout")):
         antwort.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
+    if request.path.startswith(("/admin", "/api/konto")):   # nie eine alte Kundenliste/Anmeldung aus dem Zwischenspeicher zeigen
+        antwort.headers.setdefault("Cache-Control", "no-store")
     antwort.headers.setdefault("X-Content-Type-Options", "nosniff")
     antwort.headers.setdefault("X-Frame-Options", "DENY")
     antwort.headers.setdefault("Referrer-Policy", "same-origin")
@@ -1649,7 +1651,10 @@ def admin_kunden():
             z = zahlen.setdefault(a["konto"], {"auftraege": 0, "umsatz": 0})
             z["auftraege"] += 1
             z["umsatz"] += (a.get("betrag") or a.get("preis") or 0) if a.get("bezahlt") else 0
-    kunden = sorted(({"schluessel": s, **k, **zahlen.get(s, {"auftraege": 0, "umsatz": 0})} for s, k in lade_kunden().items()),
+    # Nur die Anzeige-Felder: k["schluessel"] ist die Geraete-Liste und darf die Konto-ID nicht ueberschreiben
+    kunden = sorted(({"id": s, "name": k.get("name") or s, "seit": k.get("seit", ""), "zuletzt": k.get("zuletzt", ""),
+                      "gesperrt": bool(k.get("gesperrt")), **zahlen.get(s, {"auftraege": 0, "umsatz": 0})}
+                     for s, k in lade_kunden().items()),
                     key=lambda k: k.get("seit", ""), reverse=True)
     return render_template("kunden.html", kunden=kunden, neues_passwort=session.pop("neues_passwort", None), euro=euro)
 
@@ -4733,12 +4738,12 @@ Aufträge, Anfragen und Tickets hängen am Konto. Passwörter siehst du nie – 
 Gib es dem Kunden (z. B. per WhatsApp). Es wird nur jetzt angezeigt. Er ist auf allen Geräten abgemeldet und meldet sich damit neu an.</div>{% endif %}
 {% if kunden %}<p><b>{{ kunden|length }}</b> Konto/Konten · <input type="search" id="kunden-suche" placeholder="Kunde suchen …" style="max-width:260px;margin:0 0 0 10px;display:inline-block"></p>
 <div class="tabelle"><table id="kunden-tabelle"><tr><th>E-Mail-Adresse</th><th>Registriert</th><th>Zuletzt aktiv</th><th>Aufträge</th><th>Bezahlt</th><th>Status</th><th>Aktionen</th></tr>
-{% for k in kunden %}<tr id="k-{{ k.schluessel }}" data-name="{{ k.name|lower }}"><td><b><a href="mailto:{{ k.name }}">{{ k.name }}</a></b></td>
+{% for k in kunden %}<tr id="k-{{ k.id }}" data-name="{{ k.name|lower }}"><td><b><a href="mailto:{{ k.name }}">{{ k.name }}</a></b></td>
 <td>{{ k.seit[8:10] }}.{{ k.seit[5:7] }}.{{ k.seit[:4] }}</td>
 <td>{% if k.zuletzt %}{{ k.zuletzt[8:10] }}.{{ k.zuletzt[5:7] }}.{{ k.zuletzt[:4] }}{% else %}–{% endif %}</td>
 <td>{{ k.auftraege }}</td><td>{{ euro(k.umsatz) if k.umsatz else '–' }}</td>
 <td>{% if k.gesperrt %}<span class="status s-ABGELEHNT">Gesperrt</span>{% else %}<span class="status s-FREIGEGEBEN">Aktiv</span>{% endif %}</td>
-<td><form method="post" class="inline" style="display:inline-flex;gap:6px;flex-wrap:wrap"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="konto" value="{{ k.schluessel }}">
+<td><form method="post" class="inline" style="display:inline-flex;gap:6px;flex-wrap:wrap"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="konto" value="{{ k.id }}">
 <button class="btn klein grau" name="aktion" value="passwort" onclick="return confirm('Neues Passwort für „{{ k.name }}“ erzeugen? Das alte gilt dann nicht mehr.')">Neues Passwort</button>
 {% if k.gesperrt %}<button class="btn klein grau" name="aktion" value="entsperren">Entsperren</button>
 {% else %}<button class="btn klein grau" name="aktion" value="sperren" onclick="return confirm('„{{ k.name }}“ sperren? Der Kunde wird überall abgemeldet.')">Sperren</button>{% endif %}

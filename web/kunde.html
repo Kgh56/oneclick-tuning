@@ -1542,7 +1542,9 @@ const EN = {
   "Keine Verbindung zum Server. Bitte Internetverbindung prüfen.": "No connection to the server. Please check your internet connection.",
   "Keine Verbindung zum Server – bitte Seite neu laden.": "No connection to the server – please reload.",
   "Willkommen bei OneClick Solutions": "Welcome to OneClick Solutions",
-  "Beta": "Beta", "Willkommen – schön, dass du dabei bist": "Welcome – great to have you on board", "Verstanden": "Got it",
+  "Du wurdest abgemeldet. Bitte melde dich erneut an – falls das nicht klappt, wende dich an den Support.":
+    "You have been signed out. Please sign in again – if that doesn’t work, please contact support.",
+  "Beta": "Beta","Willkommen – schön, dass du dabei bist": "Welcome – great to have you on board", "Verstanden": "Got it",
   "Vielen Dank für deine Registrierung. OneClick Solutions befindet sich derzeit in der Beta-Phase.":
     "Thank you for registering. OneClick Solutions is currently in its beta phase.",
   "Unser Archiv wird laufend erweitert. Daher kann es vorkommen, dass für dein Steuergerät oder deinen Softwarestand noch kein fertiges File hinterlegt ist – einzelne Datenstände laden wir erst nach deiner Anfrage hoch.":
@@ -1869,7 +1871,7 @@ async function server(pfad, optionen = {}) {
   catch (e) { throw new Error("Keine Verbindung zum Server. Bitte Internetverbindung prüfen."); }
   let daten = null;
   if ((r.headers.get("Content-Type") || "").includes("json")) { try { daten = await r.json(); } catch (e) {} }
-  if (r.status === 401 && daten && daten.anmelden) { konto.weg(); kontoNoetig(); }   // abgemeldet oder gesperrt
+  if (r.status === 401 && daten && daten.anmelden && k) kontoUngueltig();   // geloescht, gesperrt oder Passwort neu vergeben
   if (!r.ok) {
     const f = new Error((daten && daten.fehler) || {403: "Das File ist noch nicht freigegeben.",
       404: "Auftrag nicht gefunden (vielleicht schon gelöscht).", 413: "Die Datei ist zu groß (max. 16 MB).",
@@ -3000,6 +3002,25 @@ function kontoAnzeigen() {
   $("#nx-konto").hidden = !k;
   if (k) { $("#nx-konto-name").textContent = k.name; $("#nx-konto-name").title = k.name; }
 }
+/* Der Server kennt die Anmeldung nicht mehr (Konto geloescht/gesperrt, neues Passwort): sofort abmelden,
+   Daten des Kontos vom PC nehmen und das Anmeldefenster mit Hinweis zeigen */
+function kontoUngueltig() {
+  if (!konto.lesen()) return;
+  konto.weg(); lokal.schreiben({});
+  kdUmschalten("anmelden", "Du wurdest abgemeldet. Bitte melde dich erneut an – falls das nicht klappt, wende dich an den Support.");
+  kontoNoetig();
+  rufe("start").then(d => { if (d.fehler) d.verbindung = d.fehler; starten(d); ticketsLaden(false); kopfAktualisieren(); }).catch(() => {});
+}
+/* Regelmaessig (und wenn das Fenster wieder nach vorn kommt) pruefen, ob die Anmeldung noch gilt */
+let kontoGeprueft = 0;
+function kontoPruefen() {
+  if (!konto.lesen() || Date.now() - kontoGeprueft < 20000) return;
+  kontoGeprueft = Date.now();
+  server("/api/konto").catch(() => {});
+}
+setInterval(kontoPruefen, 60000);
+window.addEventListener("focus", kontoPruefen);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) kontoPruefen(); });
 function kontoNoetig() {
   if (kontoOffen) return;
   kontoOffen = true; $("#nx-konto").hidden = true;
