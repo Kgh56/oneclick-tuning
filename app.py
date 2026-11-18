@@ -3533,10 +3533,24 @@ def update_pruefen(ordner: Path = None) -> list:
     return [zeile.split("|", 1) for zeile in neu.splitlines() if zeile]
 
 
+# Daten auf dem Server (Archiv mit Original-/Stage-Files usw.). Sie sind nie im Repository; ein Update darf sie
+# unter keinen Umstaenden anfassen. Loeschen nur, wenn der Admin es selbst im Admin-Bereich ausloest.
+GESCHUETZTE_DATEN = ("archiv", "auftraege", "eingang", "eigene", "sicherungen", "tickets", "config.json", "benutzer.json",
+                     "index.json", "optionen.json", "loesung_namen.json", "installationen.json", "downloads.json",
+                     "kunden.json", "umsatz.json", ".secret_key")
+
+
 def update_installieren(ordner: Path = None):
     """Neue Version uebernehmen. Daten (Archiv, Auftraege, Einstellungen) sind nicht im Repository."""
     zweig = git("rev-parse", "--abbrev-ref", "HEAD", ordner=ordner)
     git("fetch", "-q", "origin", zweig, ordner=ordner)
+    # Sicherung: "reset --hard" laesst nicht verwaltete Dateien in Ruhe. Waere aber eine Datendatei je ins Repository
+    # geraten (jetzt oder in der neuen Version), koennte das Update sie ueberschreiben oder loeschen -> dann abbrechen.
+    verwaltet = (git("ls-files", "--", *GESCHUETZTE_DATEN, ordner=ordner) + "\n"
+                 + git("ls-tree", "-r", "--name-only", f"origin/{zweig}", "--", *GESCHUETZTE_DATEN, ordner=ordner)).split()
+    if verwaltet:
+        raise RuntimeError("Update abgebrochen, damit keine Daten auf dem Server verloren gehen: "
+                           f"{', '.join(sorted(set(verwaltet))[:5])} liegt im Repository. Bitte melden.")
     git("reset", "-q", "--hard", f"origin/{zweig}", ordner=ordner)
     erg = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r",
                           str((ordner or BASE) / "requirements.txt")], capture_output=True, text=True, timeout=300)

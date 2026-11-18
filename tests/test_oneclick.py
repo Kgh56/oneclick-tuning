@@ -2138,6 +2138,19 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(A.update_pruefen(self.server), [])
         self.assertEqual((self.server / "archiv" / "kunde.bin").read_bytes(), b"wichtig")   # Daten bleiben
 
+    def test_update_bricht_ab_wenn_daten_im_repository(self):
+        """Gerät je ein Archiv-File ins Repository, darf das Update die Server-Daten nicht überschreiben."""
+        (self.entwickler / "archiv").mkdir()
+        (self.entwickler / "archiv" / "kunde.bin").write_bytes(b"aus Versehen")
+        self.git("add", "-f", "archiv/kunde.bin", cwd=self.entwickler)
+        (self.entwickler / "app.py").write_text("# Version 2\n")
+        self.commit(self.entwickler, "Versehen")
+        with self.assertRaises(RuntimeError) as f:
+            A.update_installieren(self.server)
+        self.assertIn("Update abgebrochen", str(f.exception))
+        self.assertEqual((self.server / "archiv" / "kunde.bin").read_bytes(), b"wichtig")
+        self.assertEqual((self.server / "app.py").read_text(), "# Version 1\n")   # gar nichts geaendert
+
     def test_ohne_git_keine_version(self):
         self.assertEqual(A.version(Path(self.tmp.name)), {})
 
