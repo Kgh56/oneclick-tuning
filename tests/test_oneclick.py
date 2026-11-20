@@ -323,6 +323,35 @@ class WebTests(Basis):
         self.assertEqual(d.status_code, 200)
         self.assertEqual(d.data, bytes(self.startstopp))
 
+    def test_admin_downloads_ohne_cookie_wie_mac_app(self):
+        """Die Mac-Admin-App (WebKit) laedt Downloads ein zweites Mal ohne Anmelde-Cookie. Die Links im Admin
+        muessen trotzdem das echte File liefern - nicht die Anmeldeseite."""
+        aid = self.hochladen(self.golf)
+        self.bestellen(aid, "stage1")
+        a = self.admin()
+        seite = a.get(f"/auftrag/{aid}").text
+        links = {art: url for url, art in re.findall(r'href="((?:/api)?/auftrag/[0-9a-f]+/(original|download)\?dl=[0-9a-f.]+)"', seite)}
+        self.assertEqual(set(links), {"original", "download"})
+        mac = A.app.test_client()   # kein Cookie, keine Anmeldung
+        r = mac.get(links["original"])
+        self.assertEqual((r.status_code, r.data), (200, bytes(self.golf)))
+        r = mac.get(links["download"])
+        self.assertEqual((r.status_code, r.data), (200, bytes(self.stage1)))
+        # Zeichen gilt nur fuer genau diesen Pfad, nur zum Herunterladen und nicht verfaelscht
+        pfad, zeichen = links["original"].split("?")
+        self.assertEqual(mac.get(f"/auftrag/{self.hochladen(self.golf)}/original?{zeichen}").status_code, 302)
+        self.assertEqual(mac.get(pfad + "?dl=" + zeichen[3:-1] + ("0" if zeichen[-1] != "0" else "1")).status_code, 302)
+        self.assertEqual(mac.get("/admin?" + zeichen).status_code, 302)
+        self.assertEqual(mac.get(pfad).status_code, 302)
+        abgelaufen = int(time.time()) - 5
+        self.assertEqual(mac.get(f"{pfad}?dl={abgelaufen}.{A._download_signatur(pfad, abgelaufen)}").status_code, 302)
+        # Ticket-Anhang und Archiv-ZIP
+        archiv = a.get("/admin/archiv").text
+        zip_link = re.search(r'href="(/admin/archiv\.zip\?dl=[0-9a-f.]+)"', archiv).group(1)
+        r = mac.get(zip_link)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data[:2], b"PK")
+
     def test_eigenes_file_kostenlos_fuer_admin(self):
         a = self.admin()
         self.assertEqual(self.kunde.get("/admin/eigenes-file").status_code, 302)   # nur Admin
@@ -331,7 +360,10 @@ class WebTests(Basis):
         self.assertEqual(r.status_code, 200)
         self.assertIn("Stage 1", r.text)
         eid = re.search(r"/admin/eigenes-file/([0-9a-f]{32})", r.text).group(1)
-        d = a.post(f"/admin/eigenes-file/{eid}", data={"csrf": a.csrf, "option": ["stage1", "startstopp"]})
+        weiter = a.post(f"/admin/eigenes-file/{eid}", data={"csrf": a.csrf, "option": ["stage1", "startstopp"]})
+        self.assertEqual(weiter.status_code, 302)
+        # Mac-Admin-App: macOS holt den Download ein zweites Mal - ohne Cookie und ohne Formulardaten
+        d = A.app.test_client().get(weiter.headers["Location"])
         self.assertEqual(d.status_code, 200)
         erwartet = bytearray(self.stage1)
         erwartet[0x7000:0x7004] = self.startstopp[0x7000:0x7004]

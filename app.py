@@ -521,10 +521,37 @@ def benachrichtigen(auftrag: dict):
 # Login / Sicherheit
 # ---------------------------------------------------------------------------
 
+# Download-Links im Admin tragen ein signiertes, zeitlich begrenztes Zeichen (?dl=...). Grund: Die Mac-Admin-App
+# (pywebview/WebKit) laedt Downloads ein zweites Mal ueber macOS herunter - OHNE das Anmelde-Cookie. Ohne Zeichen
+# landete dann die Anmeldeseite statt des Files auf dem Mac. Das Zeichen gilt nur fuer genau diesen Pfad und nur GET.
+DOWNLOAD_ENDPUNKTE = {"original", "download", "admin_ticket_datei", "sortieren_datei", "archiv_backup", "eigenes_file_ergebnis"}
+DOWNLOAD_GUELTIG = 6 * 3600
+
+
+def _download_signatur(pfad: str, ablauf: int) -> str:
+    return hmac.new(app.secret_key.encode(), f"download|{pfad}|{ablauf}".encode(), hashlib.sha256).hexdigest()[:40]
+
+
+def download_url(endpunkt: str, **werte) -> str:
+    pfad = url_for(endpunkt, **werte)
+    ablauf = int(time.time()) + DOWNLOAD_GUELTIG
+    return f"{pfad}?dl={ablauf}.{_download_signatur(pfad, ablauf)}"
+
+
+def download_erlaubt() -> bool:
+    """Admin-Download ohne Sitzung, wenn der Link ein gueltiges Zeichen fuer genau diesen Pfad hat."""
+    if request.method != "GET" or request.endpoint not in DOWNLOAD_ENDPUNKTE:
+        return False
+    ablauf, _, sig = request.args.get("dl", "").partition(".")
+    if not ablauf.isdigit() or int(ablauf) < time.time():
+        return False
+    return hmac.compare_digest(sig, _download_signatur(request.path, int(ablauf)))
+
+
 def admin_noetig(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not session.get("admin"):
+        if not session.get("admin") and not download_erlaubt():
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return wrapper
@@ -817,7 +844,7 @@ def ist_admin_app() -> bool:
 def nur_ueber_programm():
     """Die Kunden-Schnittstelle (/api/...) beantwortet nur das Programm. Im Browser gibt es nur die
     Werbeseite und den Admin-Bereich."""
-    if request.path.startswith("/api/") and not ist_programm() and not session.get("admin"):
+    if request.path.startswith("/api/") and not ist_programm() and not session.get("admin") and not download_erlaubt():
         return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
 
 
@@ -1603,6 +1630,7 @@ def konto_name(schluessel: str) -> str:
 
 
 app.jinja_env.globals["konto_name"] = konto_name
+app.jinja_env.globals["download_url"] = download_url
 
 
 @app.route("/admin/kunden", methods=["GET", "POST"])
@@ -1892,7 +1920,8 @@ def auftrag_status(aid):
 @app.route("/auftrag/<aid>/download")
 @app.route("/api/auftrag/<aid>/download")
 def download(aid):
-    if session.get("admin"):
+    admin = bool(session.get("admin")) or download_erlaubt()
+    if admin:
         auftrag = lade_auftrag(aid)
     else:   # Kunde: nur mit Anmeldung und nur eigene Auftraege
         gefunden = konto_aus_anfrage()
@@ -1900,11 +1929,11 @@ def download(aid):
             return jsonify(fehler="Bitte melde dich im Programm an.", anmelden=True), 401
         g.konto = gefunden[0]
         auftrag = eigener_auftrag(aid)
-    if auftrag["status"] != "FREIGEGEBEN" and not (session.get("admin") and auftrag["status"] != "ENTWURF"):
+    if auftrag["status"] != "FREIGEGEBEN" and not (admin and auftrag["status"] != "ENTWURF"):
         abort(403)
     if not hat_file(aid):
         abort(404)
-    if not session.get("admin") and zahlung_offen(auftrag):
+    if not admin and zahlung_offen(auftrag):
         auftrag = stripe_pruefen(auftrag)
         if zahlung_offen(auftrag):
             return jsonify(fehler="Bitte zuerst bezahlen – danach kannst du das File herunterladen."), 402
@@ -3073,8 +3102,20 @@ def eigenes_file_download(eid):
         if daten is None:
             flash("Diese Kombination geht nicht, weil sich die Lösungen überschneiden. Bitte anders wählen.")
             return render_template("eigenes.html", e=e, namen=option_namen())
-    return send_file(io.BytesIO(daten), as_attachment=True, mimetype="application/octet-stream",
-                     download_name=f"{Path(e['datei']).stem}_{'+'.join(auswahl)}.bin")
+    # Erst ablegen, dann per GET-Link ausliefern: die Mac-Admin-App laedt Downloads ohne Formulardaten nach
+    (ordner / "ergebnis.bin").write_bytes(daten)
+    json_speichern(ordner / "ergebnis.json", {"name": f"{Path(e['datei']).stem}_{'+'.join(auswahl)}.bin"})
+    return redirect(download_url("eigenes_file_ergebnis", eid=eid))
+
+
+@app.route("/admin/eigenes-file/<eid>/ergebnis")
+@admin_noetig
+def eigenes_file_ergebnis(eid):
+    ordner = EIGENE / eid
+    if not re.fullmatch(r"[0-9a-f]{32}", eid) or not (ordner / "ergebnis.bin").exists():
+        abort(404)
+    name = json.loads((ordner / "ergebnis.json").read_text())["name"]
+    return send_file(ordner / "ergebnis.bin", as_attachment=True, mimetype="application/octet-stream", download_name=name)
 
 
 @app.route("/admin/archiv")
@@ -4122,7 +4163,7 @@ seine Antwort kommt hier an (und per Telegram).</p>
 <div class="karte"><h2>Anfrage bearbeiten</h2>
 <p class="leise" style="margin-top:-6px">1. Original herunterladen und bearbeiten · 2. Fertiges File hier hochladen –
 der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
-<p><a class="btn" href="{{ url_for('original', aid=a.id) }}">⬇ Original herunterladen</a></p>
+<p><a class="btn" href="{{ download_url('original', aid=a.id) }}">⬇ Original herunterladen</a></p>
 <form method="post" action="{{ url_for('fertig_hochladen', aid=a.id) }}" enctype="multipart/form-data" style="margin-top:18px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}">
 <p><b>Fertiges File</b> (gleiche Größe wie das Original, Checksumme macht das Flash-Tool)</p>
@@ -4141,8 +4182,8 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 </div>
 {% elif session.admin and a.status != 'ENTWURF' %}
 <div class="karte"><h2>Admin</h2>
-<p><a href="{{ url_for('original', aid=a.id) }}">Original herunterladen</a>
-{% if hat_file %} · <a href="{{ url_for('download', aid=a.id) }}">Erstelltes File herunterladen (zum Prüfen)</a>{% endif %}</p>
+<p><a href="{{ download_url('original', aid=a.id) }}">Original herunterladen</a>
+{% if hat_file %} · <a href="{{ download_url('download', aid=a.id) }}">Erstelltes File herunterladen (zum Prüfen)</a>{% endif %}</p>
 {% if a.status == 'WARTET' %}
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
 <form method="post" action="{{ url_for('admin_entscheiden', aid=a.id) }}" class="inline" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -4270,7 +4311,7 @@ Nur ein Original ohne Tuning-File geht auch: Dann bekommen Kunden mit einem frem
 <label class="drop" id="drop"><input type="file" name="zip" id="zip" accept=".zip">
 <div id="dropText"><b>ZIP-Datei mit euren Files hierher ziehen</b><br>oder klicken zum Auswählen</div></label>
 <button class="btn" id="los">ZIP importieren</button>
-<a class="btn grau" href="{{ url_for('archiv_backup') }}">Archiv als ZIP herunterladen (Backup)</a>
+<a class="btn grau" href="{{ download_url('archiv_backup') }}">Archiv als ZIP herunterladen (Backup)</a>
 <label style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer">
 <input type="checkbox" name="sortieren" value="1" style="margin-top:3px">
 <span><b>Alle Dateien selbst zuordnen</b><br><span class="leise" style="font-size:13px">Für ZIPs mit losen Dateien ohne Ordner und ohne
@@ -4794,7 +4835,7 @@ pruefen(); setInterval(pruefen,8000);})();
 {% if t.kontakt %} · Kontakt: {{ t.kontakt }}{% endif %}
 {% if auftrag %} · Auftrag: <a href="{{ url_for('auftrag_ansicht', aid=auftrag.id) }}">{{ auftrag.datei }}</a> ({{ auftrag.option or '–' }}, ECU {{ ecu_text(auftrag) }}, #{{ auftrag.id[:8] }}){% endif %}</p>
 <div class="verlauf" id="verlauf" data-anzahl="{{ t.nachrichten|length }}">{% for n in t.nachrichten %}<div class="nachricht {{ n.von }}"><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }} · {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}.{{ n.zeit[:4] }} {{ n.zeit[11:16] }}</span>
-<div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ url_for('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ [1, (n.datei.groesse / 1024)|round|int]|max }} KB</a>{% endif %}</div>{% endfor %}</div>
+<div>{{ n.text }}</div>{% if n.datei %}<a class="anhang" href="{{ download_url('admin_ticket_datei', tid=t.id, fid=n.datei.id) }}">📎 {{ n.datei.name }} · {{ [1, (n.datei.groesse / 1024)|round|int]|max }} KB</a>{% endif %}</div>{% endfor %}</div>
 <form method="post" enctype="multipart/form-data" id="antwort-form" style="margin-top:18px"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="antworten">
 <label class="feld">Antwort an den Kunden</label><textarea name="text" id="antwort-text"></textarea>
 <label class="drop" id="anhang-drop" style="padding:22px 18px;margin-bottom:14px"><input type="file" name="datei" id="anhang-datei">
@@ -4883,7 +4924,7 @@ werden die Tuning-Files dort ergänzt.</p>{% endif %}
 Sind es <b>mehrere Autos</b>: jedes Original als „Original“ markieren und benennen. Bei den Tuning-Files erscheint dann
 „gehört zu“ – dort das richtige Original wählen (oder auf „automatisch“ lassen, dann nimmt die Seite das ähnlichste).</p>
 <div class="tabelle"><table><tr><th>Datei</th><th>ECU / Software</th><th>Abweichung</th><th>Was ist das?</th><th>Gruppe</th></tr>
-{% for d in g.dateien if not d.abgas %}<tr><td><a href="{{ url_for('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
+{% for d in g.dateien if not d.abgas %}<tr><td><a href="{{ download_url('sortieren_datei', sid=s.id, fid=d.id) }}" title="Zum Prüfen herunterladen">{{ d.name }}</a>
 {% if d.bekannt %}<br><span class="status s-ENTWURF">schon im Archiv: {{ d.bekannt }}</span>{% endif %}
 {% if d.abgas %}<br><span class="status s-ABGELEHNT">Abgasreinigung – wird nicht übernommen</span>{% endif %}</td>
 <td class="leise">{{ d.ecu }}<br>{{ d.software }}</td>
