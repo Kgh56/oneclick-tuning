@@ -554,6 +554,12 @@ class WebTests(Basis):
         # Nachricht nur mit Datei (ohne Text) ist erlaubt
         neu = k.post(f"/api/ticket/{t['id']}/nachricht", data={"text": "", "datei": (io.BytesIO(b"\x89PNG.."), "fehler.png")}, **mp).json
         self.assertEqual((neu["nachrichten"][-1]["text"], neu["nachrichten"][-1]["datei"]["name"], neu["status"]), ("", "fehler.png", "OFFEN"))
+        # Umlaute im Namen bleiben lesbar (statt "Pr-fstand-Log.csv")
+        neu = k.post(f"/api/ticket/{t['id']}/nachricht", data={"text": "", "datei": (io.BytesIO(b"rpm;boost"), "Prüfstand Lög ß.csv")}, **mp).json
+        self.assertEqual(neu["nachrichten"][-1]["datei"]["name"], "Pruefstand-Loeg-ss.csv")
+        mac = "Prüfstand.csv"   # so liefert der Mac Umlaute oft (zerlegt)
+        neu = k.post(f"/api/ticket/{t['id']}/nachricht", data={"text": "", "datei": (io.BytesIO(b"x"), mac)}, **mp).json
+        self.assertEqual(neu["nachrichten"][-1]["datei"]["name"], "Pruefstand.csv")
         # ohne Text und ohne Datei / leer / gesperrter Name -> abgelehnt
         url = f"/api/ticket/{t['id']}/nachricht"
         self.assertEqual(k.post(url, data={"text": ""}, **mp).status_code, 422)
@@ -566,7 +572,7 @@ class WebTests(Basis):
         self.assertEqual(k.post(url, data={"text": "x", "datei": (io.BytesIO(b"0" * (17 * 1024 * 1024)), "riesig.bin")}, **mp).status_code, 413)
         # JSON geht weiterhin
         self.assertEqual(k.post(url, json={"text": "nur Text"}).status_code, 200)
-        self.assertEqual(len(list((A.TICKETS / "anhang" / t["id"]).iterdir())), 2)
+        self.assertEqual(len(list((A.TICKETS / "anhang" / t["id"]).iterdir())), 4)
 
     def test_installationen_zaehlen(self):
         k = self.kunde
@@ -2185,6 +2191,100 @@ class UpdateTests(unittest.TestCase):
 
     def test_ohne_git_keine_version(self):
         self.assertEqual(A.version(Path(self.tmp.name)), {})
+
+
+def programm_modul():
+    """programm/oneclick_programm.py laden (pywebview wird dort erst bei Bedarf importiert)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "oneclick_programm_test", Path(__file__).resolve().parent.parent / "programm" / "oneclick_programm.py")
+    modul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modul)
+    return modul
+
+
+class ProgrammUpdateTests(unittest.TestCase):
+    """Auto-Update des Kunden-Programms (Windows: .exe tauschen, Mac: .app tauschen) mit Dateien im Testordner."""
+
+    def setUp(self):
+        import hashlib
+        self.P = programm_modul()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        self.neu = random.Random(5).randbytes(2 * 1024 * 1024)
+        self.sha = hashlib.sha256(self.neu).hexdigest()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def holen(self, dateien):
+        def holen(url, timeout=30):
+            name = url.rsplit("/", 1)[1].split("?")[0]
+            return dateien[name]
+        return holen
+
+    def test_windows_exe_tauschen(self):
+        exe = self.d / "OneClick-Solutions.exe"
+        exe.write_bytes(b"alte Version")
+        info = {"version": 22, "sha256": self.sha}
+        u = self.P.Updater("https://x/programm", exe=exe, eigene=21,
+                           holen=self.holen({"version.json": json.dumps(info).encode(), "OneClick-Solutions.exe": self.neu}))
+        self.assertEqual(u.pruefen()["version"], 22)
+        u.installieren(u.pruefen())
+        self.assertEqual(exe.read_bytes(), self.neu)
+        self.assertEqual(u.alte_exe.read_bytes(), b"alte Version")
+        u.aufraeumen()
+        self.assertFalse(u.alte_exe.exists())
+        # gleiche Version -> kein Update
+        self.assertIsNone(self.P.Updater("https://x/programm", exe=exe, eigene=22,
+                                         holen=self.holen({"version.json": json.dumps(info).encode()})).pruefen())
+
+    def test_windows_beschaedigter_download_aendert_nichts(self):
+        exe = self.d / "OneClick-Solutions.exe"
+        exe.write_bytes(b"alte Version")
+        u = self.P.Updater("https://x/programm", exe=exe, eigene=21,
+                           holen=self.holen({"OneClick-Solutions.exe": self.neu[:-1]}))
+        with self.assertRaises(RuntimeError):
+            u.installieren({"version": 22, "sha256": self.sha})
+        self.assertEqual(exe.read_bytes(), b"alte Version")
+        self.assertFalse(u.alte_exe.exists())
+
+    def test_mac_app_tauschen(self):
+        import hashlib
+        app = self.d / "Programme" / "OneClick Solutions.app"
+        (app / "Contents").mkdir(parents=True)
+        (app / "Contents" / "version.txt").write_text("5")
+        puffer = io.BytesIO()
+        with zipfile_modul().ZipFile(puffer, "w") as z:
+            z.writestr("OneClick Solutions.app/Contents/version.txt", "6")
+            z.writestr("OneClick Solutions.app/Contents/fuellung.bin", self.neu)
+        zip_daten = puffer.getvalue()
+        info = {"version": 6, "sha256": hashlib.sha256(zip_daten).hexdigest()}
+        u = self.P.MacUpdater("https://x/programm", app=app, eigene=5,
+                              holen=self.holen({"version-mac.json": json.dumps(info).encode(),
+                                                "OneClick-Solutions-Mac.zip": zip_daten}))
+        u.installieren(u.pruefen())
+        self.assertEqual((app / "Contents" / "version.txt").read_text(), "6")
+        self.assertEqual((u.alte_app / "Contents" / "version.txt").read_text(), "5")
+        self.assertFalse((app.parent / ".oneclick-update").exists())   # Zwischenordner weg
+        u.aufraeumen()
+        self.assertFalse(u.alte_app.exists())
+        # direkt aus dem Download-Ordner gestartet (macOS "App Translocation") -> verstaendlicher Hinweis
+        mac2 = self.P.MacUpdater("https://x/programm", app=Path("/private/var/folders/x/AppTranslocation/y/OneClick Solutions.app"),
+                                 eigene=5, holen=self.holen({}))
+        with self.assertRaisesRegex(RuntimeError, "Programme"):
+            mac2.installieren(info)
+
+    def test_dateiname_aus_kopf(self):
+        self.assertEqual(self.P.dateiname_aus("attachment; filename*=UTF-8''Golf%20Pr%C3%BCfung_stage1.bin"),
+                         "Golf Prüfung_stage1.bin")
+        self.assertEqual(self.P.dateiname_aus('attachment; filename="../../etc/passwd"'), "passwd")
+        self.assertEqual(self.P.dateiname_aus(""), "file.bin")
+
+
+def zipfile_modul():
+    import zipfile
+    return zipfile
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2180,6 +2181,10 @@ def ticket_datei_lesen(datei) -> tuple[str, bytes] | None:
     if not datei or not datei.filename:
         return None
     roh = PurePosixPath(datei.filename.replace("\\", "/")).name
+    # Umlaute lesbar umschreiben statt "-" ("Prüfstand Log.csv" -> "Pruefstand-Log.csv"). Vorher NFC: der Mac
+    # liefert Umlaute in Dateinamen oft zerlegt (u + Trema als zwei Zeichen)
+    roh = unicodedata.normalize("NFC", roh).translate(
+        str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}))
     endung = sicherer_name(PurePosixPath(roh).suffix)[:10]          # Endung bleibt auch bei langen Namen
     name = sicherer_name(PurePosixPath(roh).stem if endung != "unbenannt" else roh)
     name = name + "." + endung if endung != "unbenannt" and name != "unbenannt" else name

@@ -2409,7 +2409,11 @@ function listeMalen(hervorheben) {
     if (a.status === "ABGELEHNT") unten.textContent = a.grund ? "Grund: " + a.grund : "Bei Fragen melde dich gerne bei uns.";
     else if (a.status === "WARTET") unten.textContent = a.typ === "anfrage" ? "Wir machen dein File – du bekommst hier Bescheid."
                                                                             : "Wird gerade von uns geprüft …";
-    else if (a.status === "WARTET" && a.preis_text) unten.textContent += " · " + a.preis_text;
+    // Preis eines wartenden Auftrags (bei Anfragen legen wir ihn erst bei der Freigabe fest); eigenes Element,
+    // damit der Text davor uebersetzt werden kann
+    if (a.status === "WARTET" && a.typ !== "anfrage" && a.preis_text) {
+      const preis = document.createElement("span"); preis.textContent = " · " + a.preis_text; unten.appendChild(preis);
+    }
     if (a.status === "FREIGEGEBEN" && a.zahlung === "offen") {
       unten.textContent = "Freigegeben – nach der Zahlung kannst du herunterladen.";
       const b = document.createElement("button"); b.className = "btn bezahlen klein";
