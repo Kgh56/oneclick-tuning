@@ -247,6 +247,26 @@ class KernTests(Basis):
         st1[i:i + 10] = b"10SW054400"   # andere Software -> nichts
         self.assertEqual(oneclick.finde_loesungen(bytes(st1))[1], {})
 
+    def test_rueckruesten_continental(self):
+        """Continental-Steuergeraete haben keine Bosch-Nummer, sondern Kennungen wie A2C118827000005 / A3C0351190001."""
+        ori = zufall(GROESSE, 41)
+        ori[0x10A8:0x10C0] = b"A2C118827000005 FOIX\x00\x00\x00\x00"
+        ori[0x1150:0x1160] = b"A3C0351190001   "
+        info = oneclick.erkenne(bytes(ori))
+        self.assertEqual((info["bosch_sw"], info["conti_nr"]), ([], ["A2C118827000005", "A3C0351190001"]))
+        self.assertEqual(oneclick.software_nummern(info), ["A2C118827000005", "A3C0351190001"])
+        self.ablegen("Conti", {"ori.bin": ori})
+        oneclick.baue_index()
+        fremd = bytearray(ori)
+        for off in range(0x9000, 0x9000 + 66, 3):   # fremdes Tuning, nur das Original liegt im Archiv
+            fremd[off] ^= 0x21
+        _, l = oneclick.finde_loesungen(bytes(fremd))
+        self.assertEqual((l["original"]["art"], l["original"]["daten"]), ("softwarenummer", bytes(ori)))
+        self.assertNotIn("original", oneclick.finde_loesungen(bytes(ori))[1])   # Original selbst -> nichts
+        andere = bytearray(fremd)
+        andere[0x10A8:0x10B7] = b"A2C118827000006"   # anderer Software-Stand -> kein Angebot
+        self.assertEqual(oneclick.finde_loesungen(bytes(andere))[1], {})
+
     def test_rueckruesten_softwarenummer_grenzen(self):
         self.nur_original_ablegen()
         # Original selbst hochgeladen -> nichts zurueckzuruesten
@@ -351,6 +371,60 @@ class WebTests(Basis):
         r = mac.get(zip_link)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data[:2], b"PK")
+
+    def test_ecu_von_hand_zuordnen(self):
+        """Nicht erkanntes Steuergeraet (z. B. Delco E98) von Hand zuordnen - wird ueber die Nummern im File gemerkt."""
+        e98 = zufall(GROESSE, 98)
+        e98[0x10A8:0x10C0] = b"A2C118827000005 FOIX\x00\x00\x00\x00"
+        e98[0x1150:0x1160] = b"A3C0351190001   "
+        st1 = bytearray(e98)
+        st1[0x8000:0x8040] = bytes(64)
+        self.ablegen("E98_Kunde1", {"ori.bin": e98, "stage1.bin": st1})
+        oneclick.baue_index()
+        a = self.admin()
+        aid = self.hochladen(e98, "e98.bin")
+        self.assertEqual(self.auftrag(aid)["ecu"], "?")
+        seite = a.get(f"/auftrag/{aid}").text
+        self.assertIn("Zuordnen &amp; merken", seite)
+        r = a.post("/admin/ecu", data={"csrf": a.csrf, "auftrag": aid, "ecu": "Delco E98"}, follow_redirects=True)
+        self.assertIn("werden ab jetzt als „Delco E98“ erkannt", r.text)
+        self.assertEqual((self.auftrag(aid)["ecu"], self.auftrag(aid)["ecu_gemerkt"]), ("Delco E98", True))
+        self.assertEqual(A.lade_config()["ecu_zuordnung"]["A2C118827000005"], "Delco E98")
+        eintrag = next(e for e in oneclick.lade_index()["eintraege"] if e["name"] == "E98_Kunde1")
+        self.assertEqual(eintrag["ecu"], ["Delco E98"])
+        # naechstes File mit diesen Nummern (fremdes Tuning) -> sofort erkannt, auch beim Kunden
+        fremd = bytearray(e98)
+        fremd[0x9000:0x9010] = b"\x11" * 16
+        aid2 = self.hochladen(fremd, "fremd.bin")
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid2}").json["ecu"], "Delco E98")
+        archiv = a.get("/admin/archiv").text
+        self.assertIn("Delco E98", archiv)
+        self.assertIn("A3C0351190001", archiv)
+        # aendern (im Archiv) -> Auftraege und Index ziehen mit
+        a.post("/admin/ecu", data={"csrf": a.csrf, "archiv": "E98_Kunde1", "ecu": "GM E98"})
+        self.assertEqual(self.auftrag(aid)["ecu"], "GM E98")
+        self.assertEqual(oneclick.erkenne(bytes(fremd))["ecu"], ["GM E98"])
+        # vergessen -> wieder unbekannt
+        a.post("/admin/ecu", data={"csrf": a.csrf, "vergessen": "GM E98"})
+        self.assertEqual(A.lade_config()["ecu_zuordnung"], {})
+        self.assertEqual(self.auftrag(aid)["ecu"], "?")
+        self.assertEqual(next(e for e in oneclick.lade_index()["eintraege"] if e["name"] == "E98_Kunde1")["ecu"], [])
+        # File ohne lesbare Nummern: nur fuer diesen Auftrag, mit Hinweis
+        ohne = zufall(GROESSE, 99)
+        aid3 = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(ohne)), "ohne.bin")},
+                               content_type="multipart/form-data").json["id"]   # keine Loesung -> Anfrage, Auftrag gibt es trotzdem
+        r = a.post("/admin/ecu", data={"csrf": a.csrf, "auftrag": aid3, "ecu": "Delco E98"}, follow_redirects=True)
+        self.assertIn("keine lesbare Software- oder Teilenummer", r.text)
+        self.assertEqual(self.auftrag(aid3)["ecu"], "Delco E98")
+        self.assertEqual(A.lade_config()["ecu_zuordnung"], {})
+        # selbst erkanntes Steuergeraet: kein Feld, Zuordnung ueberschreibt es nicht
+        aid4 = self.hochladen(self.golf, "golf.bin")
+        self.assertNotIn("Zuordnen &amp; merken", a.get(f"/auftrag/{aid4}").text)
+        a.post("/admin/ecu", data={"csrf": a.csrf, "auftrag": aid4, "ecu": "Falsch"})
+        self.assertEqual(oneclick.erkenne(bytes(self.golf))["ecu"], ["EDC17C46"])
+        self.assertEqual(self.auftrag(aid4)["ecu"], "EDC17C46")
+        # nur mit Admin-Anmeldung
+        self.assertEqual(A.app.test_client().post("/admin/ecu", data={"auftrag": aid, "ecu": "x"}).status_code, 400)
 
     def test_download_name_mit_firma(self):
         """Kunden bekommen: GH-MAPPING_<ihr Dateiname>_<Loesung>.bin - nie den Namen aus dem Archiv."""

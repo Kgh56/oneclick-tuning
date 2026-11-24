@@ -54,7 +54,7 @@ STANDARD_OPTIONEN = {
 # Rueckruesten: Kunde laedt ein getuntes File hoch und bekommt das Original zurueck
 ORIGINAL = "original"
 ORIGINAL_NAME = "Original (Rückrüsten)"
-INDEX_VERSION = 7
+INDEX_VERSION = 8   # 8: Continental-Nummern (conti_nr) im Index
 MAX_ABWEICHUNG = 0.05   # Rueckruesten ueber Softwarenummer: hoechstens 5 % der Bytes duerfen abweichen
 
 # Abschaltungen der Abgasreinigung werden nicht unterstuetzt
@@ -105,6 +105,8 @@ BOSCH_SW = re.compile(rb"(?<!\d)1037\d{6}(?!\d)|(?<![A-Za-z0-9])10SW\d{6}(?!\d)"
 BOSCH_HW = re.compile(rb"(?<!\d)02[68]1\d{6}(?!\d)")
 # VAG-Teilenummern von Steuergeraeten: xxx 906/907/927 xxx (z. B. 03L906018JL, 8V0906259, 0AM927769)
 VAG_TEILENR = re.compile(rb"(?<![A-Z0-9])[0-9][A-Z0-9]{2}9(?:06|07|27)\d{3}[A-Z]{0,3}(?![A-Z0-9])")
+# Continental / Vitesco: Kennungen wie "A2C118827000005" oder "A3C0351190001" (Software- und Hardware-Stand)
+CONTI_NR = re.compile(rb"(?<![A-Za-z0-9])A[23]C\d{8,12}(?!\d)")
 
 
 def ecu_name(roh: str) -> str:
@@ -119,18 +121,63 @@ def ecu_name(roh: str) -> str:
 # Erkennung
 # ---------------------------------------------------------------------------
 
+# Steuergeraete, die der Admin von Hand zugeordnet hat: {Software-/Teilenummer: ECU-Name}.
+# app.py setzt hier eine Funktion ein (gespeichert in config.json); ohne app gibt es keine Zuordnungen.
+ECU_ZUORDNUNG = lambda: {}   # noqa: E731
+
+
 def erkenne(daten: bytes) -> dict:
     def finde(muster):
         return sorted({m.decode("ascii", "ignore") for m in muster.findall(daten)})
 
-    return {
+    info = {
         "groesse": len(daten),
         "sha256": hashlib.sha256(daten).hexdigest(),
         "ecu": sorted({ecu_name(m.decode("ascii", "ignore")) for m in ECU_MUSTER.findall(daten)}),
         "bosch_sw": finde(BOSCH_SW),
         "bosch_hw": finde(BOSCH_HW),
         "vag_teilenr": finde(VAG_TEILENR),
+        "conti_nr": finde(CONTI_NR),
     }
+    if not info["ecu"]:   # selbst nicht erkannt -> von Hand zugeordnetes Steuergeraet (ueber die Nummern im File)
+        name = gemerkte_ecu(software_nummern(info))
+        if name:
+            info["ecu"], info["ecu_gemerkt"] = [name], True
+    return info
+
+
+def software_nummern(info: dict) -> list:
+    """Alle lesbaren Software-/Teilenummern eines Files (fuer Anzeige und Vergleich)."""
+    return info.get("bosch_sw", []) + info.get("vag_teilenr", []) + info.get("conti_nr", [])
+
+
+def gemerkte_ecu(nummern: list) -> str:
+    """Von Hand zugeordnetes Steuergeraet fuer eine der Nummern, sonst ''."""
+    zuordnung = ECU_ZUORDNUNG() or {}
+    return next((zuordnung[n] for n in nummern if zuordnung.get(n)), "")
+
+
+def ecu_im_index_nachtragen() -> int:
+    """Nach einer Zuordnung: Index-Eintraege ohne erkannte ECU (oder mit gemerkter) aktualisieren.
+    Liest nur den Index, keine Archiv-Dateien. Rueckgabe: Anzahl geaenderter Eintraege."""
+    index = lade_index()
+    geaendert = 0
+    for e in index["eintraege"]:
+        if e.get("ecu") and not e.get("ecu_gemerkt"):
+            continue   # selbst erkannt -> bleibt
+        name = gemerkte_ecu(software_nummern(e))
+        neu = ([name], True) if name else ([], False)
+        if (e.get("ecu") or [], bool(e.get("ecu_gemerkt"))) != neu:
+            e["ecu"] = neu[0]
+            e.pop("ecu_gemerkt", None)
+            if neu[1]:
+                e["ecu_gemerkt"] = True
+            geaendert += 1
+    if geaendert:
+        tmp = INDEX_DATEI.with_suffix(".tmp")
+        tmp.write_text(json.dumps(index, ensure_ascii=False))
+        tmp.replace(INDEX_DATEI)
+    return geaendert
 
 
 # ---------------------------------------------------------------------------
@@ -187,8 +234,8 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
 
     def nummern_passen(e: dict) -> bool:
         # Sind Softwarenummern bzw. Teilenummern in beiden Files lesbar, muessen sie uebereinstimmen
-        for feld in ("bosch_sw", "vag_teilenr"):
-            a, b = set(info[feld]), set(e[feld])
+        for feld in ("bosch_sw", "vag_teilenr", "conti_nr"):
+            a, b = set(info[feld]), set(e.get(feld, []))
             if a and b and a != b:
                 return False
         return True
@@ -229,9 +276,11 @@ def finde_loesungen(neu: bytes, nur_identisch: bool = False) -> tuple:
 
     # Rueckruesten ueber die Softwarenummer: fremdes Tuning-File, im Archiv liegt (nur) das Original.
     # Kein Byte-fuer-Byte-Nachweis moeglich -> eigene Art, der Admin prueft vor der Freigabe.
-    if ORIGINAL not in loesungen and not nur_identisch and info["bosch_sw"]:
+    # Kennung: Bosch-Softwarenummer, sonst die Continental-Nummern (A2C.../A3C...).
+    kennung = "bosch_sw" if info["bosch_sw"] else "conti_nr" if info["conti_nr"] else None
+    if ORIGINAL not in loesungen and not nur_identisch and kennung:
         for e in kandidaten:
-            if e["sha256"] == info["sha256"] or set(e["bosch_sw"]) != set(info["bosch_sw"]):
+            if e["sha256"] == info["sha256"] or set(e.get(kennung, [])) != set(info[kennung]):
                 continue
             if not nummern_passen(e) or (info["bosch_hw"] and e["bosch_hw"] and set(info["bosch_hw"]) != set(e["bosch_hw"])):
                 continue
@@ -589,7 +638,7 @@ def cmd_pruefen(args):
     pfad = Path(args.datei)
     info, loesungen = finde_loesungen(pfad.read_bytes(), args.nur_identisch)
     print(f"ECU      : {', '.join(info['ecu']) or '?'}")
-    print(f"Software : {', '.join(info['bosch_sw'] + info['vag_teilenr']) or '?'}")
+    print(f"Software : {', '.join(software_nummern(info)) or '?'}")
     if not loesungen:
         print("Kein 100-%-Treffer im Archiv.")
         return 2

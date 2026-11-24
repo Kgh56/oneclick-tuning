@@ -139,6 +139,10 @@ def speichere_config(aenderungen: dict):
     json_speichern(CONFIG_DATEI, cfg)
 
 
+# Von Hand zugeordnete Steuergeraete ({Nummer: ECU}) liegen in config.json (mit im taeglichen Backup)
+oneclick.ECU_ZUORDNUNG = lambda: lade_config().get("ecu_zuordnung") or {}
+
+
 def lade_benutzer() -> dict:
     return json.loads(BENUTZER_DATEI.read_text()) if BENUTZER_DATEI.exists() else {}
 
@@ -1057,7 +1061,7 @@ def entwurf_anlegen(daten: bytes, dateiname: str, konto: str = "") -> dict:
 
     info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
     ecu = ", ".join(info["ecu"]) or "?"
-    software = ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"
+    software = ", ".join(oneclick.software_nummern(info)) or "?"
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
     ordner.mkdir(parents=True)
@@ -1077,6 +1081,8 @@ def entwurf_anlegen(daten: bytes, dateiname: str, konto: str = "") -> dict:
         "software": software,
         "zeit": datetime.now().isoformat(timespec="seconds"),
     }
+    if info.get("ecu_gemerkt"):
+        auftrag["ecu_gemerkt"] = True   # von Hand zugeordnet (kann im Admin geaendert werden)
     speichere_auftrag(auftrag)
     if not loesungen:
         raise KeineLoesung(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
@@ -1900,6 +1906,78 @@ def api_bezahlen(aid):
         return jsonify(url=bezahlen_starten(aid, daten.get("zustimmung") is True))
     except Abgelehnt as e:
         return jsonify(fehler=str(e)), 422
+
+
+def ecu_namen() -> list:
+    """Bisher von Hand vergebene Steuergeraete-Namen (Vorschlagsliste)."""
+    return sorted(set((lade_config().get("ecu_zuordnung") or {}).values()), key=str.lower)
+
+
+def ecu_gruppen() -> dict:
+    """{ECU-Name: [Nummern]} fuer die Liste im Archiv."""
+    gruppen = {}
+    for nummer, name in sorted((lade_config().get("ecu_zuordnung") or {}).items()):
+        gruppen.setdefault(name, []).append(nummer)
+    return dict(sorted(gruppen.items(), key=lambda t: t[0].lower()))
+
+
+app.jinja_env.globals["ecu_namen"] = ecu_namen
+app.jinja_env.globals["ecu_gruppen"] = ecu_gruppen
+
+
+@app.route("/admin/ecu", methods=["POST"])
+@admin_noetig
+def ecu_zuordnen():
+    """Steuergeraet von Hand zuordnen (Auftrag oder Archiv-Eintrag). Gemerkt wird es ueber die Software-/Teilenummern
+    im File: jedes spaetere File mit diesen Nummern wird automatisch so erkannt. Leerer Name = Zuordnung vergessen."""
+    aid, archiv_name = request.form.get("auftrag", ""), request.form.get("archiv", "")
+    vergessen = request.form.get("vergessen", "")
+    zurueck = url_for("admin_archiv") + "#ecu"
+    name = ecu_kunde_pruefen(request.form.get("ecu", ""))
+    zuordnung = dict(lade_config().get("ecu_zuordnung") or {})
+    if vergessen:   # aus der Liste "Gemerkte Steuergeraete"
+        nummern = [n for n, e in zuordnung.items() if e == vergessen]
+        name = ""
+    else:
+        if aid:
+            lade_auftrag(aid)   # 404 bei unbekannter Nummer
+            daten = (AUFTRAEGE / aid / "ori.bin").read_bytes()
+            zurueck = url_for("auftrag_ansicht", aid=aid)
+        else:
+            e = next((x for x in oneclick.lade_index()["eintraege"] if x["name"] == archiv_name), None)
+            if e is None:
+                abort(404)
+            daten = oneclick.archiv_datei(e).read_bytes()
+        nummern = oneclick.software_nummern(oneclick.erkenne(daten))
+    for n in nummern:
+        if name:
+            zuordnung[n] = name
+        else:
+            zuordnung.pop(n, None)
+    if nummern:
+        speichere_config({"ecu_zuordnung": zuordnung})
+        with index_sperre:
+            oneclick.ecu_im_index_nachtragen()
+    # Auftraege mit diesen Nummern (ohne selbst erkannte ECU) gleich mit anpassen
+    with sperre:
+        for a in alle_auftraege():
+            eigene = set((a.get("software") or "").split(", "))
+            if (a["id"] == aid or eigene & set(nummern)) and (a.get("ecu") in (None, "", "?") or a.get("ecu_gemerkt")):
+                a["ecu"] = name or "?"
+                a.pop("ecu_gemerkt", None)
+                if name:
+                    a["ecu_gemerkt"] = True   # von Hand -> bleibt im Admin aenderbar
+                speichere_auftrag(a)
+    if vergessen:
+        flash(f"Zuordnung „{vergessen}“ vergessen.")
+    elif not nummern:
+        flash("In diesem File steht keine lesbare Software- oder Teilenummer – das Steuergerät kann nicht gemerkt werden"
+              + (" (für diesen Auftrag ist es eingetragen)." if aid and name else "."))
+    elif name:
+        flash(f"Gemerkt: Files mit {', '.join(nummern)} werden ab jetzt als „{name}“ erkannt.")
+    else:
+        flash("Zuordnung entfernt.")
+    return redirect(zurueck)
 
 
 @app.route("/auftrag/<aid>")
@@ -2779,9 +2857,9 @@ def _gruppe_auswerten(stapel: dict, gid: int):
     if ori is None or ori["sha"] not in oris:
         probe = abdruck[(ori or dateien[0])["id"]]
         info = oneclick.erkenne(inhalt[(ori or dateien[0])["id"]])
-        nummern = set(info["bosch_sw"] + info["vag_teilenr"])
+        nummern = set(oneclick.software_nummern(info))
         for e in oneclick.lade_index()["eintraege"]:
-            andere = set(e.get("bosch_sw", []) + e.get("vag_teilenr", []))
+            andere = set(oneclick.software_nummern(e))
             if e["groesse"] == len(inhalt[dateien[0]["id"]]) and not (nummern and andere and not nummern & andere):
                 a = aehnlichkeit(probe, archiv_abdruck(oneclick.archiv_datei(e)))
                 if a >= AEHNLICH and (archiv is None or a > archiv[1]):
@@ -2830,7 +2908,7 @@ def eingang_anlegen(dateien: list, quelle: str) -> dict:
         abdruecke.append(block_abdruck(daten))
         eintraege.append({"id": fid, "name": PurePosixPath(name).name[:150], "groesse": len(daten), "sha": sha(daten),
                           "ecu": ", ".join(info["ecu"]) or "?",
-                          "software": ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?"})
+                          "software": ", ".join(oneclick.software_nummern(info)) or "?"})
         del daten
     for e, gid in zip(eintraege, gruppieren(abdruecke)):
         e["gruppe"] = gid
@@ -3085,7 +3163,7 @@ def eigenes_file():
     for opt, l in loesungen.items():
         (ordner / f"loesung_{opt}.bin").write_bytes(l["daten"])
     e = {"id": eid, "datei": PurePosixPath(datei.filename.replace("\\", "/")).name[:150] or "datei.bin",
-         "ecu": ", ".join(info["ecu"]) or "?", "software": ", ".join(info["bosch_sw"] + info["vag_teilenr"]) or "?",
+         "ecu": ", ".join(info["ecu"]) or "?", "software": ", ".join(oneclick.software_nummern(info)) or "?",
          "angebot": {opt: {"quelle": l["quelle"], "art": l["art"]}
                      for opt, l in sorted(loesungen.items(), key=lambda t: oneclick.reihen_index(t[0]))}}
     json_speichern(ordner / "info.json", e)
@@ -3205,7 +3283,7 @@ def loesungen_verwalten():
 def auto_name(ori: bytes, dateiname: str) -> str:
     """Archivname ohne Eingabe: ECU + Software-/Teilenummer, sonst der Dateiname."""
     info = oneclick.erkenne(ori)
-    teile = info["ecu"][:1] + (info["bosch_sw"] + info["vag_teilenr"])[:1]
+    teile = info["ecu"][:1] + oneclick.software_nummern(info)[:1]
     if not teile:
         stamm = Path(dateiname or "").stem
         for muster in [oneclick.MUSTER_ORI, re.compile(r"orginal|serie|stock")]:
@@ -3873,6 +3951,7 @@ input[type=text],input[type=password],input[type=number],input[type=email],input
 border:1px solid var(--rand);background:rgba(255,255,255,.06);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .2s,box-shadow .2s}
 input:focus,textarea:focus{outline:none;border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.25)}
 input::placeholder,textarea::placeholder{color:#6e6e73}
+.ecu-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.ecu-form input[type=text]{width:auto;flex:1;min-width:150px;max-width:260px;margin:0;padding:8px 12px;font-size:14px}
 input[type=checkbox]{accent-color:var(--akzent);width:18px;height:18px}
 .drop{position:relative;display:block;border-radius:20px;padding:48px 24px;text-align:center;color:var(--leise);cursor:pointer;margin-bottom:20px;
 background:rgba(255,255,255,.03);border:1.5px dashed var(--rand2);transition:all .25s}
@@ -4137,7 +4216,12 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 {% if a.typ == 'anfrage' %}{% for feld, titel, _ in fahrzeug_felder %}<tr><th>{{ titel }}</th><td>{{ a.fahrzeug.get(feld) or '–' }}</td></tr>{% endfor %}
 <tr><th>Gewünscht</th><td><b>{{ optionen[a.option] }}</b></td></tr>
 {% if a.nachricht %}<tr><th>Nachricht</th><td style="white-space:pre-wrap">{{ a.nachricht }}</td></tr>{% endif %}{% endif %}
-<tr><th>ECU</th><td>{{ ecu_text(a) }}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
+<tr><th>ECU</th><td>{{ ecu_text(a) }}{% if a.ecu_gemerkt %} <span class="leise" style="font-size:13px">(von dir zugeordnet)</span>{% endif %}
+{% if a.ecu in (None, '', '?') or a.ecu_gemerkt %}<form method="post" action="{{ url_for('ecu_zuordnen') }}" class="ecu-form">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="auftrag" value="{{ a.id }}">
+<input type="text" name="ecu" value="{{ a.ecu if a.ecu_gemerkt else (a.ecu_kunde or '') }}" placeholder="Steuergerät, z. B. Delco E98" maxlength="40" list="ecu-namen" aria-label="Steuergerät zuordnen">
+<button class="btn grau klein">{{ 'Ändern' if a.ecu_gemerkt else 'Zuordnen & merken' }}</button></form>
+<datalist id="ecu-namen">{% for n in ecu_namen() %}<option value="{{ n }}">{% endfor %}</datalist>{% endif %}</td></tr><tr><th>Software</th><td>{{ a.software }}</td></tr>
 <tr><th>Kunde</th><td>{% if a.konto %}<a href="{{ url_for('admin_kunden') }}#k-{{ a.konto }}"><b>{{ konto_name(a.konto) }}</b></a>{% else %}<span class="leise">ohne Konto (von vor der Anmeldung)</span>{% endif %}</td></tr>
 <tr><th>Kontakt</th><td>{% if a.konto %}<b>{{ konto_name(a.konto) }}</b>{% if a.kunde and a.kunde != '–' %}<br><span class="leise">{{ a.kunde }}</span>{% endif %}{% else %}{{ a.kunde }}{% endif %}</td></tr>
 {% if a.art and a.typ != 'anfrage' %}<tr><th>Treffer</th><td>{% if a.art == 'softwarenummer' %}<span class="status s-WARTET">Prüfen</span>{% else %}<span class="status a-AUTOMATISCH">100 %</span>{% endif %} {{ art_text.get(a.art, a.art) }}</td></tr>{% endif %}
@@ -4387,13 +4471,27 @@ Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nich
 (dort hochladen) und den anderen löschen.</p>{% endif %}
 {% if eintraege %}<div class="tabelle"><table><tr><th>Name</th><th>ECU</th><th>Software</th><th>Optionen</th><th>Größe</th><th></th></tr>
 {% for e in eintraege %}<tr><td>{{ e.name }}{% if e.name in doppelt %}
-<span class="status s-WARTET" title="Gleiches Original wie: {{ doppelt[e.name]|join(', ') }}">doppelt: {{ doppelt[e.name]|join(', ') }}</span>{% endif %}</td><td>{{ e.ecu|join(', ') or '?' }}</td>
-<td>{{ (e.bosch_sw + e.vag_teilenr)|join(', ') or '?' }}</td>
+<span class="status s-WARTET" title="Gleiches Original wie: {{ doppelt[e.name]|join(', ') }}">doppelt: {{ doppelt[e.name]|join(', ') }}</span>{% endif %}</td><td>{{ e.ecu|join(', ') or '?' }}
+{% if not e.ecu or e.ecu_gemerkt %}<form method="post" action="{{ url_for('ecu_zuordnen') }}" class="ecu-form">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="archiv" value="{{ e.name }}">
+<input type="text" name="ecu" value="{{ e.ecu|join(', ') if e.ecu_gemerkt else '' }}" placeholder="z. B. Delco E98" maxlength="40" list="ecu-namen" aria-label="Steuergerät zuordnen" style="min-width:110px">
+<button class="btn grau klein" title="Steuergerät zuordnen und für Files mit dieser Software merken">✓</button></form>{% endif %}</td>
+<td>{{ (e.bosch_sw + e.vag_teilenr + (e.conti_nr or []))|join(', ') or '?' }}</td>
 <td>{% for o in e.optionen %}{{ optionen[o] }}{{ ', ' if not loop.last }}{% else %}<span class="leise">nur Original</span>{% endfor %}</td>
 <td>{{ (e.groesse / 1024)|round|int }} KB</td>
 <td><form method="post" action="{{ url_for('archiv_loeschen', name=e.name) }}" class="inline" onsubmit="return confirm('{{ e.name }} wirklich löschen?')">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein">Löschen</button></form></td></tr>
-{% endfor %}</table></div>{% else %}<p class="leise">Noch leer.</p>{% endif %}</div>
+{% endfor %}</table></div>{% else %}<p class="leise">Noch leer.</p>{% endif %}
+<datalist id="ecu-namen">{% for n in ecu_namen() %}<option value="{{ n }}">{% endfor %}</datalist></div>
+{% set gemerkt = ecu_gruppen() %}<div class="karte" id="ecu"><h2>Steuergeräte von Hand zugeordnet</h2>
+<p class="leise" style="margin-top:-6px">Erkennt das Programm ein Steuergerät nicht selbst, ordnest du es beim Auftrag oder oben in der Tabelle zu.
+Gemerkt wird es über die Software-/Teilenummern im File – jedes weitere File mit diesen Nummern wird dann automatisch so erkannt, auch beim Kunden.</p>
+{% if gemerkt %}<div class="tabelle"><table><tr><th>Steuergerät</th><th>Nummern im File</th><th></th></tr>
+{% for name, nummern in gemerkt.items() %}<tr><td><b>{{ name }}</b></td><td style="overflow-wrap:anywhere">{{ nummern|join(', ') }}</td>
+<td><form method="post" action="{{ url_for('ecu_zuordnen') }}" class="inline" onsubmit="return confirm('Zuordnung „{{ name }}“ vergessen?')">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="vergessen" value="{{ name }}">
+<button class="btn grau klein">Vergessen</button></form></td></tr>{% endfor %}</table></div>
+{% else %}<p class="leise">Noch keine.</p>{% endif %}</div>
 <script>
 const d=document.getElementById('drop'),i=document.getElementById('zip'),t=document.getElementById('dropText');
 const zeig=()=>{if(i.files.length)t.innerHTML='<b>'+i.files[0].name+'</b><br>'+(i.files[0].size/1048576).toFixed(1)+' MB'};
