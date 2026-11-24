@@ -57,6 +57,7 @@ jobs:
           grep -q '"ui": true' selbsttest.json
           grep -q '"api": true' selbsttest.json
           grep -q '"kennung": true' selbsttest.json
+          grep -q '"ziehen": true' selbsttest.json
           grep -q '"https": true' selbsttest.json
 
       - name: ZIP erzeugen und bereitstellen

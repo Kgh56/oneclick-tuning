@@ -4162,7 +4162,42 @@ document.querySelectorAll('table').forEach(function(t){
   for(var r=1;r<t.rows.length;r++) for(var c=0;c<t.rows[r].cells.length;c++)
     t.rows[r].cells[c].setAttribute('data-label',(kopf.cells[c]||{}).textContent||'');
 });
-
+// Mac-Admin-App: WebKit gibt hineingezogene Dateien nicht immer an die Seite weiter (wie im Kunden-Programm).
+// Darum hier fuer ALLE Datei-Felder: erst selbst einlesen, sonst die Datei ueber die App aus der Drag-Ablage holen.
+(function(){
+  if(!/OneClickAdmin\//.test(navigator.userAgent)) return;   // im normalen Browser klappt Ziehen von selbst
+  function feld(ziel){
+    if(!ziel||!ziel.closest) return null;
+    if(ziel.matches('input[type=file]')) return ziel;
+    var box=ziel.closest('label,.drop,form');
+    var f=box&&box.querySelectorAll('input[type=file]');
+    return f&&f.length===1?f[0]:null;   // nur eindeutig: genau ein Datei-Feld
+  }
+  async function holen(e){
+    var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];   // vor jedem await lesen
+    if(f){ try{ var b=await f.arrayBuffer(); if(b.byteLength) return new File([b],f.name,{type:f.type}); }catch(x){} }
+    var api=window.pywebview&&window.pywebview.api;
+    if(api&&api.gezogene_datei){
+      try{
+        var d=await api.gezogene_datei();
+        if(d&&d.fehler){ alert(d.fehler); return 'fehler'; }
+        if(d&&d.daten){ var roh=atob(d.daten),u=new Uint8Array(roh.length); for(var i=0;i<roh.length;i++) u[i]=roh.charCodeAt(i); return new File([u],d.name); }
+      }catch(x){}
+    }
+    return null;
+  }
+  document.addEventListener('dragover',function(e){ if(feld(e.target)) e.preventDefault(); },true);
+  document.addEventListener('drop',async function(e){
+    var input=feld(e.target); if(!input) return;
+    e.preventDefault(); e.stopPropagation();
+    document.querySelectorAll('.drop.aktiv,label.aktiv').forEach(function(x){x.classList.remove('aktiv');});
+    var f=await holen(e);
+    if(f==='fehler') return;
+    if(!f){ alert('Die Datei wurde nicht übernommen. Bitte nochmal ziehen oder auf das Feld klicken und die Datei auswählen.'); return; }
+    var dt=new DataTransfer(); dt.items.add(f); input.files=dt.files;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  },true);
+})();
 </script>
 </body></html>""",
 

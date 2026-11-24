@@ -10,6 +10,7 @@ zeigt dann das App-Design (Seitenleiste). Neue Auftraege/Ticket-Antworten kommen
 Bauen macht GitHub automatisch: .github/workflows/mac-admin.yml
 """
 
+import base64
 import json
 import os
 import ssl
@@ -21,6 +22,7 @@ from pathlib import Path
 
 SERVER = os.environ.get("ONECLICK_SERVER", "https://oneclicksoulution.gh-mapping.de").rstrip("/")
 NAME = "OneClick Admin"
+MAX_ZIEHEN = 100 * 1024 * 1024   # groessere Dateien (z. B. riesige Archiv-ZIPs) per Klick auswaehlen
 
 
 def build_nummer() -> int:
@@ -68,6 +70,28 @@ class Bruecke:
 
     def neu_laden(self):
         self._fenster.load_url(SERVER + "/admin")
+
+    def gezogene_datei(self):
+        """Zuletzt ins Fenster gezogene Datei direkt aus der Drag-Ablage von macOS lesen (WebKit gibt sie der
+        Seite nicht immer mit - wie im Kunden-Programm). {"name", "daten" (Base64)}, {"fehler"} oder None."""
+        if sys.platform != "darwin":
+            return None
+        try:
+            import AppKit
+            name = getattr(AppKit, "NSPasteboardNameDrag", None) or AppKit.NSDragPboard
+            ablage = AppKit.NSPasteboard.pasteboardWithName_(name)
+            urls = ablage.readObjectsForClasses_options_(
+                [AppKit.NSURL], {AppKit.NSPasteboardURLReadingFileURLsOnlyKey: True}) or []
+        except Exception:
+            return None
+        for url in urls:
+            pfad = url.path()
+            if pfad and os.path.isfile(pfad):
+                if os.path.getsize(pfad) > MAX_ZIEHEN:
+                    return {"fehler": "Die Datei ist zu groß zum Hineinziehen. Bitte auf das Feld klicken und die Datei auswählen."}
+                with open(pfad, "rb") as f:
+                    return {"name": os.path.basename(pfad), "daten": base64.b64encode(f.read()).decode()}
+        return None
 
 
 OFFLINE = """<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
@@ -119,6 +143,7 @@ def selbsttest(fenster, ergebnis_datei: str):
                 break
             time.sleep(1)
         erg["kennung"] = "OneClickAdmin/" in str(fenster.evaluate_js("navigator.userAgent"))
+        erg["ziehen"] = bool(fenster.evaluate_js("!!(window.pywebview.api && window.pywebview.api.gezogene_datei)"))
         erg["version"] = VERSION
         erg["https"] = server_erreichbar(2)   # Server-Check mit Zertifikatspruefung (sonst "Keine Verbindung")
     finally:
