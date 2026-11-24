@@ -3426,9 +3426,7 @@ def video_api_eintrag(v: dict) -> dict:
     erg = v.get("ergebnis")
     return {"id": v["id"], "status": v["status"], "wunsch": v["wunsch"],
             "zeit": datetime.fromtimestamp(v["zeit"]).isoformat(timespec="seconds"),
-            "clips": [{k: c[k] for k in ("nr", "name", "groesse", "fertig")}
-                      | {"hochgeladen": c["groesse"] if c["fertig"] else dateigroesse(clip_pfad(v, c, teil=True))}
-                      for c in v["clips"]],
+            "clips": [{k: c[k] for k in ("nr", "name", "groesse", "fertig")} for c in v["clips"]],
             "ergebnis": {"name": erg["name"], "groesse": erg["groesse"]} if erg else None,
             "abgeholt": bool(v.get("abgeholt")),
             "loescht_um": datetime.fromtimestamp(video_loescht_um(v)).isoformat(timespec="seconds")}
@@ -4933,36 +4931,18 @@ eingabe.addEventListener('change',zeigen);
 ['dragleave','drop'].forEach(function(e){drop.addEventListener(e,function(){drop.classList.remove('aktiv')})});
 drop.addEventListener('drop',function(ev){ev.preventDefault();eingabe.files=ev.dataTransfer.files;zeigen();});
 function warten(ms){return new Promise(function(ok){setTimeout(ok,ms)})}
-// XMLHttpRequest statt fetch: meldet den Fortschritt auch waehrend eines 8-MB-Stuecks
-function senden(url,fd,fortschritt){
-  return new Promise(function(ok,nein){
-    var x=new XMLHttpRequest(); x.open('POST',url);
-    if(fortschritt) x.upload.onprogress=function(e){fortschritt(e.loaded)};
-    x.onload=function(){var d={};
-      try{d=JSON.parse(x.responseText)}catch(e){if(x.status>=200&&x.status<300)d={fehler:'Bitte neu anmelden und nochmal versuchen.',abbruch:true}}
-      d.code=x.status;ok(d)};
-    x.onerror=x.ontimeout=x.onabort=function(){nein(new Error('Verbindung'))};
-    x.send(fd);});}
-// Geschwindigkeit ueber die letzten 40 Sekunden gemittelt, daraus die Restzeit
-var proben=[], angezeigt=0, titel=document.title;
-function tempo(b){return b>=1048576?(b/1048576).toFixed(1).replace('.',',')+' MB/s':Math.max(1,Math.round(b/1024))+' KB/s'}
-function dauer(s){var m=Math.ceil(s/60); if(m<=1)return 'unter 1 Min.'; if(m<60)return 'ca. '+m+' Min.';
-  var h=Math.floor(m/60); m=m%60; return 'ca. '+h+' Std.'+(m?' '+m+' Min.':'')}
+async function senden(url,fd){
+  var r=await fetch(url,{method:'POST',body:fd,credentials:'same-origin'}), d={};
+  try{d=await r.json()}catch(e){if(r.ok)d={fehler:'Bitte neu anmelden und nochmal versuchen.',abbruch:true}}
+  d.code=r.status;return d;}
 function anzeigen(fertig,gesamt){
-  fertig=Math.max(angezeigt,Math.min(fertig,gesamt)); angezeigt=fertig;   // bei neuem Versuch nicht zurueckspringen
-  var p=gesamt?Math.floor(fertig*100/gesamt):100, jetzt=Date.now();
-  if(!proben.length||jetzt-proben[proben.length-1][0]>=1000) proben.push([jetzt,fertig]);
-  while(proben.length>2&&jetzt-proben[1][0]>40000) proben.shift();
-  var zeile=gr(fertig)+' von '+gr(gesamt)+' ('+p+' %)', a=proben[0], z=proben[proben.length-1], s=(z[0]-a[0])/1000;
-  if(fertig<gesamt){var b=s>0?(z[1]-a[1])/s:0;
-    zeile+=s>=5&&b>0?' · '+tempo(b)+' · noch '+dauer((gesamt-fertig)/b):' · Restzeit wird berechnet …';}
-  balken.style.width=p+'%'; text.textContent=zeile; document.title=p+' % hochgeladen';}
+  balken.style.width=(gesamt?Math.floor(fertig*100/gesamt):100)+'%';
+  text.textContent=gr(fertig)+' von '+gr(gesamt)+' hochgeladen ('+(gesamt?Math.floor(fertig*100/gesamt):100)+' %)';}
 async function clipHochladen(id,c,datei,vorher,gesamt){
   var start=c.start, fehler=0;
   while(start<datei.size){
-    var teil=datei.slice(start,start+TEIL), basis=vorher+start;
-    var fd=new FormData(); fd.append('csrf',csrf); fd.append('start',start); fd.append('teil',teil,'teil');
-    var d; try{d=await senden('/admin/video/'+id+'/clip/'+c.nr,fd,function(n){anzeigen(basis+Math.min(n,teil.size),gesamt)})}catch(e){d={code:0}}
+    var fd=new FormData(); fd.append('csrf',csrf); fd.append('start',start); fd.append('teil',datei.slice(start,start+TEIL),'teil');
+    var d; try{d=await senden('/admin/video/'+id+'/clip/'+c.nr,fd)}catch(e){d={code:0}}
     if(d.abbruch) throw new Error(d.fehler);
     if((d.code===200||d.code===409)&&typeof d.start==='number'&&d.start!==start){start=d.start;fehler=0;anzeigen(vorher+start,gesamt);continue}
     if(d.code===200&&d.fertig) return;
@@ -4977,7 +4957,6 @@ form.addEventListener('submit',async function(ev){
   ev.preventDefault(); if(laeuft) return;
   if(!dateien.length){alert('Bitte zuerst Videos auswählen.');return}
   laeuft=true; knopf.disabled=true; box.hidden=false; text.textContent='Upload startet …'; wachHalten();
-  proben=[]; angezeigt=0; box.scrollIntoView({behavior:'smooth',block:'center'});
   try{
     var fd=new FormData(); fd.append('csrf',csrf); fd.append('wunsch',wunsch.value);
     fd.append('dateien',JSON.stringify(dateien.map(function(f){return {name:f.name,groesse:f.size}})));
@@ -4990,7 +4969,7 @@ form.addEventListener('submit',async function(ev){
     }
     laeuft=false; text.textContent='Fertig hochgeladen. Sag Claude jetzt im Chat Bescheid.';
     setTimeout(function(){location.reload()},2500);
-  }catch(e){text.textContent=e.message; knopf.disabled=false; document.title=titel}
+  }catch(e){text.textContent=e.message; knopf.disabled=false}
   finally{laeuft=false; if(wach){wach.release().catch(function(){}); wach=null}}
 });
 // Seite neu laden, sobald Claude fertig ist (nicht waehrend eines Uploads)
