@@ -61,7 +61,8 @@ def liste(server: str, als_json: bool = False):
     if not videos:
         print("Keine Videos.")
     for v in videos:
-        clips = ", ".join(f"{c['nr']}: {c['name']} ({c['groesse'] / 1024 ** 2:.0f} MB{'' if c['fertig'] else ', unvollständig'})"
+        clips = ", ".join(f"{c['nr']}: {c['name']} ({c['groesse'] / 1024 ** 2:.0f} MB"
+                          + ("" if c["fertig"] else f", erst {c.get('hochgeladen', 0) * 100 // c['groesse']} % da") + ")"
                           for c in v["clips"]) or "keine Clips"
         print(f"{v['id']}  {v['status']:7}  {v['zeit']}  löscht {v['loescht_um']}\n"
               f"    Wunsch: {v['wunsch'] or '-'}\n    Clips: {clips}"

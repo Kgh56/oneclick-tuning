@@ -83,6 +83,9 @@ class VideoTests(Basis):
         self.assertEqual(r.status_code, 200)
         vid = r.json["id"]
         self.assertEqual(self.stueck(vid, 1, 0, clip1[:1000]).json["start"], 1000)
+        # Stand fuer Claude: wie viel ist schon angekommen
+        stand = self.claude(self.schluessel()).get("/api/video").json["videos"][0]["clips"]
+        self.assertEqual([(c["hochgeladen"], c["fertig"]) for c in stand], [(1000, False), (0, False)])
         # Falscher Startpunkt: nichts wird angehaengt, Antwort nennt den richtigen
         r = self.stueck(vid, 1, 0, clip1[:1000])
         self.assertEqual((r.status_code, r.json["start"]), (409, 1000))
