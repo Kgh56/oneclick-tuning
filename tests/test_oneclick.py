@@ -352,6 +352,19 @@ class WebTests(Basis):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data[:2], b"PK")
 
+    def test_download_name_mit_firma(self):
+        """Kunden bekommen: GH-MAPPING_<ihr Dateiname>_<Loesung>.bin - nie den Namen aus dem Archiv."""
+        aid = self.hochladen(self.golf, "Golf7_ORI.bin")
+        self.bestellen(aid, "stage1")
+        A.entscheide(aid, True, wer="test")
+        kopf = self.laden(aid).headers["Content-Disposition"]
+        self.assertIn("GH-MAPPING_Golf7_ORI_stage1.bin", kopf)
+        n = lambda datei, option="stage1": A.download_dateiname({"datei": datei, "option": option})
+        self.assertEqual(n("GH-MAPPING_Golf7_ORI_stage1.bin", "original"), "GH-MAPPING_Golf7_ORI_stage1_original.bin")
+        self.assertEqual(n("gh-mapping golf.ori"), "GH-MAPPING_golf_stage1.bin")
+        self.assertEqual(n("GH-MAPPING.bin"), "GH-MAPPING_file_stage1.bin")
+        self.assertEqual(n("Golf Prüfung.bin", "stage1+startstopp"), "GH-MAPPING_Golf Prüfung_stage1+startstopp.bin")
+
     def test_eigenes_file_kostenlos_fuer_admin(self):
         a = self.admin()
         self.assertEqual(self.kunde.get("/admin/eigenes-file").status_code, 302)   # nur Admin
@@ -1289,7 +1302,7 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["status"], "FREIGEGEBEN")
         r = self.laden(aid)
         self.assertEqual(r.data, bytes(fertig))
-        self.assertIn("passat_stage1+popsbangs.bin", r.headers["Content-Disposition"])
+        self.assertIn("GH-MAPPING_passat_stage1+popsbangs.bin", r.headers["Content-Disposition"])
 
     def test_anfrage_ablehnen_und_andere_loesung(self):
         # Auch wenn es Treffer gibt, kann der Kunde etwas anderes anfragen

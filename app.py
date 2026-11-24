@@ -1938,9 +1938,17 @@ def download(aid):
         auftrag = stripe_pruefen(auftrag)
         if zahlung_offen(auftrag):
             return jsonify(fehler="Bitte zuerst bezahlen – danach kannst du das File herunterladen."), 402
-    stamm = Path(auftrag["datei"]).stem
-    return send_file(AUFTRAEGE / aid / "ergebnis.bin", as_attachment=True,
-                     download_name=f"{stamm}_{auftrag['option']}.bin")
+    return send_file(AUFTRAEGE / aid / "ergebnis.bin", as_attachment=True, download_name=download_dateiname(auftrag))
+
+
+DOWNLOAD_PRAEFIX = "GH-MAPPING"   # steht vor jedem File, das Kunden herunterladen
+
+
+def download_dateiname(auftrag: dict) -> str:
+    """z. B. GH-MAPPING_Golf7_ORI_stage1.bin - Name des Kunden-Originals, davor die Firma, dahinter die Loesung.
+    Laedt ein Kunde ein File von uns wieder hoch (z. B. fuers Original), kommt die Firma nicht doppelt davor."""
+    stamm = re.sub(rf"^(?:{re.escape(DOWNLOAD_PRAEFIX)}[ _-]*)+", "", Path(auftrag["datei"]).stem, flags=re.I) or "file"
+    return f"{DOWNLOAD_PRAEFIX}_{stamm}_{auftrag['option']}.bin"
 
 
 # ---------------------------------------------------------------------------
