@@ -1187,6 +1187,357 @@ button.hilfe svg{width:15px;height:15px}
 .pr-k.neu{border-color:var(--blau);box-shadow:0 0 0 3px rgba(47,107,255,.25);background:rgba(47,107,255,.10)}
 .pr-hinweise{margin-top:20px;display:grid;gap:8px;font-size:14px}
 .pr-hinweise p{margin:0}
+
+/* ===================== PREMIUM: Glas, Licht und Tiefe ===================== */
+@property --p-w{syntax:"<angle>";inherits:false;initial-value:0deg}
+:root{--p-bg:#04070f;--p-blau:#3d7bff;--p-blau2:#7aa6ff;--p-cyan:#3fd8ff;--p-violett:#8b6bff;--p-gruen:#2fe28a;--p-orange:#ffaa45;--p-rot:#ff5d73;
+  --p-text:#eef3ff;--p-leise:#8d9dc0;--p-linie:rgba(140,175,255,.13);--p-linie2:rgba(140,175,255,.26);
+  --p-glas:linear-gradient(180deg,rgba(24,34,62,.66),rgba(11,17,33,.74));
+  --p-rand:linear-gradient(150deg,rgba(130,170,255,.5),rgba(130,170,255,.07) 32%,rgba(130,170,255,.04) 62%,rgba(90,210,255,.32));
+  --p-verlauf:linear-gradient(120deg,#3d7bff,#6b62ff 55%,#3fd8ff);--p-feder:cubic-bezier(.2,.8,.2,1);
+  --nx-bg:var(--p-bg);--nx-text:var(--p-text);--nx-leise:var(--p-leise);--nx-rand:var(--p-linie);--nx-rand2:var(--p-linie2);
+  --nx-blau:var(--p-blau);--nx-blau2:var(--p-blau2);--nx-gruen:var(--p-gruen);
+  --i-blitz:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2 4 14h7l-1 8 9-12h-7z'/></svg>");
+  --i-rakete:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 15c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2 2 0 0 0-2.9-.1z'/><path d='m12 15-3-3a22 22 0 0 1 2-4A13 13 0 0 1 22 2c0 2.7-.8 7.5-6 11a22 22 0 0 1-4 2z'/><path d='M9 12H4s.5-3 2-4c1.6-1.1 5 0 5 0M12 15v5s3-.5 4-2c1.1-1.6 0-5 0-5'/></svg>");
+  --i-power:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v9'/><path d='M6.3 6.3a8 8 0 1 0 11.4 0'/></svg>");
+  --i-tacho:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 18a9 9 0 1 1 17 0'/><path d='m12 15 4.5-5.5'/><circle cx='12' cy='15.5' r='1.3'/></svg>");
+  --i-flamme:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22a7 7 0 0 0 7-7c0-4-3-6.5-4-9-1 2-2 3-3 3.5C12 7 11 4.5 9 2.5 9 7 5 9.5 5 15a7 7 0 0 0 7 7z'/></svg>");
+  --i-flagge:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 22V4'/><path d='M5 4h13l-2.5 4.5L18 13H5'/></svg>");
+  --i-zurueck:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 3-6.7'/><path d='M3 4v4h4'/></svg>");
+  --i-regler:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1'/><circle cx='15' cy='6' r='2'/><circle cx='9' cy='12' r='2'/><circle cx='17' cy='18' r='2'/></svg>")}
+html,body{background:var(--p-bg)}
+/* Hintergrund: Lichtschein + feines Raster (bewusst ohne Dauer-Animation: schont Akku und Grafikkarte) */
+.app{background:none!important;isolation:isolate}
+.app::before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:radial-gradient(42% 40% at 84% 4%,rgba(61,123,255,.30),transparent 70%),radial-gradient(38% 42% at 4% 98%,rgba(139,107,255,.20),transparent 70%),
+    radial-gradient(28% 30% at 55% 48%,rgba(63,216,255,.06),transparent 70%),linear-gradient(180deg,#060b18,#03060d)}
+.app::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(rgba(140,175,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(140,175,255,.045) 1px,transparent 1px);background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(ellipse 75% 65% at 58% 22%,#000 18%,transparent 75%);mask-image:radial-gradient(ellipse 75% 65% at 58% 22%,#000 18%,transparent 75%)}
+/* Glas-Flaechen mit Lichtkante */
+.karte,.seite,.analyse>div,#konto-dialog .karte,#zahl-dialog .karte,#beta-dialog .karte{
+  background:var(--p-glas) padding-box,var(--p-rand) border-box!important;border:1px solid transparent!important;border-radius:20px;
+  -webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -30px rgba(0,0,0,.85)}
+.karte:hover{border-color:transparent}
+.karte h2,#meine h2,#tk-liste-karte h2{font-size:15px;font-weight:800;letter-spacing:.01em;color:#fff}
+/* Kopfleiste */
+header.nx-top{position:relative;z-index:30;background:linear-gradient(180deg,rgba(7,12,26,.88),rgba(7,12,26,.62));border-bottom:1px solid rgba(140,175,255,.1);
+  -webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%)}
+header.nx-top::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent 4%,rgba(122,166,255,.55) 35%,rgba(63,216,255,.55) 65%,transparent 96%)}
+.marke{border:1px solid transparent;border-radius:13px;
+  background:linear-gradient(180deg,rgba(28,40,74,.9),rgba(12,19,38,.9)) padding-box,linear-gradient(120deg,rgba(122,166,255,.85),rgba(139,107,255,.45) 50%,rgba(63,216,255,.8)) border-box;
+  box-shadow:0 10px 30px -10px rgba(61,123,255,.6)}
+.marke .logo{filter:drop-shadow(0 0 10px rgba(91,141,255,.75))}
+.marke .glanz{font-weight:800;letter-spacing:.01em;background:linear-gradient(100deg,#fff 0,#fff 42%,#9cc3ff 50%,#fff 58%,#fff 100%);background-size:260% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:p-schimmer 7s linear infinite}
+@keyframes p-schimmer{0%{background-position:130% 0}100%{background-position:-130% 0}}
+.nx-pille{border-radius:999px;padding:7px 14px;background:rgba(255,255,255,.035);border:1px solid var(--p-linie);color:#dce6fb}
+.nx-pille>i{background:var(--p-gruen);box-shadow:0 0 0 0 rgba(47,226,138,.6);animation:p-puls 2.4s infinite}
+@keyframes p-puls{0%{box-shadow:0 0 0 0 rgba(47,226,138,.55)}70%{box-shadow:0 0 0 8px rgba(47,226,138,0)}100%{box-shadow:0 0 0 0 rgba(47,226,138,0)}}
+.nx-update:hover,.nx-glocke:hover{background:rgba(61,123,255,.14);border-color:var(--p-linie2)}
+.nx-glocke b{background:var(--p-verlauf);box-shadow:0 0 10px rgba(61,123,255,.8)}
+.sprachwahl{border-radius:999px;background:rgba(255,255,255,.035);border-color:var(--p-linie)}
+.sprachwahl button{border-radius:999px}
+.sprachwahl button.an{background:var(--p-verlauf);box-shadow:0 4px 14px rgba(61,123,255,.55)}
+/* Menue links */
+main{gap:20px;padding:18px 20px 10px}
+.seite{padding:16px 12px}
+.nx-menukopf{border:0;padding:2px 10px 6px;margin:0}
+.nx-menukopf .nx-quadrat{display:none}
+.nx-menukopf b{font-size:11px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#7d90ba}
+.seite-nav{gap:6px}
+.seite-nav button,.seite-nav a{height:52px;padding:0 12px;border:1px solid transparent;background:transparent;color:#c7d3ec;font-weight:600;position:relative;overflow:hidden;
+  transition:background .25s,border-color .25s,color .25s,transform .25s var(--p-feder)}
+.seite-nav button svg,.seite-nav a svg{width:36px;height:36px;padding:8px;flex:none;border-radius:11px;background:rgba(140,175,255,.07);border:1px solid rgba(140,175,255,.12);color:#9db4e6;transition:all .25s}
+.seite-nav button:hover,.seite-nav a:hover{background:rgba(61,123,255,.09);border-color:rgba(140,175,255,.15);color:#fff;transform:translateX(2px)}
+.seite-nav button:hover svg{background:rgba(61,123,255,.2);color:#d6e4ff;border-color:rgba(122,166,255,.4)}
+.seite-nav button.an{background:linear-gradient(90deg,rgba(61,123,255,.30),rgba(61,123,255,.06) 75%,transparent);border-color:rgba(122,166,255,.32);color:#fff;transform:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 12px 30px -16px rgba(61,123,255,.9)}
+.seite-nav button.an svg{background:var(--p-verlauf);border-color:rgba(255,255,255,.18);color:#fff;box-shadow:0 6px 18px rgba(61,123,255,.55)}
+.seite-nav button.an::after{content:"";position:absolute;left:0;top:13px;bottom:13px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(#9cc3ff,#3fd8ff);box-shadow:0 0 12px rgba(122,166,255,.9)}
+.nx-badge{background:var(--p-verlauf);box-shadow:0 0 12px rgba(61,123,255,.8)}
+.nx-konto{background:rgba(255,255,255,.035);border:1px solid var(--p-linie);border-radius:14px}
+.nx-konto .nx-quadrat{border-radius:50%;background:var(--p-verlauf);box-shadow:0 0 0 3px rgba(61,123,255,.18),0 6px 16px rgba(61,123,255,.5)}
+.nx-konto button:hover{border-color:rgba(255,93,115,.6);color:#ff9aa8}
+.nx-zaehler{background:rgba(255,255,255,.03);border:1px solid var(--p-linie);border-radius:14px}
+.nx-zaehler .s-kopf svg{width:26px;height:26px;padding:5px;border-radius:8px;background:rgba(61,123,255,.14);color:#9cc3ff}
+.nx-zaehler .stat.gelb .s-kopf svg{background:rgba(255,170,69,.14);color:var(--p-orange)}
+.nx-zaehler .stat.gruen .s-kopf svg{background:rgba(47,226,138,.14);color:var(--p-gruen)}
+.nx-balken{height:6px;background:rgba(140,175,255,.1)}
+.nx-balken i{background:linear-gradient(90deg,#2fe28a,#3fd8ff);box-shadow:0 0 12px rgba(47,226,138,.7)}
+/* Hauptflaeche */
+.rahmen-kopf{border-bottom:1px solid var(--p-linie)}
+.rahmen-kopf #titel{font-size:22px;background:linear-gradient(90deg,#fff 0,#e3ecff 45%,#8fb6ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn.zurueck{background:rgba(255,255,255,.04);border:1px solid var(--p-linie2);border-radius:11px}
+.btn.zurueck:hover{background:rgba(61,123,255,.14);border-color:rgba(122,166,255,.55)}
+.unter-titel{color:var(--p-leise)}
+/* Knoepfe */
+.btn{border-radius:12px;background:linear-gradient(180deg,#4a86ff,#2b5fe6);border:1px solid rgba(160,195,255,.45);color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 10px 24px -10px rgba(61,123,255,.95);transition:transform .2s var(--p-feder),box-shadow .2s,background .2s,filter .2s}
+.btn:hover{background:linear-gradient(180deg,#5893ff,#3268ee);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 14px 30px -10px rgba(61,123,255,1)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn:disabled{filter:saturate(.4) brightness(.8);transform:none;cursor:default}
+.btn.grau{background:rgba(255,255,255,.04);border:1px solid var(--p-linie2);color:#dce6fb;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.btn.grau:hover{background:rgba(61,123,255,.14);border-color:rgba(122,166,255,.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 24px -14px rgba(61,123,255,.9)}
+.btn.gruen{background:linear-gradient(180deg,#33dd8c,#12a85c);border-color:rgba(130,255,195,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 10px 24px -10px rgba(47,226,138,.9)}
+.btn.gruen:hover{background:linear-gradient(180deg,#45e69a,#16b866)}
+.btn.bezahlen,#zd-los{background:linear-gradient(180deg,#ffb54d,#ff8a1f);border-color:rgba(255,215,160,.6);color:#1b1000;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 10px 26px -10px rgba(255,150,40,.95)}
+.btn.bezahlen:hover,#zd-los:hover{background:linear-gradient(180deg,#ffc266,#ff972f)}
+#zd-los:disabled{background:rgba(255,255,255,.06);border-color:var(--p-linie2);color:var(--p-leise);box-shadow:none}
+#senden{background:var(--p-verlauf)!important;border:1px solid rgba(190,215,255,.5)!important;position:relative;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 12px 30px -10px rgba(91,107,255,.95)!important}
+#senden::after{content:"";display:block!important;position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);
+  transform:translateX(-130%);animation:p-glanz 3.8s ease-in-out infinite}
+@keyframes p-glanz{0%,55%{transform:translateX(-130%)}100%{transform:translateX(130%)}}
+/* Eingabefelder */
+.feld,.suche input{background:rgba(6,10,22,.66)!important;border:1px solid rgba(140,175,255,.2)!important;border-radius:12px!important;clip-path:none!important;color:var(--p-text)}
+.feld:focus,.suche input:focus{border-color:rgba(122,166,255,.8)!important;box-shadow:0 0 0 4px rgba(61,123,255,.18),0 0 26px -8px rgba(61,123,255,.8)!important;outline:none}
+.feld::placeholder,.suche input::placeholder{color:#5f7099}
+/* Upload: leuchtender Rahmen, schwebender Chip mit Umlaufbahnen */
+.zone{border:0!important;clip-path:none!important;border-radius:22px!important;background:none!important;transform:none!important;box-shadow:inset 0 0 0 1px rgba(140,175,255,.14)!important}
+.zone::before{display:block!important;inset:-60%;opacity:.8;background:conic-gradient(from 0deg,transparent 0 58%,rgba(61,123,255,.9) 70%,#3fd8ff 78%,rgba(139,107,255,.9) 84%,transparent 92%);animation:drehen 7s linear infinite}
+.zone::after{inset:1.5px!important;border-radius:21px!important;clip-path:none!important;
+  background:radial-gradient(55% 50% at 50% 40%,rgba(61,123,255,.2),transparent 70%),radial-gradient(35% 35% at 50% 42%,rgba(63,216,255,.08),transparent 70%),
+    linear-gradient(180deg,rgba(12,19,40,.96),rgba(6,10,22,.97))!important}
+.zone:hover{box-shadow:inset 0 0 0 1px rgba(140,175,255,.3),0 0 70px -20px rgba(61,123,255,.7)!important}
+.zone:hover::before{opacity:1}
+.zone.ziehen::before{opacity:1;animation-duration:1.5s}
+.zone.ziehen::after{background:radial-gradient(60% 55% at 50% 40%,rgba(61,123,255,.38),transparent 70%),linear-gradient(180deg,rgba(14,26,56,.96),rgba(8,14,30,.97))!important}
+.zone>div{position:relative;z-index:1;padding:20px}
+.zone b{font-family:"Montserrat",system-ui,sans-serif!important;font-weight:800;text-transform:none!important;letter-spacing:.01em!important;font-size:clamp(19px,1.8vw,26px)!important;
+  background:linear-gradient(90deg,#fff,#d6e4ff 50%,#8fb6ff);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+.zone .leise{color:var(--p-leise)!important;font-size:13.5px}
+.p-ecu{position:relative;width:max-content;max-width:100%;margin:0 auto 8px}
+.p-ecu .ecu{position:relative;z-index:1;height:clamp(130px,25vh,290px);margin-bottom:0}
+.p-ring{position:absolute;inset:0;pointer-events:none}
+.p-ring i{position:absolute;left:50%;top:50%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);border:1px solid rgba(122,166,255,.22)}
+.p-ring i:nth-child(1){height:82%;border-style:dashed;animation:p-orbit 22s linear infinite}
+.p-ring i:nth-child(2){height:118%;border-color:rgba(63,216,255,.12);border-top-color:rgba(63,216,255,.55);animation:p-orbit 9s linear infinite reverse}
+.p-ring i:nth-child(3){height:150%;border-color:rgba(139,107,255,.08);border-right-color:rgba(139,107,255,.45);animation:p-orbit 14s linear infinite}
+@keyframes p-orbit{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.ecu .bahn{stroke:rgba(122,166,255,.22)}
+.ecu .puls{filter:drop-shadow(0 0 6px rgba(63,216,255,.95))}
+.ecu .knoten{fill:#0a1224;stroke:rgba(122,166,255,.7)}.ecu .pin{fill:rgba(122,166,255,.65)}
+.ecu .chip{fill:#0b1430;stroke:url(#chiprand);stroke-width:2.2}
+.p-vorteile{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:24px}
+.p-vorteile>span{display:inline-flex;align-items:center;gap:10px;padding:9px 14px 9px 9px;border-radius:14px;text-align:left;
+  background:rgba(255,255,255,.035);border:1px solid var(--p-linie);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.p-vorteile svg{width:32px;height:32px;padding:7px;flex:none;border-radius:10px;background:rgba(61,123,255,.16);border:1px solid rgba(122,166,255,.3);color:#a9c6ff;
+  fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.p-vorteile strong{display:block;font-size:13px;color:#fff;font-weight:700}
+.p-vorteile small{display:block;font-size:11.5px;color:var(--p-leise);margin-top:1px}
+.zonen-scan{display:none!important}
+@media (max-width:1280px),(max-height:780px){.p-vorteile{margin-top:16px;gap:8px}.p-vorteile small{display:none}
+  .p-vorteile>span{padding:6px 12px 6px 6px}.p-vorteile svg{width:26px;height:26px;padding:5px}}
+/* Verarbeitung */
+.analyse>div{padding:34px 42px}
+.verarbeitung{background:linear-gradient(90deg,#fff,#9cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.analyse .balken{width:280px;height:5px;background:rgba(140,175,255,.12);border-radius:6px;overflow:hidden}
+.analyse .balken i{background:var(--p-verlauf)!important;box-shadow:0 0 14px rgba(61,123,255,.9)}
+.analyse>div{min-width:380px}
+.ringe{width:112px!important;height:112px!important;margin:0 auto 22px!important}
+.ringe i{border-width:3px!important}
+.ringe i:nth-child(1){border-top-color:#7aa6ff!important;border-right-color:#3fd8ff!important;filter:drop-shadow(0 0 6px rgba(63,216,255,.85))}
+.ringe i:nth-child(2){inset:15px!important;border-bottom-color:#8b6bff!important;border-left-color:#4a86ff!important;filter:drop-shadow(0 0 6px rgba(139,107,255,.85))}
+.ringe i:nth-child(3){inset:30px!important;border-top-color:#fff!important;filter:drop-shadow(0 0 6px rgba(255,255,255,.8))}
+.ringe b{display:block!important;inset:42px!important;clip-path:none!important;border-radius:50%!important;font-size:0;
+  background:radial-gradient(circle,rgba(160,195,255,.95),rgba(61,123,255,.35) 60%,transparent 72%)!important;filter:blur(1.5px)}
+.schritt{color:#a9c6ff!important;font-size:13.5px!important}
+.warnsymbol{color:#ffc266!important;border-color:rgba(255,170,69,.55)!important;
+  background:radial-gradient(circle at 50% 35%,rgba(255,190,100,.3),rgba(255,170,69,.08) 70%)!important;box-shadow:0 0 0 10px rgba(255,170,69,.06),0 0 46px -6px rgba(255,170,69,.6)}
+.erfolg svg{filter:drop-shadow(0 0 20px rgba(47,226,138,.6))}
+.datei-chip{background:rgba(61,123,255,.12)!important;border:1px solid rgba(122,166,255,.35)!important;border-radius:10px!important}
+/* Auswahl */
+.nx-felder,.nx-loesungsfeld,.nx-bericht{background:rgba(6,10,22,.5);border:1px solid var(--p-linie);border-radius:16px}
+.nx-wert,.nx-feld .chip{background:rgba(255,255,255,.035);border:1px solid var(--p-linie);border-radius:12px}
+.nx-feld .chip b,#aw-datei{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:600;letter-spacing:.01em}
+.nx-wert.ok{border-color:rgba(47,226,138,.55);box-shadow:0 0 0 3px rgba(47,226,138,.08),0 0 24px -8px rgba(47,226,138,.6)}
+.nx-wert.ok>svg,.nx-bericht-kopf>svg{background:linear-gradient(135deg,#2fe28a,#14b866);box-shadow:0 0 12px rgba(47,226,138,.6)}
+.nx-tausch{background:rgba(61,123,255,.16);border:1px solid rgba(122,166,255,.35)}
+.nx-leiste{border:1px solid transparent;border-radius:16px;
+  background:linear-gradient(180deg,rgba(20,32,64,.75),rgba(10,16,34,.8)) padding-box,linear-gradient(120deg,rgba(122,166,255,.7),rgba(139,107,255,.35),rgba(63,216,255,.6)) border-box;
+  box-shadow:0 18px 40px -22px rgba(61,123,255,.8)}
+.nx-abschnitt{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#8ea4d4}
+#v-auswahl .loesungen{gap:12px}
+.loesung{position:relative;clip-path:none!important;min-width:210px;padding:13px 16px 13px 62px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid var(--p-linie);
+  font-size:14px;color:#dbe5fb;transition:transform .25s var(--p-feder),border-color .25s,box-shadow .25s,background .25s}
+:where(.loesung,.pr-k){--ico:var(--i-regler)}
+.loesung::before{content:"";position:absolute;left:14px;top:50%;width:34px;height:34px;margin-top:-17px;border-radius:10px;
+  background:var(--ico) center/18px 18px no-repeat,rgba(140,175,255,.12);border:1px solid rgba(140,175,255,.2);transition:all .25s}
+.loesung:hover{transform:translateY(-2px);border-color:var(--p-linie2);box-shadow:0 14px 30px -18px rgba(61,123,255,.9)}
+.loesung.an,.loesung[data-key^="stage"].an{background:linear-gradient(180deg,rgba(61,123,255,.24),rgba(61,123,255,.07));border-color:rgba(122,166,255,.75);color:#fff;
+  box-shadow:0 0 0 1px rgba(122,166,255,.25),0 16px 34px -14px rgba(61,123,255,.95)}
+.loesung.an::before{background:var(--ico) center/18px 18px no-repeat,var(--p-verlauf);border-color:rgba(255,255,255,.2);box-shadow:0 6px 16px rgba(61,123,255,.6)}
+.loesung>span:last-child{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.loesung .preis{font-family:"JetBrains Mono",ui-monospace,monospace;color:#9cc3ff;font-size:12.5px;font-weight:600}
+.loesung.an .haken,.loesung[data-key^="stage"].an .haken{background:linear-gradient(90deg,#2fe28a,#19c7a0);box-shadow:0 0 12px rgba(47,226,138,.55)}
+[data-key="stage1"]{--ico:var(--i-blitz)}[data-key="stage2"]{--ico:var(--i-rakete)}[data-key="startstopp"]{--ico:var(--i-power)}[data-key="vmax"]{--ico:var(--i-tacho)}
+[data-key="popsbangs"]{--ico:var(--i-flamme)}[data-key="launch"]{--ico:var(--i-flagge)}[data-key="original"]{--ico:var(--i-zurueck)}
+.gesamt{border:1px solid transparent;border-radius:14px;padding:16px 18px;
+  background:linear-gradient(120deg,rgba(30,48,96,.7),rgba(22,20,60,.7)) padding-box,var(--p-rand) border-box}
+#aw-summe{font-family:"Montserrat",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:28px;letter-spacing:.02em;
+  background:linear-gradient(90deg,#fff,#9cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hinweis.warnung{background:linear-gradient(90deg,rgba(255,170,69,.12),rgba(255,170,69,.04));border:1px solid rgba(255,170,69,.35);border-radius:12px}
+/* Seitenkoepfe */
+.nx-kopfzeile .nx-quadrat{width:46px;height:46px;border-radius:14px;background:var(--p-verlauf);box-shadow:0 0 0 4px rgba(61,123,255,.12),0 10px 26px -6px rgba(61,123,255,.8)}
+.nx-kopfzeile .nx-h{font-size:24px;letter-spacing:.005em;background:linear-gradient(90deg,#fff,#cfdcff);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Kennzahlen */
+.nx-karten{gap:14px}
+.nx-kz,.nx-kz.blau,.nx-kz.orange,.nx-kz.lila,.nx-kz.gruen{--k:61,123,255;justify-content:flex-start;gap:16px;padding:18px 20px;border-radius:18px;border:1px solid transparent;
+  background:radial-gradient(120% 140% at 0% 0%,rgba(var(--k),.22),transparent 55%) padding-box,var(--p-glas) padding-box,
+    linear-gradient(150deg,rgba(var(--k),.65),rgba(var(--k),.07) 40%,rgba(140,175,255,.05) 70%,rgba(var(--k),.3)) border-box;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 24px 44px -26px rgba(0,0,0,.9);transition:transform .3s var(--p-feder),box-shadow .3s}
+.nx-kz.orange{--k:255,170,69}.nx-kz.lila{--k:139,107,255}.nx-kz.gruen{--k:47,226,138}
+.nx-kz:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 26px 50px -24px rgba(var(--k),.7)}
+.nx-kz svg{width:50px;height:50px;padding:12px;flex:none;border-radius:15px;background:rgba(var(--k),.16);border:1px solid rgba(var(--k),.4);color:rgb(var(--k));
+  box-shadow:0 10px 26px -8px rgba(var(--k),.75)}
+.nx-kz b{font-family:"Montserrat",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:30px;letter-spacing:.02em}
+.nx-kz span{text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:700;color:var(--p-leise)}
+/* Auftragsliste */
+.reiter{background:rgba(6,10,22,.6)!important;border:1px solid var(--p-linie)!important;border-radius:14px!important;clip-path:none!important}
+.reiter .schieber{background:var(--p-verlauf)!important;border-radius:10px;box-shadow:0 6px 18px -4px rgba(61,123,255,.85)!important}
+.auftrag{--s:47,226,138;position:relative;overflow:hidden;border-radius:14px;border:1px solid var(--p-linie)!important;
+  background:linear-gradient(90deg,rgba(var(--s),.11),transparent 42%),rgba(255,255,255,.03)!important;transition:transform .25s var(--p-feder),border-color .25s,box-shadow .25s}
+.auftrag::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgb(var(--s));box-shadow:0 0 14px rgba(var(--s),.9)}
+.auftrag[data-status="WARTET"]{--s:255,170,69}.auftrag[data-status="OFFEN"]{--s:139,107,255}.auftrag[data-status="ABGELEHNT"]{--s:255,93,115}
+.auftrag:hover{transform:translateY(-2px);border-color:var(--p-linie2)!important;box-shadow:0 18px 36px -20px rgba(0,0,0,.95)}
+.auftrag .a-datei{font-weight:700;color:#fff}
+.pille{clip-path:none!important;border-radius:999px!important;padding:4px 11px!important;font-family:"Montserrat",sans-serif!important;letter-spacing:.06em!important;
+  font-size:10.5px!important;font-weight:800!important;text-transform:uppercase;border:1px solid currentColor}
+.ticket{--s:122,166,255}.ticket.aktiv{border-color:rgba(122,166,255,.6)!important;box-shadow:0 0 0 1px rgba(122,166,255,.25),0 16px 30px -18px rgba(61,123,255,.9)}
+/* Fortschritt je Auftrag: Gesendet -> Freigegeben -> Bereit */
+.a-weg{display:flex;margin:12px 0 2px}
+.a-weg span{position:relative;flex:1;padding-top:17px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5d6d95}
+.a-weg span::before{content:"";position:absolute;top:2px;left:50%;width:11px;height:11px;margin-left:-6.5px;border-radius:50%;background:#131c33;border:2px solid #33436a;z-index:1}
+.a-weg span::after{content:"";position:absolute;top:7px;left:-50%;right:50%;height:2px;background:#24304d}
+.a-weg span:first-child::after{display:none}
+.a-weg span.ok{color:#8fe7bd}.a-weg span.ok::before{background:var(--p-gruen);border-color:var(--p-gruen);box-shadow:0 0 10px rgba(47,226,138,.85)}
+.a-weg span.ok::after{background:var(--p-gruen);box-shadow:0 0 8px rgba(47,226,138,.6)}
+.a-weg span.jetzt{color:#ffd29a}.a-weg span.jetzt::before{background:var(--p-orange);border-color:var(--p-orange);animation:p-puls-o 1.8s infinite}
+.a-weg span.jetzt::after{background:linear-gradient(90deg,var(--p-gruen),var(--p-orange))}
+.a-weg span.nein{color:#ff9aa8}.a-weg span.nein::before{background:var(--p-rot);border-color:var(--p-rot);box-shadow:0 0 10px rgba(255,93,115,.85)}
+.a-weg span.nein::after{background:linear-gradient(90deg,var(--p-gruen),var(--p-rot))}
+@keyframes p-puls-o{0%{box-shadow:0 0 0 0 rgba(255,170,69,.6)}70%{box-shadow:0 0 0 7px rgba(255,170,69,0)}100%{box-shadow:0 0 0 0 rgba(255,170,69,0)}}
+/* Info-Spalte */
+.nx-quadrat.gross{background:var(--p-verlauf);box-shadow:0 0 0 10px rgba(61,123,255,.08),0 0 0 22px rgba(61,123,255,.04),0 18px 44px -6px rgba(61,123,255,.7)}
+.nx-info b,.tk-leer b{font-size:20px;background:linear-gradient(90deg,#fff,#cfdcff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nx-info ol{list-style:none;padding:0;counter-reset:p;width:100%;max-width:440px}
+.nx-info ol li{counter-increment:p;position:relative;padding:11px 14px 11px 50px;margin-bottom:9px;border-radius:13px;background:rgba(255,255,255,.03);border:1px solid var(--p-linie);font-size:13.5px}
+.nx-info ol li::before{content:counter(p);position:absolute;left:11px;top:50%;width:27px;height:27px;margin-top:-13.5px;border-radius:9px;display:grid;place-items:center;
+  font-weight:800;font-size:13px;color:#fff;background:var(--p-verlauf);box-shadow:0 6px 14px rgba(61,123,255,.5)}
+/* Preise */
+.pr-liste{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.pr-k{position:relative;padding:20px;border-radius:18px;border:1px solid transparent!important;
+  background:radial-gradient(120% 120% at 100% 0%,rgba(61,123,255,.14),transparent 55%) padding-box,var(--p-glas) padding-box,var(--p-rand) border-box!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 24px 44px -28px rgba(0,0,0,.95);transition:transform .3s var(--p-feder),box-shadow .3s}
+.pr-k::before{content:"";width:46px;height:46px;flex:none;border-radius:14px;background:var(--ico) center/22px 22px no-repeat,var(--p-verlauf);box-shadow:0 10px 24px -8px rgba(61,123,255,.85);margin-bottom:6px}
+.pr-k.orig::before{background:var(--ico) center/22px 22px no-repeat,linear-gradient(135deg,#8b6bff,#3fd8ff)}
+.pr-k:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 50px -24px rgba(61,123,255,.75)}
+.pr-k b{font-size:16px;color:#fff}
+.pr-k .pr-p{font-family:"Montserrat",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:29px;letter-spacing:.02em;
+  background:linear-gradient(90deg,#fff,#9cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pr-k .pr-p.anfrage{font-family:"Montserrat",sans-serif;font-size:12.5px;font-weight:700;align-self:flex-start;padding:5px 12px;border-radius:999px;
+  background:rgba(255,255,255,.05);-webkit-background-clip:border-box;background-clip:border-box;color:#9fb0d6;border:1px solid var(--p-linie)}
+.pr-k.neu{box-shadow:0 0 0 2px rgba(122,166,255,.85),0 0 44px rgba(61,123,255,.65)}
+.pr-hinweise p{padding:11px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--p-linie)}
+.pr-live{padding:6px 12px;border-radius:999px;background:rgba(47,226,138,.08);border:1px solid rgba(47,226,138,.35);color:#8fe7bd}
+/* Support */
+.tk-verlauf{background:rgba(5,9,20,.5);border:1px solid var(--p-linie);border-radius:16px}
+.tk-blase{background:rgba(255,255,255,.045);border:1px solid var(--p-linie);border-radius:16px 16px 16px 5px;box-shadow:0 12px 26px -18px rgba(0,0,0,.95)}
+.tk-blase.kunde{background:linear-gradient(135deg,rgba(61,123,255,.42),rgba(107,98,255,.32));border-color:rgba(122,166,255,.5);border-radius:16px 16px 5px 16px}
+.tk-klammer{border-radius:12px;background:rgba(61,123,255,.1)}
+.tk-anhang{background:rgba(61,123,255,.14);border-color:rgba(122,166,255,.45);border-radius:12px}
+.tk-anhang-icon{background:var(--p-verlauf)}
+/* Dialoge */
+#konto-dialog,#zahl-dialog,#beta-dialog{background:radial-gradient(60% 55% at 50% 40%,rgba(61,123,255,.2),transparent 70%),rgba(2,5,12,.8)!important}
+#konto-dialog .karte,#zahl-dialog .karte,#beta-dialog .karte{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 40px 90px -30px rgba(0,0,0,.95),0 0 90px -30px rgba(61,123,255,.7)}
+.kd-marke{position:relative;width:max-content}
+.kd-marke svg{width:58px;height:58px;filter:drop-shadow(0 0 18px rgba(91,141,255,.8))}
+.kd-marke::after{content:"";position:absolute;inset:-7px;border-radius:20px;padding:2px;pointer-events:none;
+  background:conic-gradient(from var(--p-w),transparent 0 55%,rgba(122,166,255,.95) 75%,#3fd8ff 85%,transparent 95%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:p-w 3.2s linear infinite}
+@keyframes p-w{to{--p-w:360deg}}
+#kd-titel,#beta-titel{background:linear-gradient(90deg,#fff,#9cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.kd-reiter{background:rgba(6,10,22,.6);border-color:var(--p-linie)}
+.kd-reiter button.an{background:var(--p-verlauf);box-shadow:0 6px 18px -4px rgba(61,123,255,.85)}
+.beta-marke{background:var(--p-verlauf);border-color:rgba(255,255,255,.25);box-shadow:0 0 16px rgba(61,123,255,.6)}
+#zahl-dialog .betrag{font-family:"Montserrat",sans-serif!important;font-weight:800;font-variant-numeric:tabular-nums;background:linear-gradient(90deg,#fff,#ffcf8a);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+#statistik-frage{background:var(--p-glas) padding-box,var(--p-rand) border-box;border:1px solid transparent;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+/* Meldungen */
+.toast{clip-path:none!important;border-radius:16px!important;border:1px solid var(--p-linie2)!important;
+  background:linear-gradient(180deg,rgba(20,30,58,.94),rgba(10,16,34,.96))!important;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  box-shadow:0 24px 50px -20px rgba(0,0,0,.9),0 0 34px -12px rgba(61,123,255,.6)!important}
+.toast .t-icon{clip-path:none!important;border-radius:50%!important}
+.toast.ok .t-icon{background:linear-gradient(135deg,#2fe28a,#14b866);box-shadow:0 0 14px rgba(47,226,138,.6)}
+.toast.fehler .t-icon{background:linear-gradient(135deg,#ff6b80,#e23a55);box-shadow:0 0 14px rgba(255,93,115,.6)}
+.toast.info .t-icon{background:var(--p-verlauf);box-shadow:0 0 14px rgba(61,123,255,.6)}
+/* Fussleiste und Bildlaufleisten */
+.fuss{background:rgba(5,9,20,.55)!important;border-top:1px solid rgba(140,175,255,.1)!important;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.liste::-webkit-scrollbar,.tk-verlauf::-webkit-scrollbar{width:9px}
+.liste::-webkit-scrollbar-thumb,.tk-verlauf::-webkit-scrollbar-thumb{background:rgba(122,166,255,.25);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+.liste::-webkit-scrollbar-thumb:hover,.tk-verlauf::-webkit-scrollbar-thumb:hover{background:rgba(122,166,255,.45);background-clip:padding-box}
+/* Scan-Cockpit beim Pruefen: echter Hexdump + Kennfeld-Suche aus den Bytes der Datei */
+.analyse>div.scan{width:min(1120px,96%);min-width:0;padding:20px 24px 18px;text-align:left}
+.scan-kopf{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+.scan-kopf .ringe{width:58px!important;height:58px!important;margin:0!important;flex:none}
+.scan-kopf .ringe i:nth-child(2){inset:8px!important}.scan-kopf .ringe i:nth-child(3){inset:16px!important}.scan-kopf .ringe b{inset:22px!important}
+.scan-text{flex:1;min-width:0}.scan-text .verarbeitung{font-size:18px;margin:0 0 3px}
+.scan-kopf .datei-chip{margin:0;flex:none;max-width:38%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.scan-flaeche{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(0,1fr);gap:12px}
+.scan-box{position:relative;height:clamp(170px,34vh,340px);padding:10px 12px;border-radius:14px;overflow:hidden;
+  background:radial-gradient(90% 70% at 50% 0%,rgba(61,123,255,.10),transparent 70%),rgba(2,5,12,.78);border:1px solid rgba(122,166,255,.2);
+  box-shadow:inset 0 0 40px rgba(0,0,0,.6)}
+.scan-box::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.scan-box::before{content:"";position:absolute;left:0;right:0;height:46px;top:-46px;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,transparent,rgba(63,216,255,.10),rgba(63,216,255,.35) 96%,transparent);animation:p-scanstrich 2.2s linear infinite}
+#kf-box::before{animation-delay:-1.1s}
+@keyframes p-scanstrich{to{top:100%}}
+.scan-titel{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px;
+  font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#7f96c8}
+.scan-titel b{color:#cfe0ff;font-weight:800}
+.scan-titel span{font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.03em;text-transform:none;color:#3fd8ff;text-shadow:0 0 8px rgba(63,216,255,.7)}
+.hex-zeilen{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:11.5px;line-height:18px;color:#5f79b0;white-space:pre}
+.hex-zeilen>div{display:flex;gap:12px}
+.hex-zeilen>div>i{font-style:normal;color:#35508a}
+.hex-zeilen>div>em{font-style:normal;color:#46639e}
+.hex-zeilen>div:nth-child(odd){color:#6a85bd}
+.hex-zeilen b{font-weight:400;border-radius:2px}
+.hex-zeilen b.cur{color:#fff;background:rgba(63,216,255,.4);box-shadow:0 0 12px rgba(63,216,255,.95)}
+.hex-zeilen b.fund{color:#04150b;background:#2fe28a;box-shadow:0 0 12px rgba(47,226,138,.9)}
+.hex-zeilen>div.fund-zeile em{color:#8fe7bd}
+.hex-zeilen b.kf{color:#bff3ff;background:rgba(63,216,255,.13)}
+#kf-canvas{display:block;position:absolute;left:0;top:30px;width:100%;height:calc(100% - 30px);z-index:0}
+.scan-fund{position:absolute;z-index:2;left:12px;bottom:9px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11.5px;font-weight:600;
+  color:#2fe28a;text-shadow:0 0 10px rgba(47,226,138,.85);opacity:0;transform:translateY(4px);transition:opacity .25s,transform .25s}
+.scan-fund.an{opacity:1;transform:none}
+.scan-schritte{display:flex;gap:8px;margin:14px 0 12px}
+.scan-schritte span{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;font-size:12px;font-weight:700;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;color:#5f7099;background:rgba(255,255,255,.03);border:1px solid var(--p-linie);transition:all .3s}
+.scan-schritte span::before{content:"";flex:none;width:15px;height:15px;box-sizing:border-box;border-radius:50%;border:2px solid #33436a}
+.scan-schritte span.jetzt{color:#ffd29a;border-color:rgba(255,170,69,.45);background:rgba(255,170,69,.08)}
+.scan-schritte span.jetzt::before{border-color:#ffaa45;border-top-color:transparent;animation:drehen .7s linear infinite}
+.scan-schritte span.ok{color:#8fe7bd;border-color:rgba(47,226,138,.4);background:rgba(47,226,138,.07)}
+.scan-schritte span.ok::before{border:0;box-shadow:0 0 10px rgba(47,226,138,.8);
+  background:#2fe28a url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2304150b' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7.5'/></svg>") center/10px no-repeat}
+.analyse .scan .balken{width:100%;margin:0}
+.analyse .scan .balken.voll i{width:100%;animation:none;transform:none}
+.zone b.los{display:none}.zone.ziehen b:not(.los){display:none}.zone.ziehen b.los{display:block}
+@media (max-height:760px){.scan-kopf{margin-bottom:10px}.scan-schritte{margin:10px 0 8px}.scan-schritte span{padding:6px 9px}}
+/* Hineinziehen: Lichtwelle an der Stelle, an der die Datei landet */
+.p-welle{position:absolute;z-index:3;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;pointer-events:none;
+  border:2px solid rgba(122,166,255,.95);box-shadow:0 0 30px rgba(63,216,255,.9),inset 0 0 22px rgba(63,216,255,.7);animation:p-welle .9s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes p-welle{to{transform:scale(30);opacity:0}}
+.zone.ziehen .p-ring i{animation-duration:2.4s!important;border-color:rgba(63,216,255,.55)}
+.zone.ziehen b{filter:drop-shadow(0 0 14px rgba(63,216,255,.8))}
+/* Bewegung: Seiten und Kacheln gleiten herein */
+.nx-seite.aktiv>*{animation:p-auf .55s var(--p-feder) both}
+.nx-seite.aktiv>*:nth-child(2){animation-delay:.05s}.nx-seite.aktiv>*:nth-child(3){animation-delay:.1s}.nx-seite.aktiv>*:nth-child(4){animation-delay:.15s}
+.nx-karten>.nx-kz{animation:p-auf .6s var(--p-feder) both}.nx-karten>.nx-kz:nth-child(2){animation-delay:.06s}.nx-karten>.nx-kz:nth-child(3){animation-delay:.12s}.nx-karten>.nx-kz:nth-child(4){animation-delay:.18s}
+@keyframes p-auf{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.zone::before,.p-ring i,#senden::after,.marke .glanz,.nx-pille>i,.kd-marke::after,.a-weg span.jetzt::before,
+  .nx-seite.aktiv>*,.nx-karten>.nx-kz,.scan-box::before,.p-welle{animation:none!important}}
 </style>
 </head>
 <body>
@@ -1314,6 +1665,7 @@ button.hilfe svg{width:15px;height:15px}
           <label class="zone" id="zone">
             <input type="file" id="datei" accept=".bin,.ori,.org,.mod,*">
             <div>
+              <div class="p-ecu"><span class="p-ring" aria-hidden="true"><i></i><i></i><i></i></span>
               <svg class="ecu" viewBox="0 0 380 200" aria-hidden="true">
                 <defs>
                   <linearGradient id="pulsfarbe" x1="0" x2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset="1" stop-color="#3b78ff"/></linearGradient>
@@ -1342,20 +1694,35 @@ button.hilfe svg{width:15px;height:15px}
                   <rect x="162" y="72" width="56" height="56" rx="16" fill="url(#kernfarbe)" style="filter:drop-shadow(0 8px 20px rgba(0,229,255,.55))"/>
                   <path d="M190 112 V88 M180 97 l10 -10 10 10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
                 </g>
-              </svg>
-              <b>Datei hierher ziehen</b>
+              </svg></div>
+              <b>Datei hierher ziehen</b><b class="los">Jetzt loslassen</b>
               <span class="leise">oder klicken zum Auswählen · .bin / .ori · max. 16 MB</span>
+              <div class="p-vorteile" aria-hidden="true">
+                <span><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span><strong>Sofort-Check</strong><small>Steuergerät und Software in Sekunden</small></span></span>
+                <span><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg><span><strong>Geprüfte Files</strong><small>in WinOLS 5 erstellt</small></span></span>
+                <span><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg><span><strong>Sicher bezahlen</strong><small>Karte, Apple Pay, PayPal</small></span></span>
+                <span><svg viewBox="0 0 24 24"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg><span><strong>Kein Abo</strong><small>nur zahlen, was du brauchst</small></span></span>
+              </div>
             </div>
           </label>
         </div>
 
         <div class="ansicht" id="v-analyse">
-          <div class="analyse"><div>
-            <div class="ringe"><i></i><i></i><i></i><b>ECU</b></div>
-            <div class="verarbeitung">File wird verarbeitet …</div>
-            <div class="schritt" id="schritt"><span>Lese Steuergerät …</span></div>
+          <div class="analyse"><div class="scan">
+            <div class="scan-kopf">
+              <div class="ringe"><i></i><i></i><i></i><b>ECU</b></div>
+              <div class="scan-text"><div class="verarbeitung">File wird verarbeitet …</div>
+                <div class="schritt" id="schritt"><span>Lese Steuergerät …</span></div></div>
+              <div class="datei-chip" id="analyse-datei"></div>
+            </div>
+            <div class="scan-flaeche" aria-hidden="true">
+              <div class="scan-box" id="hex-box"><div class="scan-titel"><b>Hex-Dump</b><span id="hex-adr" data-kein-ueb>0x000000</span></div>
+                <div class="hex-zeilen" id="hex-zeilen" data-kein-ueb></div><div class="scan-fund" id="hex-fund" data-kein-ueb></div></div>
+              <div class="scan-box" id="kf-box"><div class="scan-titel"><b>Kennfeld-Suche</b><span id="kf-info" data-kein-ueb>–</span></div>
+                <canvas id="kf-canvas"></canvas><div class="scan-fund" id="kf-fund" data-kein-ueb></div></div>
+            </div>
+            <div class="scan-schritte" id="scan-schritte"><span>Datei lesen</span><span>Steuergerät</span><span>Software</span><span>Kennfelder</span><span>Archiv</span></div>
             <div class="balken"><i></i></div>
-            <div class="datei-chip" id="analyse-datei"></div>
           </div></div>
         </div>
 
@@ -1647,6 +2014,11 @@ const EN = {
   // Auftraege
   "Status, Bezahlung und Download deiner Files": "Status, payment and download of your files", "+ Neues File": "+ New file", "Gesamt": "Total",
   "Zu bezahlen": "To pay", "Fertig": "Done", "Alle": "All", "Wartend": "Waiting", "Abgelehnt": "Rejected", "So läuft dein Auftrag": "How your order works",
+  "Lese Datei …": "Reading file …", "Suche Kennfelder …": "Searching maps …", "Hex-Dump": "Hex dump", "Kennfeld-Suche": "Map search",
+  "Datei lesen": "Read file", "Kennfelder": "Maps", "Kennfeld": "Map", "Archiv": "Archive", "Jetzt loslassen": "Drop it now",
+  "Gesendet": "Sent", "Bereit": "Ready", "Sofort-Check": "Instant check", "Steuergerät und Software in Sekunden": "ECU and software in seconds",
+  "Geprüfte Files": "Verified files", "in WinOLS 5 erstellt": "made in WinOLS 5", "Sicher bezahlen": "Secure payment",
+  "Karte, Apple Pay, PayPal": "Card, Apple Pay, PayPal", "Kein Abo": "No subscription", "nur zahlen, was du brauchst": "pay only for what you need",
   "Original laden und Lösungen wählen": "Load the original and choose solutions", "Sofort bezahlen und File herunterladen": "Pay right away and download the file",
   "Nichts dabei? Anfrage stellen – wir erstellen dein File und geben es frei": "Nothing suitable? Send a request – we’ll create your file and approve it",
   "Alle Files im Archiv sind von uns erstellt und geprüft – darum geht der Kauf sofort.": "All files in the archive were created and checked by us – that’s why you can buy instantly.",
@@ -2226,28 +2598,321 @@ function firma(name) {
 }
 
 /* ---------- Datei lesen + pruefen ---------- */
-const schritte = ["Lese Steuergerät …", "Erkenne Software …", "Suche im Archiv …", "Prüfe Tuning-Stellen …", "Fast fertig …"];
-let schrittTimer;
-function schrittAnimation() {
-  let i = 0;
-  $("#schritt").innerHTML = `<span>${schritte[0]}</span>`;
-  clearInterval(schrittTimer);
-  schrittTimer = setInterval(() => { i = Math.min(i + 1, schritte.length - 1); $("#schritt").innerHTML = `<span>${schritte[i]}</span>`; }, 900);
+/* Scan-Cockpit waehrend der Pruefung: echter Hexdump der Datei, Spruenge zu Steuergeraete- und Softwarenummer,
+   Kennfeld-Suche (glatte 16-Bit-Bereiche) als 3D-Flaeche. Rein optisch - die eigentliche Pruefung macht der Server. */
+const SCAN_DAUER = 2800;                                   // so lange laeuft die Animation mindestens (ms)
+const SCAN_PHASEN = [0, 320, 680, 1040, 2400];             // Datei lesen, Steuergeraet, Software, Kennfelder, Archiv
+const SCAN_TEXTE = [["Lese Datei …"], ["Lese Steuergerät …"], ["Erkenne Software …"], ["Suche Kennfelder …"],
+                    ["Suche im Archiv …", "Prüfe Tuning-Stellen …", "Fast fertig …"]];
+const KF_SP = 16, KF_ZE = 12, KF_N = KF_SP * KF_ZE;   // Such-Fenster: 192 Werte a 16 Bit, angezeigt als 16 x 12
+const KF_BREITEN = [12, 14, 16, 18, 20, 24];   // so viele Spalten haben Kennfelder meistens
+const HEX = Array.from({length: 256}, (_, b) => b.toString(16).toUpperCase().padStart(2, "0"));
+const ASC = Array.from({length: 256}, (_, b) => b === 38 ? "&amp;" : b === 60 ? "&lt;" : b === 62 ? "&gt;" : b >= 32 && b < 127 ? String.fromCharCode(b) : ".");
+const SCAN_IDS = [   // wie in oneclick.py, aber ohne Lookbehind (kennt Safari erst ab 16.4)
+  {art: "ecu", re: /(?:^|[^A-Z0-9])(EDC1[5-7][_ ]?(?:[A-Z]{1,3}\d{1,2}|[A-Z]{1,2}\+?)|(?:MEVD|MEV|MED|ME)[_ ]?(?:7|9|17)(?:[._]\d{1,2}){1,3}|M[GD]1[_ ]?[A-Z]{2}\d{3}|SID[_ ]?\d{3}|SIMOS[_ ]?\d{1,2}(?:[._]\d{1,2}){0,2}|PCR[_ ]?2[._]1|EMS[_ ]?\d{4}|DC[MU][_ ]?\d{1,2}[._]\d{1,2}|IAW[_ ]?\d{1,2}[A-Z]{1,3}|MJD[_ ]?\d[A-Z0-9]{1,4})(?![A-Z0-9])/g},
+  {art: "hw", re: /(?:^|[^0-9])(02[68]1\d{6})(?!\d)/g},
+  {art: "sw", re: /(?:^|[^A-Za-z0-9])(1037\d{6}|10SW\d{6})(?!\d)/g},
+  {art: "sw", re: /(?:^|[^A-Za-z0-9])(A[23]C\d{8,12})(?!\d)/g},
+  {art: "sw", re: /(?:^|[^A-Z0-9])([0-9][A-Z0-9]{2}9(?:06|07|27)\d{3}[A-Z]{0,3})(?![A-Z0-9])/g},
+];
+const KF_REIHE = {};
+function kfReihe(C, R) {   // Vierecke von hinten nach vorne zeichnen (Maler-Verfahren)
+  const s = C + "x" + R;
+  if (KF_REIHE[s]) return KF_REIHE[s];
+  const q = [];
+  for (let r = 0; r < R - 1; r++) for (let c = 0; c < C - 1; c++) q.push([c, r]);
+  return KF_REIHE[s] = q.sort((a, b) => (a[0] * .3 - a[1] * .36) - (b[0] * .3 - b[1] * .36));
 }
+const scanLauf = {nr: 0, raf: 0, st: null};
+const adr = o => o.toString(16).toUpperCase().padStart(6, "0");
+
+function scanLesen(datei) {
+  if (datei.arrayBuffer) return datei.arrayBuffer().then(b => new Uint8Array(b));
+  return new Promise((ok, nein) => { const r = new FileReader(); r.onload = () => ok(new Uint8Array(r.result)); r.onerror = nein; r.readAsArrayBuffer(datei); });
+}
+function scanErsatz(name) {   // nur falls die Datei nicht lesbar ist: Bytes aus dem Namen, damit die Anzeige trotzdem laeuft
+  const u8 = new Uint8Array(65536); let s = 2166136261;
+  for (const ch of String(name)) s = Math.imul(s ^ ch.charCodeAt(0), 16777619) >>> 0;
+  for (let i = 0; i < u8.length; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; s >>>= 0; u8[i] = s & 255; }
+  return u8;
+}
+function scanIds(u8) {   // Steuergeraet, Hardware- und Softwarenummern mit Position in der Datei
+  const laeufe = [];   // Nummern stehen als Text in der Datei: nur lesbare Abschnitte (ab 8 Zeichen) durchsuchen - auch bei 16 MB schnell
+  for (let i = 0, start = -1; i <= u8.length; i++) {
+    const b = i < u8.length ? u8[i] : 0;
+    if (b >= 32 && b < 127) { if (start < 0) start = i; }
+    else if (start >= 0) { if (i - start >= 8) laeufe.push(start, i); start = -1; }
+  }
+  let dec;
+  try { dec = new TextDecoder("latin1"); } catch (e) { return []; }
+  const texte = [];
+  for (let k = 0; k < laeufe.length; k += 2) texte.push([laeufe[k], dec.decode(u8.subarray(laeufe[k], laeufe[k + 1]))]);
+  const funde = [];
+  for (const {art, re} of SCAN_IDS) {
+    let n = 0;
+    for (const [anfang, text] of texte) {
+      re.lastIndex = 0;
+      for (let m; n < 3 && (m = re.exec(text)); n++) {
+        const id = m[1], von = anfang + m.index + m[0].length - id.length;
+        funde.push({art, id, von, bis: von + id.length});
+      }
+      if (n >= 3) break;
+    }
+  }
+  return funde;
+}
+function kfWerte(u8, off, be, C = KF_SP, R = KF_ZE) {   // C x R Werte ab off -> 0..1
+  const N = C * R, z = new Float32Array(N);
+  let min = Infinity, max = -Infinity;
+  for (let k = 0, p = off; k < N; k++, p += 2) {
+    const x = p + 1 < u8.length ? (be ? u8[p] << 8 | u8[p + 1] : u8[p + 1] << 8 | u8[p]) : 0;
+    z[k] = x; if (x < min) min = x; if (x > max) max = x;
+  }
+  const sp = max - min || 1;
+  for (let k = 0; k < N; k++) z[k] = (z[k] - min) / sp;
+  return z;
+}
+/* Kennfeld-Kandidaten: Bereiche, deren 16-Bit-Werte in beide Richtungen weich verlaufen (so sehen Kennfelder aus).
+   Bewertet wird die Rauheit im Verhaeltnis zur mittleren Streuung - flache Bereiche mit einzelnen Ausreissern fallen so raus.
+   Die Spaltenzahl wird geschaetzt (die Zeilen liegen dann sauber untereinander). Hoechstens 6, ohne Ueberlappung. */
+function kennfelderFinden(u8) {
+  const n = u8.length, v = new Int32Array(KF_N), sortiert = new Int32Array(KF_N), kand = [];
+  if (n < KF_N * 2) return [];
+  const schritt = Math.max(32, Math.floor(n / 6000) & ~1);
+  for (let off = 0; off + KF_N * 2 <= n; off += schritt) {
+    for (let be = 1; be >= 0; be--) {
+      let min = 65535, max = 0, rauh = 0, gleich = 0;
+      for (let k = 0, p = off; k < KF_N; k++, p += 2) {
+        const x = be ? u8[p] << 8 | u8[p + 1] : u8[p + 1] << 8 | u8[p];
+        v[k] = x; if (x < min) min = x; if (x > max) max = x;
+        if (k) { const d = Math.abs(x - v[k - 1]); rauh += d; if (!d) gleich++; }
+      }
+      const spanne = max - min;
+      if (spanne < 48 || gleich > KF_N * .4 || rauh / (KF_N - 1) > spanne * .12) continue;   // schneller Vorfilter
+      sortiert.set(v); sortiert.sort();
+      const iqr = sortiert[KF_N * 3 >> 2] - sortiert[KF_N >> 2];
+      if (iqr < spanne * .2) continue;   // nur Ausreisser, sonst flach
+      let best = Infinity, bestC = 16, bewegt = 0;
+      for (const C of KF_BREITEN) {
+        const R = Math.floor(KF_N / C), fein = spanne * .005;
+        let summe = 0, anzahl = 0, aenderungen = 0;
+        for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+          const i = r * C + c;
+          if (c + 1 < C) { const d = Math.abs(v[i + 1] - v[i]); summe += d; anzahl++; if (d > fein) aenderungen++; }
+          if (r + 1 < R) { const d = Math.abs(v[i + C] - v[i]); summe += d; anzahl++; if (d > fein) aenderungen++; }
+        }
+        const w = summe / anzahl / iqr;
+        if (w < best) { best = w; bestC = C; bewegt = aenderungen / anzahl; }
+      }
+      // weich, aber nicht nur zwei flache Stufen: die meisten Nachbarwerte muessen sich etwas unterscheiden
+      if (best < .3 && bewegt > .4) kand.push({off, be, wert: best, C: bestC, R: Math.floor(KF_N / bestC)});
+    }
+  }
+  kand.sort((a, b) => a.wert - b.wert);
+  const gew = [];
+  for (const k of kand) {
+    if (gew.length >= 6) break;
+    if (!gew.some(g => Math.abs(g.off - k.off) < KF_N * 2)) gew.push(k);
+  }
+  return gew.sort((a, b) => a.off - b.off).map(k => { const off = kfAusrichten(u8, k); return {off, C: k.C, R: k.R, z: kfWerte(u8, off, k.be, k.C, k.R)}; });
+}
+function kfAusrichten(u8, k) {   // Zeilenanfang finden: die Verschiebung, bei der die Zeilen am weichsten verlaufen
+  const {off, be, C, R} = k, wert = p => be ? u8[p] << 8 | u8[p + 1] : u8[p + 1] << 8 | u8[p];
+  let best = off, bestRauh = Infinity;
+  for (let j = 0; j < C; j++) {
+    const o = off + j * 2;
+    if (o + C * R * 2 > u8.length) break;
+    let rauh = 0;
+    for (let r = 0; r < R; r++) for (let c = 0; c + 1 < C; c++) { const p = o + (r * C + c) * 2; rauh += Math.abs(wert(p + 2) - wert(p)); }
+    if (rauh < bestRauh) { bestRauh = rauh; best = o; }
+  }
+  return best;
+}
+function scanSchritte(ph, fertig) {
+  document.querySelectorAll("#scan-schritte span").forEach((s, i) => {
+    s.classList.toggle("ok", fertig || i < ph); s.classList.toggle("jetzt", !fertig && i === ph); });
+}
+function schrittText(t) { $("#schritt").innerHTML = `<span>${t}</span>`; }
+function scanMeldung(el, text) { el.textContent = text; el.classList.remove("an"); void el.offsetWidth; el.classList.add("an"); }
+function scanLayout(st) {   // wie viele Zeilen und Bytes pro Zeile passen in den Kasten
+  const box = $("#hex-zeilen"), probe = document.createElement("span");
+  if (!box.clientWidth) return;   // gerade nicht sichtbar (andere Seite offen): spaeter nochmal
+  probe.textContent = "0".repeat(20); box.innerHTML = ""; box.appendChild(probe);
+  box.style.fontSize = "";
+  const fs = parseFloat(getComputedStyle(box).fontSize) || 11.5, cw = probe.offsetWidth / 20 || fs * .6, breite = box.clientWidth;
+  box.innerHTML = "";
+  const fs16 = Math.min(fs, Math.floor((breite - 26) / 69 / (cw / fs) * 10) / 10);   // 16 Bytes pro Zeile, notfalls etwas kleiner
+  if (fs16 >= 9.5) { st.n = 16; st.ascii = true; box.style.fontSize = fs16 + "px"; }
+  else { st.n = 8; st.ascii = breite >= 37 * cw + 26; }
+  st.zeilen = Math.max(3, Math.floor(($("#hex-box").clientHeight - box.offsetTop - 30) / 18));
+  st.pos -= st.pos % st.n;
+}
+function hexFokus(st, von, bis, art, t, dauer) {   // Ansicht auf eine Stelle springen und sie markieren
+  if (!st.zeilen) scanLayout(st);
+  st.mark = {von, bis, art}; st.halt = t + dauer; st.cursor = von;
+  st.pos = Math.max(0, Math.floor(von / st.n) * st.n - Math.floor((st.zeilen || 12) / 2) * st.n);
+}
+function hexSchritt(st, t) {
+  if (t < st.halt) {   // Cursor laeuft ueber die markierten Bytes
+    if (st.mark && !ruhig) st.cursor = st.cursor + 1 < Math.min(st.mark.bis, st.pos + st.zeilen * st.n) ? st.cursor + 1 : st.mark.von;
+    return;
+  }
+  if (st.mark && st.mark.art === "fund") st.mark = null;
+  if (ruhig) return;
+  st.pos += st.phase >= 3 ? st.n : st.n * 3;
+  if (st.pos >= st.u8.length) st.pos = 0;
+  st.cursor = st.pos + Math.floor(st.zeilen / 2) * st.n + Math.floor(t / 55) % st.n;
+}
+function hexMalen(st) {
+  const {u8, n, zeilen, mark} = st, html = [];
+  for (let z = 0; z < zeilen; z++) {
+    const o = st.pos + z * n;
+    if (o >= u8.length) { html.push("<div> </div>"); continue; }
+    let hx = "", as = "", fz = false;
+    for (let k = 0; k < n; k++) {
+      const p = o + k;
+      if (k) hx += " ";
+      if (p >= u8.length) { hx += "  "; as += " "; continue; }
+      const b = u8[p], kl = p === st.cursor ? "cur" : mark && p >= mark.von && p < mark.bis ? mark.art : "";
+      if (kl) { hx += `<b class="${kl}">${HEX[b]}</b>`; as += `<b class="${kl}">${ASC[b]}</b>`; fz = fz || kl === "fund"; }
+      else { hx += HEX[b]; as += ASC[b]; }
+    }
+    html.push(`<div${fz ? ' class="fund-zeile"' : ""}><i>${adr(o)}</i><span>${hx}</span>${st.ascii ? `<em>${as}</em>` : ""}</div>`);
+  }
+  $("#hex-zeilen").innerHTML = html.join("");
+  $("#hex-adr").textContent = "0x" + adr(Math.max(0, st.cursor));
+}
+function kfLayout(st) {
+  const cv = $("#kf-canvas"), W = cv.clientWidth, H = cv.clientHeight, r = cv.getBoundingClientRect();
+  if (!W || !H) return false;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  st.kf = {ctx, W, H};
+  return true;
+}
+function kfRoh(u8, off) {   // Suchansicht: Rohdaten an der Stelle, leicht geglaettet und flacher (wogende Flaeche statt Zacken)
+  const w = kfWerte(u8, off, 1), z = new Float32Array(KF_N);
+  for (let r = 0; r < KF_ZE; r++) for (let c = 0; c < KF_SP; c++) {
+    let s = 0, n = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < KF_ZE && cc >= 0 && cc < KF_SP) { s += w[rr * KF_SP + cc]; n++; }
+    }
+    z[r * KF_SP + c] = s / n * .55;
+  }
+  return z;
+}
+function kfGroesse(st, C, R) { if (st.C !== C || st.R !== R) { st.C = C; st.R = R; st.z = new Float32Array(C * R); } }
+function kfMalen(st, t) {
+  if (!st.kf && !kfLayout(st)) return;
+  const {ctx, W, H} = st.kf, karten = st.karten;
+  const farbig = st.phase >= 3 && karten.length > 0;
+  if (farbig && t - st.kfT >= (ruhig ? 1400 : 680)) {   // naechstes gefundenes Kennfeld
+    st.kfT = t; st.kfNr = (st.kfNr + 1) % karten.length;
+    const k = karten[st.kfNr];
+    kfGroesse(st, k.C, k.R); st.ziel = k.z; st.wechsel = t;
+    $("#kf-info").textContent = "0x" + adr(k.off) + " · " + k.C + "×" + k.R;
+    scanMeldung($("#kf-fund"), "◆ " + T("Kennfeld") + " " + (st.kfNr + 1) + "/" + karten.length);
+    hexFokus(st, k.off, k.off + k.C * k.R * 2, "kf", t, 420); st.hexT = -1e9;
+  } else if (!farbig && t - st.rohT >= 110) {   // Suche: Rohdaten an der aktuellen Stelle im Hexdump
+    kfGroesse(st, KF_SP, KF_ZE); st.rohT = t; st.ziel = kfRoh(st.u8, st.pos); st.wechsel = -1e9;
+    $("#kf-info").textContent = "0x" + adr(st.pos) + " · " + KF_SP + "×" + KF_ZE;
+  }
+  const C = st.C, R = st.R, z = st.z, ziel = st.ziel;
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {   // Hoehen weich nachfuehren, neue Kennfelder wachsen von vorne nach hinten
+    const i = r * C + c;
+    if (ruhig) z[i] = ziel[i];
+    else if (t - st.wechsel >= (c + R - 1 - r) * 14) z[i] += (ziel[i] - z[i]) * (farbig ? .2 : .3);
+  }
+  // Schraegbild: Spalten nach rechts, Zeilen nach hinten, Werte nach oben - passend in die Flaeche eingepasst
+  const breite = C - 1 + (R - 1) * .62, hoehe = breite * .25, oben = (R - 1) * .36 + hoehe, unten = (C - 1) * .3;
+  const s = Math.min((W - 20) / breite, (H - 14) / (oben + unten));
+  const ox = (W - breite * s) / 2, oy = (H - (oben + unten) * s) / 2 + oben * s;
+  const P = (c, r, h) => [ox + (c + r * .62) * s, oy + (c * .3 - r * .36 - h * hoehe) * s];
+  ctx.clearRect(0, 0, W, H);
+  ctx.lineWidth = 1; ctx.strokeStyle = "rgba(122,166,255,.13)"; ctx.beginPath();
+  for (let c = 0; c < C; c += 3) { ctx.moveTo(...P(c, 0, 0)); ctx.lineTo(...P(c, R - 1, 0)); }
+  for (let r = 0; r < R; r += 3) { ctx.moveTo(...P(0, r, 0)); ctx.lineTo(...P(C - 1, r, 0)); }
+  ctx.stroke();
+  ctx.lineJoin = "round";
+  for (const [c, r] of kfReihe(C, R)) {
+    const i = r * C + c, a = z[i], b = z[i + 1], d = z[i + C], e = z[i + C + 1];
+    const p1 = P(c, r, a), p2 = P(c + 1, r, b), p3 = P(c + 1, r + 1, e), p4 = P(c, r + 1, d);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.lineTo(p3[0], p3[1]); ctx.lineTo(p4[0], p4[1]); ctx.closePath();
+    const licht = Math.max(26, Math.min(74, 50 + (a + d - b - e) * 38 + (d + e - a - b) * 22));
+    if (farbig) {
+      ctx.fillStyle = `hsl(${(222 - 222 * (a + b + d + e) / 4).toFixed(0)},90%,${licht.toFixed(0)}%)`; ctx.fill();
+      ctx.strokeStyle = "rgba(3,7,18,.5)";
+    } else {
+      ctx.fillStyle = `hsla(216,95%,${licht.toFixed(0)}%,.22)`; ctx.fill();
+      ctx.strokeStyle = "rgba(122,166,255,.5)";
+    }
+    ctx.stroke();
+  }
+}
+function scanStart(datei) {
+  scanStop();
+  const nr = scanLauf.nr, t0 = performance.now();
+  const st = scanLauf.st = {u8: null, ids: [], karten: [], phase: -1, textNr: 0, pos: 0, n: 16, cursor: -1, mark: null, halt: 0,
+    hexT: -1e9, rohT: -1e9, kfT: -1e9, kfNr: -1, wechsel: 0, C: KF_SP, R: KF_ZE, z: new Float32Array(KF_N), ziel: new Float32Array(KF_N), zeilen: 0, kf: null};
+  $("#hex-zeilen").innerHTML = ""; $("#hex-adr").textContent = "0x000000"; $("#kf-info").textContent = "–";
+  $("#hex-fund").classList.remove("an"); $("#kf-fund").classList.remove("an");
+  $(".scan .balken").classList.remove("voll");
+  const cv = $("#kf-canvas"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
+  st.phase = 0; scanSchritte(0); schrittText(SCAN_TEXTE[0][0]);
+  Promise.resolve().then(() => scanLesen(datei)).catch(() => null).then(u8 => {
+    if (scanLauf.nr !== nr) return;
+    st.u8 = u8 && u8.length ? u8 : scanErsatz(datei.name);
+    st.ids = scanIds(st.u8); st.karten = kennfelderFinden(st.u8);
+  });
+  (function tick(jetzt) {
+    if (scanLauf.nr !== nr) return;
+    try {
+      const t = jetzt - t0;
+      let ph = 0; while (ph + 1 < SCAN_PHASEN.length && t >= SCAN_PHASEN[ph + 1]) ph++;
+      if (st.u8 && ph !== st.phase) {
+        st.phase = ph; st.textNr = 0; scanSchritte(ph); schrittText(SCAN_TEXTE[ph][0]);
+        const f = ph === 1 ? st.ids.find(x => x.art === "ecu") || st.ids.find(x => x.art === "hw") : ph === 2 ? st.ids.find(x => x.art === "sw") : null;
+        if (f) { hexFokus(st, f.von, f.bis, "fund", t, 300); scanMeldung($("#hex-fund"), "◆ " + f.id + " · 0x" + adr(f.von)); st.hexT = -1e9; }
+      } else if (ph === 4) {
+        const k = Math.min(SCAN_TEXTE[4].length - 1, Math.floor((t - SCAN_PHASEN[4]) / 650));
+        if (k !== st.textNr) { st.textNr = k; schrittText(SCAN_TEXTE[4][k]); }
+      }
+      if (st.u8) {
+        if (!st.zeilen) { scanLayout(st); st.hexT = -1e9; }
+        if (st.zeilen && t - st.hexT >= 55) { st.hexT = t; hexSchritt(st, t); hexMalen(st); }
+        kfMalen(st, t);
+      }
+    } catch (e) { console.warn("Scan-Anzeige", e); return; }   // Fehler in der Optik: Animation anhalten, Pruefung laeuft weiter
+    scanLauf.raf = requestAnimationFrame(tick);
+  })(t0);
+}
+function scanStop(fertig) {
+  scanLauf.nr++; cancelAnimationFrame(scanLauf.raf);
+  if (fertig) { scanSchritte(0, true); $(".scan .balken").classList.add("voll"); }
+  else scanLauf.st = null;
+}
+addEventListener("resize", () => { const st = scanLauf.st; if (st) { st.zeilen = 0; st.kf = null; } });
+
 async function pruefen(datei) {
   if (!datei) return;
   if (datei.size > 16 * 1024 * 1024) return fehler("Datei zu groß", "Die Datei ist größer als 16 MB.");
   $("#analyse-datei").innerHTML = SYMBOL_DATEI + "<span></span>";
   $("#analyse-datei span").textContent = datei.name;
   seite("ecu"); $(zustand.modus === "original" ? "#sn-original" : "#sn-neu").classList.add("an");
-  zeige("v-analyse"); schrittAnimation();
+  zeige("v-analyse");
+  try { scanStart(datei); } catch (e) { console.warn("Scan-Anzeige", e); }   // nur Optik, darf die Pruefung nie stoeren
   log("Upload gestartet: " + datei.name);
   const beginn = Date.now();
   let erg;
   try { erg = await rufe("pruefen", datei.name, datei); }
   catch (e) { erg = {fehler: "Die Datei konnte nicht gelesen werden."}; }
-  await new Promise(r => setTimeout(r, Math.max(0, 1800 - (Date.now() - beginn))));   // Animation kurz zeigen
-  clearInterval(schrittTimer);
+  await new Promise(r => setTimeout(r, Math.max(0, SCAN_DAUER - (Date.now() - beginn))));   // Scan-Animation zeigen
+  const gefunden = !erg.fehler && (zustand.modus !== "original" || (erg.angebot || []).some(o => o.key === zustand.original));
+  if (gefunden && !ruhig) { scanStop(true); await new Promise(r => setTimeout(r, 320)); }   // kurz alles abgehakt zeigen
+  scanStop();
   if (erg.fehler) {
     log(erg.fehler, "warn");
     zustand.entwurf = erg.anfrage ? erg : null;   // Original liegt auf dem Server -> Anfrage moeglich
@@ -2399,8 +3064,17 @@ function listeMalen(hervorheben) {
       <span class="pille ${a.zahlung === "offen" ? "WARTET" : a.status}">${a.status === "WARTET" || a.zahlung === "offen" ? "<i></i>" : ""}<span></span></span></div>
       <div class="a-info"></div>
       <div class="a-fuss"><span class="leise" style="font-size:12.5px"></span><span class="aktionen"></span></div>`;
+    el.dataset.status = a.zahlung === "offen" ? "OFFEN" : a.status;   // Farbe des Leuchtstreifens
     el.querySelector(".a-datei").textContent = a.datei;
     el.querySelector(".a-info").textContent = (a.option_name || "–") + (a.fahrzeug ? " · " + a.fahrzeug : "") + " · " + datum(a.zeit);
+    // Fortschritt: Gesendet -> Freigegeben -> Bereit (zum Herunterladen)
+    const weg = document.createElement("div"); weg.className = "a-weg";
+    const stufen = a.status === "ABGELEHNT" ? ["ok", "nein", ""] : a.status === "FREIGEGEBEN"
+      ? ["ok", "ok", a.zahlung === "offen" ? "jetzt" : "ok"] : ["ok", "jetzt", ""];
+    ["Gesendet", a.status === "ABGELEHNT" ? "Abgelehnt" : "Freigegeben", "Bereit"].forEach((t, i) => {
+      const s = document.createElement("span"); s.textContent = t; if (stufen[i]) s.className = stufen[i]; weg.appendChild(s);
+    });
+    el.querySelector(".a-info").after(weg);
     if (a.typ === "anfrage") el.querySelector(".a-info").insertAdjacentHTML("afterbegin", '<span class="typ-anfrage">Anfrage</span>');
     el.querySelector(".pille span").textContent = a.zahlung === "offen" ? "Bitte bezahlen"
       : a.typ === "anfrage" ? {WARTET: "In Bearbeitung", FREIGEGEBEN: "Fertig"}[a.status] || a.status_text || a.status
@@ -2640,9 +3314,19 @@ $("#suche").addEventListener("input", e => { zustand.suche = e.target.value; lis
 document.addEventListener("keydown", e => {
 });
 const zone = $("#zone");
-$("#datei").addEventListener("change", e => { pruefen(e.target.files[0]); e.target.value = ""; });
-const ecuSichtbar = () => aktuelle === "v-upload" && $("#seite-ecu").classList.contains("aktiv");
-["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (ecuSichtbar()) zone.classList.add("ziehen"); }));
+function zoneWelle(x, y) {   // Lichtwelle an der Stelle, an der die Datei landet
+  if (ruhig) return;
+  const r = zone.getBoundingClientRect(), f = zoomFaktor(), w = document.createElement("i");
+  w.className = "p-welle";
+  w.style.left = ((x == null ? r.left + r.width / 2 : x) - r.left) / f + "px";
+  w.style.top = ((y == null ? r.top + r.height / 2 : y) - r.top) / f + "px";
+  zone.appendChild(w); setTimeout(() => w.remove(), 950);
+}
+$("#datei").addEventListener("change", e => { if (e.target.files[0]) zoneWelle(); pruefen(e.target.files[0]); e.target.value = ""; });
+const ecuSichtbar = () => aktuelle === "v-upload" && $("#seite-ecu").classList.contains("aktiv") && !$("#konto-dialog").classList.contains("offen");
+let ziehenAus;   // falls das Ziehen ausserhalb des Fensters endet, kommt kein passendes dragleave
+["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (ecuSichtbar()) {
+  zone.classList.add("ziehen"); clearTimeout(ziehenAus); ziehenAus = setTimeout(() => zone.classList.remove("ziehen"), 1000); } }));
 ["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || e.target === zone) zone.classList.remove("ziehen"); }));
 /* Gezogene Datei holen. Auf dem Mac (WebKit) kommt sie manchmal leer oder gar nicht an: dann die Datei
    im Programm einlesen bzw. ueber das Programm direkt aus der Drag-Ablage von macOS holen. */
@@ -2662,6 +3346,7 @@ async function gezogeneDatei(e) {
 }
 document.addEventListener("drop", async e => {
   if (!ecuSichtbar()) return;
+  zoneWelle(e.clientX, e.clientY);
   const f = await gezogeneDatei(e);
   if (f) pruefen(f);
   else if (/Macintosh/.test(navigator.userAgent)) toast("fehler", "Datei nicht geladen", "Bitte nochmal ziehen oder auf „Datei wählen“ klicken.", 7000);
@@ -2954,7 +3639,7 @@ async function preiseLaden() {
   const box = $("#pr-liste"); box.innerHTML = "";
   if (!d.liste.length) box.innerHTML = '<p class="leise">Gerade sind keine Lösungen hinterlegt.</p>';
   d.liste.forEach(o => {
-    const k = document.createElement("div"); k.className = "pr-k" + (o.original ? " orig" : "");
+    const k = document.createElement("div"); k.className = "pr-k" + (o.original ? " orig" : ""); k.dataset.key = o.key;   // Symbol je Loesung
     const n = document.createElement("b"); n.textContent = o.original && !/rückrüst/i.test(o.name) ? o.name + " (Rückrüsten)" : o.name;
     const p = document.createElement("div"); p.className = "pr-p" + (o.preis ? "" : " anfrage");
     p.textContent = o.preis ? euro(o.preis) : "Preis auf Anfrage";
@@ -3233,16 +3918,16 @@ init();
 
 /* ===================== PRO: Desktop-Effekte ===================== */
 (function pro() {
-  if (ruhig) return;
-  const fein = matchMedia("(hover:hover) and (pointer:fine)").matches;
-  // Uhr + echte Antwortzeit vom Server
-  const uhr = $("#uhr"), ping = $("#ping");
-  setInterval(() => uhr.textContent = new Date().toLocaleTimeString("de-DE"), 1000);
+  // Uhr + echte Antwortzeit vom Server (Information, keine Animation: laeuft auch, wenn Animationen aus sind)
+  const uhr = $("#uhr"), ping = $("#ping"), uhrStellen = () => uhr.textContent = new Date().toLocaleTimeString("de-DE");
+  uhrStellen(); setInterval(uhrStellen, 1000);
   const orig = WEB.aktualisieren;
   WEB.aktualisieren = async (...a) => { const t0 = performance.now(); const r = await orig(...a);
     if (r && !r.fehler) { const ms = Math.max(1, Math.round(performance.now() - t0)); ping.textContent = ms + " ms"; ping.className = ms < 250 ? "gut" : ms < 800 ? "mittel" : "lahm"; }
     else { ping.textContent = "offline"; ping.className = "lahm"; }
     return r; };
+  if (ruhig) return;
+  const fein = matchMedia("(hover:hover) and (pointer:fine)").matches;
   // Lauflicht um die Rahmen + Impulse auf den Leiterbahnen
   document.querySelectorAll(".app .karte, .seite").forEach((k, i) => {
     const l = document.createElement("i"); l.className = "lauflicht"; l.style.animationDelay = (-i * 1.7) + "s"; k.appendChild(l);

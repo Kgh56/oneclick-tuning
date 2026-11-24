@@ -1167,8 +1167,12 @@ class WebTests(Basis):
         a = self.admin()
         seite = a.get("/admin", headers=app_ua).text
         self.assertIn('class="aa-leiste"', seite)
-        self.assertIn('class="admin-app"', seite)
-        self.assertNotIn('class="aa-leiste"', a.get("/admin", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)   # Browser: schlicht wie bisher
+        self.assertIn('<body class="aa admin-app">', seite)
+        # Browser: dasselbe Design mit Seitenleiste (am Handy per CSS das Menue oben)
+        browser = a.get("/admin", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text
+        self.assertIn('<body class="aa aa-browser">', browser)
+        self.assertIn('class="aa-leiste"', browser)
+        self.assertIn('<body class="aa aa-browser ohne-leiste">', c.get("/impressum", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
         self.assertEqual(c.get("/favicon.svg").mimetype, "image/svg+xml")
         # Anmeldung bleibt gleich streng: ohne Login kein Admin, auch nicht mit App-Kennung
         self.assertEqual(c.get("/admin", headers=app_ua).status_code, 302)
