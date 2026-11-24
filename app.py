@@ -111,7 +111,7 @@ app.secret_key = SECRET_DATEI.read_text().strip()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 sperre = threading.Lock()
-index_sperre = threading.Lock()
+index_sperre = oneclick.INDEX_SPERRE   # dieselbe Sperre wie beim Neu-Einlesen im Hintergrund
 eingang_sperre = threading.Lock()
 telegram_chats = {}   # zuletzt gesehene Chats (fuer die Einrichtung im Admin-Bereich)
 versuche = {}         # (art, ip) -> Zeitstempel, gegen Passwort-Raten und Upload-Flut
@@ -2046,7 +2046,7 @@ def admin():
     alle = [a for a in alle_auftraege() if a["status"] != "ENTWURF"]
     wartend = [a for a in alle if a["status"] == "WARTET"]
     return render_template("admin.html", wartend=wartend, alle=alle[:100],
-                           archiv=len(oneclick.lade_index()["eintraege"]),
+                           archiv=len(oneclick.lade_index()["eintraege"]), index_neubau=oneclick.index_neubau_laeuft(),
                            freigegeben=sum(a["status"] == "FREIGEGEBEN" for a in alle),
                            telegram=bool(lade_config().get("telegram_chat_id")),
                            zahlung=zahlung_aktiv(), euro=euro,
@@ -4314,6 +4314,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <div class="karte"><div class="leise">Freigegeben</div><div class="zahl">{{ freigegeben }}</div></div>
 {% if zahlung %}<div class="karte"><div class="leise">Bezahlt (gesamt)</div><div class="zahl" style="font-size:32px">{{ euro(bezahlt) }}</div></div>{% endif %}
 <div class="karte"><div class="leise">Files im Archiv</div><div class="zahl">{{ archiv }}</div>
+{% if index_neubau %}<p class="leise" style="font-size:12.5px;margin:4px 0 0">⏳ Wird nach dem Update im Hintergrund neu eingelesen …</p>{% endif %}
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
 </div>
@@ -5445,6 +5446,7 @@ if __name__ == "__main__":
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
         threading.Thread(target=homepage_schleife, daemon=True).start()
+        threading.Thread(target=oneclick.lade_index, daemon=True).start()   # nach einem Update gleich im Hintergrund neu einlesen
         host = os.environ.get("ONECLICK_HOST", "0.0.0.0")
         app.config["SESSION_COOKIE_SECURE"] = lade_config().get("basis_url", "").startswith("https://")
         try:

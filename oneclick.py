@@ -31,10 +31,16 @@ Hinweis: Checksummen werden NICHT korrigiert -> Flash-Tool / WinOLS.
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import threading
 import time
 from pathlib import Path
+
+# Schutz fuer index.json: Neu-Einlesen und Aenderungen nie gleichzeitig (RLock: app.py haelt sie auch selbst)
+INDEX_SPERRE = threading.RLock()
+_neubau_sperre = threading.Lock()
 
 BASE = Path(__file__).resolve().parent
 ARCHIV = BASE / "archiv"
@@ -160,6 +166,11 @@ def gemerkte_ecu(nummern: list) -> str:
 def ecu_im_index_nachtragen() -> int:
     """Nach einer Zuordnung: Index-Eintraege ohne erkannte ECU (oder mit gemerkter) aktualisieren.
     Liest nur den Index, keine Archiv-Dateien. Rueckgabe: Anzahl geaenderter Eintraege."""
+    with INDEX_SPERRE:
+        return _ecu_im_index_nachtragen()
+
+
+def _ecu_im_index_nachtragen() -> int:
     index = lade_index()
     geaendert = 0
     for e in index["eintraege"]:
@@ -174,9 +185,7 @@ def ecu_im_index_nachtragen() -> int:
                 e["ecu_gemerkt"] = True
             geaendert += 1
     if geaendert:
-        tmp = INDEX_DATEI.with_suffix(".tmp")
-        tmp.write_text(json.dumps(index, ensure_ascii=False))
-        tmp.replace(INDEX_DATEI)
+        index_schreiben(index)
     return geaendert
 
 
@@ -562,45 +571,81 @@ def archiv_datei(eintrag: dict, option: str = None) -> Path:
 
 
 def baue_index() -> dict:
-    eintraege = []
-    if not ARCHIV.exists():
-        ARCHIV.mkdir(parents=True)
-    for ordner in sorted(p for p in ARCHIV.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        ori_name, gefunden = klassifiziere([p.name for p in ordner.iterdir() if p.is_file()])
-        if not ori_name:
-            print(f"  ! {ordner.name}: kein Original erkannt, uebersprungen")
-            continue
-        ori = (ordner / ori_name).read_bytes()
-        optionen = {}
-        for opt, name in gefunden.items():
-            mod = (ordner / name).read_bytes()
-            if len(mod) != len(ori):
-                print(f"  ! {ordner.name}/{name}: andere Groesse als {ori_name}, uebersprungen")
+    """Archiv einlesen (nur lesen) und index.json schreiben. Immer nur einer gleichzeitig."""
+    with INDEX_SPERRE:
+        eintraege = []
+        if not ARCHIV.exists():
+            ARCHIV.mkdir(parents=True)
+        for ordner in sorted(p for p in ARCHIV.iterdir() if p.is_dir() and not p.name.startswith(".")):
+            ori_name, gefunden = klassifiziere([p.name for p in ordner.iterdir() if p.is_file()])
+            if not ori_name:
+                print(f"  ! {ordner.name}: kein Original erkannt, uebersprungen")
                 continue
-            bloecke = finde_bloecke(ori, mod)
-            if not bloecke:
-                print(f"  ! {ordner.name}/{name}: identisch mit dem Original, uebersprungen")
-                continue
-            optionen[opt] = {"datei": name, "bloecke": bloecke, "sha256": hashlib.sha256(mod).hexdigest()}
-        info = erkenne(ori)   # ohne Tuning-File: nur Original (fuer Rueckruesten ueber Softwarenummer)
-        eintraege.append({"name": ordner.name, "ori_datei": ori_name, "ori_sha256": hashlib.sha256(ori).hexdigest(),
-                          **info, "optionen": optionen})
-        print(f"  + {ordner.name}: {', '.join(optionen) or 'nur Original'} | ECU {', '.join(info['ecu']) or '?'}")
+            ori = (ordner / ori_name).read_bytes()
+            optionen = {}
+            for opt, name in gefunden.items():
+                mod = (ordner / name).read_bytes()
+                if len(mod) != len(ori):
+                    print(f"  ! {ordner.name}/{name}: andere Groesse als {ori_name}, uebersprungen")
+                    continue
+                bloecke = finde_bloecke(ori, mod)
+                if not bloecke:
+                    print(f"  ! {ordner.name}/{name}: identisch mit dem Original, uebersprungen")
+                    continue
+                optionen[opt] = {"datei": name, "bloecke": bloecke, "sha256": hashlib.sha256(mod).hexdigest()}
+            info = erkenne(ori)   # ohne Tuning-File: nur Original (fuer Rueckruesten ueber Softwarenummer)
+            eintraege.append({"name": ordner.name, "ori_datei": ori_name, "ori_sha256": hashlib.sha256(ori).hexdigest(),
+                              **info, "optionen": optionen})
+            print(f"  + {ordner.name}: {', '.join(optionen) or 'nur Original'} | ECU {', '.join(info['ecu']) or '?'}")
 
-    index = {"version": INDEX_VERSION, "eintraege": eintraege, "zeit": time.time()}
-    tmp = INDEX_DATEI.with_suffix(".tmp")
-    tmp.write_text(json.dumps(index, ensure_ascii=False))
-    tmp.replace(INDEX_DATEI)
+        index = {"version": INDEX_VERSION, "eintraege": eintraege, "zeit": time.time()}
+        index_schreiben(index)
     print(f"{len(eintraege)} Eintraege im Index.")
     return index
 
 
+def index_schreiben(index: dict):
+    """Erst komplett in eine eigene Temp-Datei, dann in einem Schritt austauschen (nie halb geschrieben)."""
+    tmp = INDEX_DATEI.with_name(f".{INDEX_DATEI.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(index, ensure_ascii=False))
+    tmp.replace(INDEX_DATEI)
+
+
+_neubau = {"laeuft": False}
+
+
+def index_neubau_laeuft() -> bool:
+    return _neubau["laeuft"]
+
+
+def index_im_hintergrund_neu():
+    """Nach einem Update (neue INDEX_VERSION): Archiv EINMAL im Hintergrund neu einlesen (nur lesend).
+    Bis dahin arbeitet der Server mit dem bisherigen Index weiter - kein Aufruf wartet darauf."""
+    with _neubau_sperre:
+        if _neubau["laeuft"]:
+            return
+        _neubau["laeuft"] = True
+
+    def lauf():
+        try:
+            baue_index()
+        except Exception as e:   # z. B. eine unlesbare Datei: alter Index bleibt, naechster Aufruf versucht es erneut
+            print(f"Index neu einlesen fehlgeschlagen: {e}", file=sys.stderr)
+        finally:
+            _neubau["laeuft"] = False
+    threading.Thread(target=lauf, daemon=True, name="index-neu").start()
+
+
 def lade_index() -> dict:
-    if not INDEX_DATEI.exists():
-        return baue_index()
-    index = json.loads(INDEX_DATEI.read_text())
-    if index.get("version") != INDEX_VERSION:   # nach einem Update einmal neu einlesen
-        return baue_index()
+    try:
+        index = json.loads(INDEX_DATEI.read_text())
+    except (OSError, ValueError):   # noch kein Index: jetzt bauen (gleichzeitige Aufrufe warten auf den einen)
+        with INDEX_SPERRE:
+            if INDEX_DATEI.exists():
+                return json.loads(INDEX_DATEI.read_text())
+            return baue_index()
+    if index.get("version") != INDEX_VERSION:   # nach einem Update: im Hintergrund neu einlesen
+        index_im_hintergrund_neu()
     return index
 
 

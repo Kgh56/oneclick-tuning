@@ -14,6 +14,7 @@ import random
 import re
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -266,6 +267,30 @@ class KernTests(Basis):
         andere = bytearray(fremd)
         andere[0x10A8:0x10B7] = b"A2C118827000006"   # anderer Software-Stand -> kein Angebot
         self.assertEqual(oneclick.finde_loesungen(bytes(andere))[1], {})
+
+    def test_index_nach_update_im_hintergrund(self):
+        """Neue INDEX_VERSION nach einem Update: Anfragen warten NICHT auf das Neu-Einlesen (bei grossem Archiv
+        haette das den Server minutenlang blockiert), der alte Index gilt so lange weiter."""
+        alt = json.loads(oneclick.INDEX_DATEI.read_text())
+        alt["version"] = oneclick.INDEX_VERSION - 1
+        for e in alt["eintraege"]:
+            e.pop("conti_nr", None)   # so sah der Index vor dem Update aus
+        oneclick.INDEX_DATEI.write_text(json.dumps(alt))
+        with oneclick.INDEX_SPERRE:   # Neu-Einlesen haengt fest (z. B. riesiges Archiv) ...
+            idx = oneclick.lade_index()
+            self.assertEqual(idx["version"], oneclick.INDEX_VERSION - 1)   # ... trotzdem sofort eine Antwort
+            self.assertTrue(oneclick.index_neubau_laeuft())
+            info, l = oneclick.finde_loesungen(bytes(self.golf))           # und alles funktioniert mit dem alten Index
+            self.assertIn("stage1", l)
+            oneclick.lade_index()   # kein zweites Neu-Einlesen
+            self.assertEqual(sum(t.name == "index-neu" for t in threading.enumerate()), 1)
+        for _ in range(200):
+            if not oneclick.index_neubau_laeuft():
+                break
+            time.sleep(0.05)
+        neu = oneclick.lade_index()
+        self.assertEqual(neu["version"], oneclick.INDEX_VERSION)
+        self.assertTrue(all("conti_nr" in e for e in neu["eintraege"]))
 
     def test_rueckruesten_softwarenummer_grenzen(self):
         self.nur_original_ablegen()
