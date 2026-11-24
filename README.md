@@ -224,17 +224,6 @@ und den vorzeitigen Beginn der Ausführung (Widerrufsrecht); Zeitpunkt und Wortl
 | **Aufträge** | Wartende Aufträge bestätigen/ablehnen, alle Aufträge |
 | **Archiv** | Fahrzeug einzeln hinzufügen oder Option nachreichen, eigene Lösungen anlegen, ZIP-Import, Einträge löschen, Archiv als ZIP sichern |
 | **Einstellungen** | Firmenname, Impressum, Datenschutz, Telegram, „nur identische Originale“, automatisches Löschen alter Aufträge (Standard 90 Tage), Admin-Passwort ändern, **Update installieren** |
-| **Video** | Clips hochladen und dazuschreiben, was Claude daraus machen soll (z. B. Actionfilm). Claude schneidet und legt das fertige Video dort ab; Telegram meldet „Video ist fertig“. Siehe unten. |
-
-## Video (Claude schneidet Videos)
-- **Hochladen:** Admin → Video → Videos auswählen (mehrere gehen) → Wunsch dazuschreiben → Hochladen. Der Upload läuft
-  in 8-MB-Stücken; bricht er ab, dieselben Videos nochmal auswählen, dann geht es weiter.
-- **Zugang für Claude:** Unter „Zugang für Claude“ einen Schlüssel erzeugen und in das Fenster eintragen, das Claude
-  zeigt (nicht in den Chat). Claude sieht damit nur die Videos dieses Bereichs. „Zugriff sperren“ nimmt ihn zurück.
-- **Speicher:** Die Videos liegen nur vorübergehend in `videos/` und werden automatisch gelöscht: 1 Stunde nach dem
-  Herunterladen des fertigen Videos, spätestens nach 3 Tagen, abgebrochene Uploads nach 24 Stunden. Es bleiben immer
-  mindestens 5 GB auf dem Server frei; reicht der Platz nicht, wird der Upload abgelehnt. Archiv und alle anderen Daten
-  fasst das nie an.
 
 ## Telegram einrichten (im Admin-Bereich → Einstellungen)
 1. In Telegram **@BotFather** öffnen → `/newbot` → Namen vergeben → **Token** in den Einstellungen eintragen → Speichern.
