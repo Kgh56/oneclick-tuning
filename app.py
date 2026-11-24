@@ -3581,7 +3581,8 @@ def update_pruefen(ordner: Path = None) -> list:
 
 # Daten auf dem Server (Archiv mit Original-/Stage-Files usw.). Sie sind nie im Repository; ein Update darf sie
 # unter keinen Umstaenden anfassen. Loeschen nur, wenn der Admin es selbst im Admin-Bereich ausloest.
-GESCHUETZTE_DATEN = ("archiv", "auftraege", "eingang", "eigene", "sicherungen", "tickets", "config.json", "benutzer.json",
+# "videos": Ordner des frueheren Video-Bereichs (wieder ausgebaut) - bleibt geschuetzt, falls dort noch etwas liegt.
+GESCHUETZTE_DATEN = ("archiv", "auftraege", "eingang", "eigene", "sicherungen", "tickets", "videos", "config.json", "benutzer.json",
                      "index.json", "optionen.json", "loesung_namen.json", "installationen.json", "downloads.json",
                      "kunden.json", "umsatz.json", ".secret_key")
 
