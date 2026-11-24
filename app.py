@@ -58,7 +58,6 @@ TICKETS = BASE / "tickets"   # Support-Tickets aus dem Programm (bleiben auf dem
 EINGANG = BASE / "eingang"   # lose Dateien aus ZIP-Importen, die der Admin selbst zuordnet
 EIGENE = BASE / "eigene"   # Admin: eigene Files kostenlos durch das Archiv schicken (24 h)
 SICHERUNGEN = BASE / "sicherungen"   # Archiv-Stand vor "Alles löschen" / "Alles neu sortieren"
-VIDEOS = BASE / "videos"   # Zwischenlager: Videos, die Claude schneidet. Wird automatisch geleert (siehe CLAUDE.md)
 BENUTZER_DATEI = BASE / "benutzer.json"
 KUNDEN_DATEI = BASE / "kunden.json"   # Kundenkonten aus dem Programm (Passwoerter nur als Hash)
 CONFIG_DATEI = BASE / "config.json"
@@ -526,8 +525,7 @@ def benachrichtigen(auftrag: dict):
 # Download-Links im Admin tragen ein signiertes, zeitlich begrenztes Zeichen (?dl=...). Grund: Die Mac-Admin-App
 # (pywebview/WebKit) laedt Downloads ein zweites Mal ueber macOS herunter - OHNE das Anmelde-Cookie. Ohne Zeichen
 # landete dann die Anmeldeseite statt des Files auf dem Mac. Das Zeichen gilt nur fuer genau diesen Pfad und nur GET.
-DOWNLOAD_ENDPUNKTE = {"original", "download", "admin_ticket_datei", "sortieren_datei", "archiv_backup", "eigenes_file_ergebnis",
-                      "admin_video_ergebnis"}
+DOWNLOAD_ENDPUNKTE = {"original", "download", "admin_ticket_datei", "sortieren_datei", "archiv_backup", "eigenes_file_ergebnis"}
 DOWNLOAD_GUELTIG = 6 * 3600
 
 
@@ -847,8 +845,6 @@ def ist_admin_app() -> bool:
 def nur_ueber_programm():
     """Die Kunden-Schnittstelle (/api/...) beantwortet nur das Programm. Im Browser gibt es nur die
     Werbeseite und den Admin-Bereich."""
-    if request.path == "/api/video" or request.path.startswith("/api/video/"):
-        return   # Video-Schnittstelle fuer Claude: eigener Schluessel, prueft jede Route selbst (video_api)
     if request.path.startswith("/api/") and not ist_programm() and not session.get("admin") and not download_erlaubt():
         return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
 
@@ -3127,402 +3123,6 @@ def eigenes_file_ergebnis(eid):
     return send_file(ordner / "ergebnis.bin", as_attachment=True, mimetype="application/octet-stream", download_name=name)
 
 
-# ---------------------------------------------------------------------------
-# Admin: Video (Claude schneidet Videos)
-# ---------------------------------------------------------------------------
-# Die Inhaberin laedt Clips hoch und schreibt dazu, was sie will (z. B. "Actionfilm"). Claude holt die Clips ueber
-# /api/video/... mit einem eigenen Schluessel, schneidet sie und legt das fertige Video wieder hier ab.
-# videos/ ist nur ein Zwischenlager. Auf ausdruecklichen Wunsch der Inhaberin wird es automatisch geleert:
-# 1 Stunde nach dem Herunterladen des fertigen Videos, spaetestens nach 3 Tagen. Geloescht wird dabei
-# ausschliesslich in videos/ - nie im Archiv, in Sicherungen oder anderen Daten (siehe CLAUDE.md).
-
-VIDEO_ID = re.compile(r"[0-9a-f]{32}")
-VIDEO_TEIL = 8 * 1024 * 1024        # Upload in Stuecken: bleibt unter der 16-MB-Grenze und uebersteht Funkloecher
-VIDEO_MAX = 20 * 1024 ** 3          # hoechstens 20 GB auf einmal
-VIDEO_RESERVE = 5 * 1024 ** 3       # auf dem Server bleiben immer mindestens 5 GB frei
-VIDEO_NACH_DOWNLOAD = 3600          # fertiges Video heruntergeladen -> 1 Stunde spaeter weg
-VIDEO_HOECHSTENS = 3 * 86400        # alles spaetestens 3 Tage nach dem Hochladen (bzw. nach dem fertigen Video) weg
-VIDEO_ABGEBROCHEN = 86400           # Upload haengt seit 24 Stunden -> weg
-VIDEO_ENDUNGEN = (".mp4", ".mov", ".m4v", ".mkv", ".avi", ".mts", ".webm", ".3gp")
-VIDEO_STATUS = {"upload": ("Upload unvollständig", "s-ENTWURF"), "wartet": ("Wartet auf Claude", "s-WARTET"),
-                "arbeit": ("Claude schneidet", "s-ENTWURF"), "fertig": ("Fertig", "s-FREIGEGEBEN")}
-video_sperre = threading.Lock()
-
-
-def video_groesse(n: int) -> str:
-    if n >= 1024 ** 3:
-        return f"{n / 1024 ** 3:.1f} GB".replace(".", ",")
-    return f"{max(1, round(n / 1024 ** 2))} MB"
-
-
-def video_zeit(t: float) -> str:
-    return datetime.fromtimestamp(t).strftime("%d.%m. %H:%M")
-
-
-def video_info(vid: str):
-    if not VIDEO_ID.fullmatch(vid or ""):
-        return None
-    try:
-        return json.loads((VIDEOS / vid / "info.json").read_text())
-    except (OSError, ValueError):
-        return None
-
-
-def video_speichern(v: dict):
-    v["aktiv"] = time.time()
-    json_speichern(VIDEOS / v["id"] / "info.json", v)
-
-
-def alle_videos() -> list:
-    if not VIDEOS.exists():
-        return []
-    liste = [video_info(o.name) for o in VIDEOS.iterdir() if o.is_dir()]
-    return sorted((v for v in liste if v), key=lambda v: v["zeit"], reverse=True)
-
-
-def video_endung(name: str) -> str:
-    endung = Path(name or "").suffix.lower()
-    return endung if endung in VIDEO_ENDUNGEN else ".mp4"
-
-
-def clip_pfad(v: dict, c: dict, teil: bool = False) -> Path:
-    return VIDEOS / v["id"] / (f"clip_{c['nr']}.teil" if teil else f"clip_{c['nr']}{c['endung']}")
-
-
-def dateigroesse(pfad: Path) -> int:
-    return pfad.stat().st_size if pfad.exists() else 0
-
-
-def video_ausstehend() -> int:
-    """Bytes, die laufende Uploads (Clips und fertige Videos) noch schreiben werden."""
-    rest = 0
-    for v in alle_videos():
-        for c in v["clips"]:
-            if not c["fertig"]:
-                rest += max(0, c["groesse"] - dateigroesse(clip_pfad(v, c, teil=True)))
-        if v.get("abgabe"):
-            rest += max(0, v["abgabe"]["groesse"] - dateigroesse(VIDEOS / v["id"] / "ergebnis.teil"))
-    return rest
-
-
-def video_platz_ok(neu: int) -> bool:
-    VIDEOS.mkdir(exist_ok=True)
-    return shutil.disk_usage(VIDEOS).free - video_ausstehend() - neu >= VIDEO_RESERVE
-
-
-def stueck_anhaengen(pfad: Path, start: int, daten: bytes, gesamt: int):
-    """Haengt ein Stueck an. Passt start nicht zur vorhandenen Groesse, bleibt alles, wie es ist, und der
-    Absender macht bei der gelieferten Groesse weiter. Liefert (Groesse, angehaengt)."""
-    ist = dateigroesse(pfad)
-    if start != ist:
-        return ist, False
-    if not daten or len(daten) > VIDEO_TEIL or ist + len(daten) > gesamt:
-        raise ValueError("Das Stück passt nicht.")
-    if shutil.disk_usage(pfad.parent).free - len(daten) < VIDEO_RESERVE // 2:
-        raise OSError("Auf dem Server ist kein Platz mehr frei.")
-    with open(pfad, "ab") as f:
-        f.write(daten)
-    return ist + len(daten), True
-
-
-def video_loeschen(vid: str):
-    """Loescht genau einen Vorgang in videos/. Aufrufer haelt video_sperre. Ausserhalb von videos/ wird nie etwas
-    geloescht: der Name muss eine Vorgangsnummer sein und der Ordner direkt in videos/ liegen (kein Link)."""
-    ordner = VIDEOS / (vid or "")
-    if not VIDEO_ID.fullmatch(vid or "") or ordner.is_symlink() or ordner.resolve().parent != VIDEOS.resolve():
-        raise ValueError(f"Kein Video-Vorgang: {vid!r}")
-    shutil.rmtree(ordner, ignore_errors=True)
-
-
-def video_loescht_um(v: dict):
-    """Zeitpunkt, zu dem der Vorgang automatisch geloescht wird."""
-    if v["status"] == "upload":
-        return v.get("aktiv", v["zeit"]) + VIDEO_ABGEBROCHEN
-    bis = max(v["zeit"], (v.get("ergebnis") or {}).get("zeit", 0)) + VIDEO_HOECHSTENS
-    if v.get("abgeholt"):
-        bis = min(bis, v["abgeholt"] + VIDEO_NACH_DOWNLOAD)
-    return bis
-
-
-def videos_aufraeumen(jetzt: float = None) -> int:
-    """Leert das Zwischenlager videos/ (Wunsch der Inhaberin, damit der Server nicht voll laeuft).
-    Fasst nur Vorgangsordner in videos/ an - sonst nichts auf dem Server."""
-    jetzt = time.time() if jetzt is None else jetzt
-    if not VIDEOS.exists():
-        return 0
-    geloescht = 0
-    with video_sperre:
-        for ordner in list(VIDEOS.iterdir()):
-            if ordner.is_symlink() or not ordner.is_dir() or not VIDEO_ID.fullmatch(ordner.name):
-                continue   # was nicht vom Video-Bereich stammt, bleibt liegen
-            v = video_info(ordner.name)
-            faellig = (jetzt - ordner.stat().st_mtime > VIDEO_ABGEBROCHEN) if v is None else jetzt >= video_loescht_um(v)
-            if faellig:
-                video_loeschen(ordner.name)
-                geloescht += 1
-    return geloescht
-
-
-def video_schleife():
-    """Alle 5 Minuten das Video-Zwischenlager leeren."""
-    while True:
-        try:
-            videos_aufraeumen()
-        except Exception as e:  # Hintergrund darf nie sterben
-            print(f"Video-Aufräumen: {e}", file=sys.stderr)
-        time.sleep(300)
-
-
-def video_ansicht(v: dict) -> dict:
-    text, klasse = VIDEO_STATUS[v["status"]]
-    fehlt = sum(c["groesse"] - dateigroesse(clip_pfad(v, c, teil=True)) for c in v["clips"] if not c["fertig"])
-    erg = v.get("ergebnis")
-    return v | {"status_text": text, "status_klasse": klasse, "zeit_text": video_zeit(v["zeit"]),
-                "groesse_text": video_groesse(sum(c["groesse"] for c in v["clips"])) if v["clips"] else "",
-                "fehlt_text": video_groesse(fehlt) if fehlt else "",
-                "ergebnis_url": download_url("admin_video_ergebnis", vid=v["id"]) if v["status"] == "fertig" else "",
-                "ergebnis_groesse": video_groesse(erg["groesse"]) if erg else "",
-                "loescht_text": video_zeit(video_loescht_um(v))}
-
-
-def video_seite(**extra):
-    return render_template("video.html", videos=[video_ansicht(v) for v in alle_videos()], teil=VIDEO_TEIL,
-                           schluessel_aktiv=bool(lade_config().get("video_schluessel")), **extra)
-
-
-@app.route("/admin/video")
-@admin_noetig
-def admin_video():
-    videos_aufraeumen()
-    return video_seite()
-
-
-@app.route("/admin/video/stand")
-@admin_noetig
-def admin_video_stand():
-    """Fuer die Seite: neu laden, sobald Claude fertig ist oder etwas geloescht wurde."""
-    return jsonify(stand=[[v["id"], v["status"], (v.get("ergebnis") or {}).get("zeit")] for v in alle_videos()])
-
-
-@app.route("/admin/video/neu", methods=["POST"])
-@admin_noetig
-def admin_video_neu():
-    try:
-        clips = [{"name": PurePosixPath(str(d["name"]).replace("\\", "/")).name[:150] or f"clip{i + 1}.mp4",
-                  "groesse": int(d["groesse"])} for i, d in enumerate(json.loads(request.form.get("dateien", "")))]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        return jsonify(fehler="Ungültige Angaben."), 400
-    if not 0 < len(clips) <= 50 or any(c["groesse"] <= 0 for c in clips):
-        return jsonify(fehler="Bitte 1 bis 50 Videos auswählen."), 400
-    wunsch = request.form.get("wunsch", "").strip()[:4000]
-    gesamt = sum(c["groesse"] for c in clips)
-    with video_sperre:
-        # Dieselben Videos wie bei einem abgebrochenen Upload: dort weitermachen
-        auswahl = [(c["name"], c["groesse"]) for c in clips]
-        for v in alle_videos():
-            if v["status"] == "upload" and [(c["name"], c["groesse"]) for c in v["clips"]] == auswahl:
-                v["wunsch"] = wunsch or v["wunsch"]
-                video_speichern(v)
-                return jsonify(id=v["id"], weiter=True, clips=[{"nr": c["nr"], "fertig": c["fertig"],
-                               "start": c["groesse"] if c["fertig"] else dateigroesse(clip_pfad(v, c, teil=True))}
-                               for c in v["clips"]])
-        if gesamt > VIDEO_MAX:
-            return jsonify(fehler=f"Zu groß: höchstens {video_groesse(VIDEO_MAX)} auf einmal."), 400
-        if not video_platz_ok(gesamt):
-            return jsonify(fehler="Auf dem Server ist dafür nicht genug Platz frei. Bitte weniger oder kürzere "
-                                  "Videos auswählen oder ein altes Video löschen."), 507
-        v = {"id": uuid.uuid4().hex, "zeit": time.time(), "wunsch": wunsch, "status": "upload",
-             "clips": [dict(c, nr=i + 1, endung=video_endung(c["name"]), fertig=False) for i, c in enumerate(clips)]}
-        (VIDEOS / v["id"]).mkdir(parents=True)
-        video_speichern(v)
-    return jsonify(id=v["id"], weiter=False, clips=[{"nr": c["nr"], "fertig": False, "start": 0} for c in v["clips"]])
-
-
-@app.route("/admin/video/<vid>/clip/<int:nr>", methods=["POST"])
-@admin_noetig
-def admin_video_clip(vid, nr):
-    teil = request.files.get("teil")
-    daten = teil.read(VIDEO_TEIL + 1) if teil else b""
-    with video_sperre:
-        v = video_info(vid)
-        c = next((c for c in (v or {}).get("clips", []) if c["nr"] == nr), None)
-        if not c:
-            return jsonify(fehler="Dieser Upload ist nicht mehr da. Bitte die Videos nochmal auswählen."), 404
-        if c["fertig"]:
-            return jsonify(start=c["groesse"], fertig=True)
-        try:
-            stand, angehaengt = stueck_anhaengen(clip_pfad(v, c, teil=True), int(request.form.get("start", "-1")),
-                                                 daten, c["groesse"])
-        except ValueError:
-            return jsonify(fehler="Das Stück passt nicht. Bitte die Videos nochmal auswählen."), 400
-        except OSError:
-            return jsonify(fehler="Auf dem Server ist kein Platz mehr frei."), 507
-        if stand == c["groesse"]:
-            os.replace(clip_pfad(v, c, teil=True), clip_pfad(v, c))
-            c["fertig"] = True
-            if all(x["fertig"] for x in v["clips"]):
-                v["status"] = "wartet"
-        video_speichern(v)
-    return jsonify(start=stand, fertig=c["fertig"]), (200 if angehaengt else 409)
-
-
-@app.route("/admin/video/<vid>/ergebnis")
-@admin_noetig
-def admin_video_ergebnis(vid):
-    v = video_info(vid)
-    if not v or v["status"] != "fertig" or not (VIDEOS / vid / v["ergebnis"]["datei"]).exists():
-        abort(404)
-    if not v.get("abgeholt") and request.headers.get("Range", "bytes=0-").startswith("bytes=0-"):
-        with video_sperre:   # Download beginnt: in 1 Stunde wird geloescht
-            v = video_info(vid) or v
-            v["abgeholt"] = time.time()
-            video_speichern(v)
-    return send_file(VIDEOS / vid / v["ergebnis"]["datei"], as_attachment=True, download_name=v["ergebnis"]["name"],
-                     mimetype="video/mp4" if v["ergebnis"]["datei"].endswith(".mp4") else "application/octet-stream")
-
-
-@app.route("/admin/video/<vid>/loeschen", methods=["POST"])
-@admin_noetig
-def admin_video_loeschen(vid):
-    with video_sperre:
-        if video_info(vid):
-            video_loeschen(vid)
-            flash("Video gelöscht.")
-    return redirect(url_for("admin_video"))
-
-
-@app.route("/admin/video/schluessel", methods=["POST"])
-@admin_noetig
-def admin_video_schluessel():
-    """Schluessel fuer Claude. Gespeichert wird nur der Hash; der Schluessel selbst wird genau einmal angezeigt
-    (nicht per flash: das Sitzungs-Cookie ist nur signiert, nicht verschluesselt)."""
-    if request.form.get("aktion") == "aus":
-        speichere_config({"video_schluessel": ""})
-        flash("Claude hat jetzt keinen Zugriff mehr auf die Videos.")
-        return redirect(url_for("admin_video"))
-    schluessel = "video_" + secrets.token_urlsafe(32)
-    speichere_config({"video_schluessel": geraet_hash(schluessel)})
-    return video_seite(neuer_schluessel=schluessel)
-
-
-# --- Schnittstelle fuer Claude (Authorization: Bearer <Schluessel>) ---
-
-def video_api(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if zu_viele("video", 20, 15 * 60):
-            return jsonify(fehler="Zu viele falsche Versuche. Bitte später nochmal."), 429
-        gespeichert = lade_config().get("video_schluessel")
-        art, _, schluessel = request.headers.get("Authorization", "").partition(" ")
-        if not gespeichert or art.lower() != "bearer" or \
-                not hmac.compare_digest(geraet_hash(schluessel.strip()), gespeichert):
-            merken("video")
-            return jsonify(fehler="Kein Zugriff."), 401
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def video_api_eintrag(v: dict) -> dict:
-    erg = v.get("ergebnis")
-    return {"id": v["id"], "status": v["status"], "wunsch": v["wunsch"],
-            "zeit": datetime.fromtimestamp(v["zeit"]).isoformat(timespec="seconds"),
-            "clips": [{k: c[k] for k in ("nr", "name", "groesse", "fertig")} for c in v["clips"]],
-            "ergebnis": {"name": erg["name"], "groesse": erg["groesse"]} if erg else None,
-            "abgeholt": bool(v.get("abgeholt")),
-            "loescht_um": datetime.fromtimestamp(video_loescht_um(v)).isoformat(timespec="seconds")}
-
-
-@app.route("/api/video")
-@video_api
-def api_video_liste():
-    videos_aufraeumen()
-    return jsonify(videos=[video_api_eintrag(v) for v in alle_videos()])
-
-
-@app.route("/api/video/neu", methods=["POST"])
-@video_api
-def api_video_neu():
-    """Leerer Vorgang, um eine neue Version zu liefern, wenn der alte schon geloescht ist."""
-    wunsch = str((request.get_json(silent=True) or {}).get("wunsch", "")).strip()[:4000]
-    with video_sperre:
-        v = {"id": uuid.uuid4().hex, "zeit": time.time(), "wunsch": wunsch, "status": "arbeit", "clips": []}
-        (VIDEOS / v["id"]).mkdir(parents=True)
-        video_speichern(v)
-    return jsonify(video_api_eintrag(v))
-
-
-@app.route("/api/video/<vid>/clip/<int:nr>")
-@video_api
-def api_video_clip(vid, nr):
-    v = video_info(vid)
-    c = next((c for c in (v or {}).get("clips", []) if c["nr"] == nr and c["fertig"]), None)
-    if not c or not clip_pfad(v, c).exists():
-        return jsonify(fehler="Clip nicht gefunden."), 404
-    if v["status"] == "wartet":
-        with video_sperre:
-            v = video_info(vid) or v
-            if v["status"] == "wartet":
-                v["status"] = "arbeit"
-                video_speichern(v)
-    return send_file(clip_pfad(v, c), as_attachment=True, download_name=c["name"], mimetype="application/octet-stream")
-
-
-@app.route("/api/video/<vid>/ergebnis", methods=["POST"])
-@video_api
-def api_video_ergebnis(vid):
-    """Fertiges Video in Stuecken abgeben: ?start=<Byte>&gesamt=<Bytes>&name=<Dateiname>, Inhalt = das Stueck."""
-    try:
-        start, gesamt = int(request.args["start"]), int(request.args["gesamt"])
-    except (KeyError, ValueError):
-        return jsonify(fehler="start und gesamt fehlen."), 400
-    name = PurePosixPath(request.args.get("name", "").replace("\\", "/")).name[:150] or "video.mp4"
-    daten = request.get_data(cache=False)
-    with video_sperre:
-        v = video_info(vid)
-        if not v:
-            return jsonify(fehler="Vorgang nicht gefunden (schon gelöscht?). Neuen mit POST /api/video/neu anlegen."), 404
-        teil = VIDEOS / vid / "ergebnis.teil"
-        if start == 0:   # (neue) Abgabe beginnt
-            if not 0 < gesamt <= VIDEO_MAX:
-                return jsonify(fehler="Ungültige Größe."), 400
-            v.pop("abgabe", None)
-            video_speichern(v)
-            if not video_platz_ok(gesamt):
-                return jsonify(fehler="Auf dem Server ist nicht genug Platz frei."), 507
-            teil.unlink(missing_ok=True)
-            v["abgabe"] = {"groesse": gesamt}
-        elif (v.get("abgabe") or {}).get("groesse") != gesamt:
-            return jsonify(fehler="Keine passende Abgabe – bitte mit start=0 beginnen.", start=0), 409
-        try:
-            stand, angehaengt = stueck_anhaengen(teil, start, daten, gesamt)
-        except ValueError as e:
-            return jsonify(fehler=str(e)), 400
-        except OSError as e:
-            return jsonify(fehler=str(e)), 507
-        fertig = stand == gesamt
-        if fertig:
-            datei = "ergebnis" + video_endung(name)
-            alt = (v.get("ergebnis") or {}).get("datei")
-            if alt and alt != datei:
-                (VIDEOS / vid / alt).unlink(missing_ok=True)   # alte Version im selben Vorgang
-            os.replace(teil, VIDEOS / vid / datei)
-            v.pop("abgabe", None)
-            v.update(status="fertig", abgeholt=None, ergebnis={"datei": datei, "name": name, "groesse": gesamt,
-                                                                "zeit": time.time()})
-        video_speichern(v)
-    if fertig:
-        threading.Thread(target=video_fertig_melden, daemon=True).start()
-    return jsonify(start=stand, fertig=fertig), (200 if angehaengt else 409)
-
-
-def video_fertig_melden():
-    cfg = lade_config()
-    if cfg.get("telegram_chat_id"):
-        link = cfg.get("basis_url", "").rstrip("/") + "/admin/video"
-        telegram_api("sendMessage", {"chat_id": cfg["telegram_chat_id"],
-                                     "text": f"🎬 Dein Video ist fertig.\n{link}"})
-
-
 @app.route("/admin/archiv")
 @admin_noetig
 def admin_archiv():
@@ -3981,7 +3581,7 @@ def update_pruefen(ordner: Path = None) -> list:
 
 # Daten auf dem Server (Archiv mit Original-/Stage-Files usw.). Sie sind nie im Repository; ein Update darf sie
 # unter keinen Umstaenden anfassen. Loeschen nur, wenn der Admin es selbst im Admin-Bereich ausloest.
-GESCHUETZTE_DATEN = ("archiv", "auftraege", "eingang", "eigene", "sicherungen", "tickets", "videos", "config.json", "benutzer.json",
+GESCHUETZTE_DATEN = ("archiv", "auftraege", "eingang", "eigene", "sicherungen", "tickets", "config.json", "benutzer.json",
                      "index.json", "optionen.json", "loesung_namen.json", "installationen.json", "downloads.json",
                      "kunden.json", "umsatz.json", ".secret_key")
 
@@ -4445,7 +4045,6 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin_archiv') }}#preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<i>{{ zu_sortieren }}</i></a>{% endif %}
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>Eigenes File</a>
-<a href="{{ url_for('admin_video') }}"{{ ' class=an' if ep.startswith('admin_video') }}><svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg>Video</a>
 <a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</a>
 <div class="aa-unten"><a href="{{ url_for('logout') }}"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</a></div>
 </aside>{% endif %}
@@ -4458,7 +4057,6 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('admin_archiv') }}"{{ ' class=an' if ep == 'admin_archiv' }}>Archiv</a>
 <a href="{{ url_for('admin_archiv') }}#preise">Preise</a>
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}>Eigenes File</a>
-<a href="{{ url_for('admin_video') }}"{{ ' class=an' if ep.startswith('admin_video') }}>Video</a>
 {% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"{{ ' class=an' if ep == 'sortieren' }}>Sortieren ({{ zu_sortieren }})</a>{% endif %}
 <a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}>Einstellungen</a>
 <a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}</nav></header>
@@ -4863,120 +4461,6 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 <div class="hinweis">Mehrere Häkchen = Lösungen werden in einem File kombiniert (wie beim Kunden). Das File bleibt 24 Stunden hier.</div>
 </form>{% else %}<p>Für dieses File gibt es im Archiv noch keine passende Lösung.</p>{% endif %}
 </div>{% endif %}
-{% endblock %}""",
-"video.html": """{% extends "basis.html" %}{% block inhalt %}
-<div class="karte"><h1>Video</h1>
-<p class="leise">Clips hochladen und dazuschreiben, was du willst, zum Beispiel „Mach einen Actionfilm daraus“.
-Claude holt sich die Clips, schneidet sie und legt das fertige Video hier ab.</p>
-<form id="video-form">
-<label class="drop" id="video-drop"><input type="file" id="video-dateien" accept="video/*,.mp4,.mov,.mkv,.lrf" multiple>
-<div><b>Videos auswählen</b><br><span id="video-auswahl">oder hierher ziehen, mehrere gehen auch</span></div></label>
-<textarea id="video-wunsch" maxlength="4000" style="min-height:90px"
- placeholder="Was soll Claude daraus machen? z. B. Actionfilm, 1 Minute, Zeitlupe beim Sprung, Titel „…“"></textarea>
-<button class="btn" id="video-los" type="submit">Hochladen</button>
-<div id="video-fortschritt" hidden style="margin-top:16px">
-<div style="height:8px;border-radius:99px;background:var(--glas2);overflow:hidden"><div id="video-balken" style="height:100%;width:0;background:var(--verlauf);transition:width .3s"></div></div>
-<p id="video-text" class="leise" style="margin:8px 0 0"></p></div>
-<div class="hinweis">Lass die Seite offen, bis der Upload fertig ist. Bricht er ab, wähle dieselben Videos nochmal aus,
-dann geht es dort weiter, wo es aufgehört hat.<br>Alles wird automatisch gelöscht: 1 Stunde nach dem Herunterladen des
-fertigen Videos, spätestens nach 3 Tagen.</div>
-</form></div>
-
-{% if videos %}<div class="karte"><h2>Deine Videos</h2>
-{% for v in videos %}<div style="{{ 'border-top:1px solid var(--rand);' if not loop.first }}padding:14px 0">
-<p style="margin:0 0 6px"><span class="status {{ v.status_klasse }}">{{ v.status_text }}</span>
-<span class="leise">{{ v.zeit_text }}{% if v.clips %} · {{ v.clips|length }} {{ 'Clip' if v.clips|length == 1 else 'Clips' }}, {{ v.groesse_text }}{% endif %}</span></p>
-{% if v.wunsch %}<p style="margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere">„{{ v.wunsch }}“</p>{% endif %}
-{% if v.status == 'upload' %}<p class="leise">Es fehlen noch {{ v.fehlt_text }}. Wähle dieselben Videos nochmal aus, dann geht es weiter.</p>{% endif %}
-{% if v.ergebnis_url %}<p><a class="btn gruen" href="{{ v.ergebnis_url }}">Fertiges Video herunterladen ({{ v.ergebnis_groesse }})</a></p>{% endif %}
-<p class="leise" style="font-size:13px;margin:8px 0">Wird automatisch gelöscht am {{ v.loescht_text }} Uhr.</p>
-<form method="post" action="{{ url_for('admin_video_loeschen', vid=v.id) }}" onsubmit="return confirm('Dieses Video jetzt löschen?')">
-<input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="btn grau klein">Jetzt löschen</button></form>
-</div>{% endfor %}</div>{% endif %}
-
-<div class="karte"><h2>Zugang für Claude</h2>
-{% if neuer_schluessel %}<p>Dein neuer Schlüssel. Er wird nur dieses eine Mal angezeigt:</p>
-<p><code id="video-schluessel" style="overflow-wrap:anywhere;user-select:all">{{ neuer_schluessel }}</code></p>
-<p><button class="btn klein" type="button" id="video-kopieren">Kopieren</button></p>
-<p class="leise">Trag ihn in das Fenster ein, das Claude dir zeigt. Bitte nicht in den Chat schreiben.</p>
-{% elif schluessel_aktiv %}<p>Claude hat Zugriff auf die Videos hier, und nur auf diese.</p>
-{% else %}<p class="leise">Claude hat noch keinen Zugriff. Erzeuge einen Schlüssel, wenn Claude dich danach fragt.</p>{% endif %}
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-<form method="post" action="{{ url_for('admin_video_schluessel') }}"{% if schluessel_aktiv %} onsubmit="return confirm('Der bisherige Schlüssel gilt dann nicht mehr. Weiter?')"{% endif %}>
-<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="neu">
-<button class="btn grau klein">{{ 'Neuen Schlüssel erzeugen' if schluessel_aktiv else 'Schlüssel erzeugen' }}</button></form>
-{% if schluessel_aktiv %}<form method="post" action="{{ url_for('admin_video_schluessel') }}" onsubmit="return confirm('Claude den Zugriff auf die Videos sperren?')">
-<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="aus">
-<button class="btn grau klein">Zugriff sperren</button></form>{% endif %}</div></div>
-
-<script>
-(function(){
-var TEIL={{ teil }}, csrf='{{ session.csrf }}';
-var form=document.getElementById('video-form'), eingabe=document.getElementById('video-dateien'),
-    drop=document.getElementById('video-drop'), auswahl=document.getElementById('video-auswahl'),
-    knopf=document.getElementById('video-los'), box=document.getElementById('video-fortschritt'),
-    balken=document.getElementById('video-balken'), text=document.getElementById('video-text'),
-    wunsch=document.getElementById('video-wunsch'), dateien=[], laeuft=false, wach=null;
-var kopieren=document.getElementById('video-kopieren');
-if(kopieren) kopieren.addEventListener('click',function(){
-  navigator.clipboard.writeText(document.getElementById('video-schluessel').textContent).then(function(){kopieren.textContent='Kopiert'});});
-function gr(n){return n>=1073741824?(n/1073741824).toFixed(1).replace('.',',')+' GB':Math.max(1,Math.round(n/1048576))+' MB'}
-function summe(){return dateien.reduce(function(s,f){return s+f.size},0)}
-function zeigen(){
-  // nach Namen sortiert: so passt die Reihenfolge beim Fortsetzen, und DJI-Dateinamen sind zeitlich geordnet
-  dateien=Array.prototype.slice.call(eingabe.files).sort(function(a,b){return a.name.localeCompare(b.name)});
-  auswahl.textContent=dateien.length?dateien.length+(dateien.length==1?' Video, ':' Videos, ')+gr(summe()):'oder hierher ziehen, mehrere gehen auch';}
-eingabe.addEventListener('change',zeigen);
-['dragenter','dragover'].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add('aktiv')})});
-['dragleave','drop'].forEach(function(e){drop.addEventListener(e,function(){drop.classList.remove('aktiv')})});
-drop.addEventListener('drop',function(ev){ev.preventDefault();eingabe.files=ev.dataTransfer.files;zeigen();});
-function warten(ms){return new Promise(function(ok){setTimeout(ok,ms)})}
-async function senden(url,fd){
-  var r=await fetch(url,{method:'POST',body:fd,credentials:'same-origin'}), d={};
-  try{d=await r.json()}catch(e){if(r.ok)d={fehler:'Bitte neu anmelden und nochmal versuchen.',abbruch:true}}
-  d.code=r.status;return d;}
-function anzeigen(fertig,gesamt){
-  balken.style.width=(gesamt?Math.floor(fertig*100/gesamt):100)+'%';
-  text.textContent=gr(fertig)+' von '+gr(gesamt)+' hochgeladen ('+(gesamt?Math.floor(fertig*100/gesamt):100)+' %)';}
-async function clipHochladen(id,c,datei,vorher,gesamt){
-  var start=c.start, fehler=0;
-  while(start<datei.size){
-    var fd=new FormData(); fd.append('csrf',csrf); fd.append('start',start); fd.append('teil',datei.slice(start,start+TEIL),'teil');
-    var d; try{d=await senden('/admin/video/'+id+'/clip/'+c.nr,fd)}catch(e){d={code:0}}
-    if(d.abbruch) throw new Error(d.fehler);
-    if((d.code===200||d.code===409)&&typeof d.start==='number'&&d.start!==start){start=d.start;fehler=0;anzeigen(vorher+start,gesamt);continue}
-    if(d.code===200&&d.fertig) return;
-    if(d.code>=400&&d.code<500&&d.code!==409||d.code===507) throw new Error(d.fehler||'Upload abgelehnt.');
-    if(++fehler>8) throw new Error('Keine Verbindung zum Server. Wähle dieselben Videos nochmal aus, dann geht es weiter.');
-    text.textContent='Verbindung weg, neuer Versuch …'; await warten(Math.min(30000,2000*fehler));
-  }}
-async function wachHalten(){try{if(laeuft&&navigator.wakeLock&&document.visibilityState==='visible')wach=await navigator.wakeLock.request('screen')}catch(e){}}
-document.addEventListener('visibilitychange',wachHalten);
-window.addEventListener('beforeunload',function(e){if(laeuft){e.preventDefault();e.returnValue=''}});
-form.addEventListener('submit',async function(ev){
-  ev.preventDefault(); if(laeuft) return;
-  if(!dateien.length){alert('Bitte zuerst Videos auswählen.');return}
-  laeuft=true; knopf.disabled=true; box.hidden=false; text.textContent='Upload startet …'; wachHalten();
-  try{
-    var fd=new FormData(); fd.append('csrf',csrf); fd.append('wunsch',wunsch.value);
-    fd.append('dateien',JSON.stringify(dateien.map(function(f){return {name:f.name,groesse:f.size}})));
-    var d=await senden('{{ url_for('admin_video_neu') }}',fd);
-    if(d.code!==200||!d.id) throw new Error(d.fehler||'Der Upload konnte nicht starten.');
-    var gesamt=summe(), vorher=0;
-    for(var i=0;i<dateien.length;i++){
-      if(!d.clips[i].fertig) await clipHochladen(d.id,d.clips[i],dateien[i],vorher,gesamt);
-      vorher+=dateien[i].size; anzeigen(vorher,gesamt);
-    }
-    laeuft=false; text.textContent='Fertig hochgeladen. Sag Claude jetzt im Chat Bescheid.';
-    setTimeout(function(){location.reload()},2500);
-  }catch(e){text.textContent=e.message; knopf.disabled=false}
-  finally{laeuft=false; if(wach){wach.release().catch(function(){}); wach=null}}
-});
-// Seite neu laden, sobald Claude fertig ist (nicht waehrend eines Uploads)
-var alt=null; setInterval(function(){if(laeuft)return; fetch('{{ url_for('admin_video_stand') }}',{cache:'no-store'})
-  .then(function(r){return r.json()}).then(function(d){var neu=JSON.stringify(d.stand); if(alt!==null&&neu!==alt&&!laeuft)location.reload(); alt=neu}).catch(function(){})},15000);
-})();
-</script>
 {% endblock %}""",
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -5854,8 +5338,7 @@ if __name__ == "__main__":
         threading.Thread(target=telegram_schleife, daemon=True).start()
         threading.Thread(target=hintergrund, daemon=True).start()
         threading.Thread(target=homepage_schleife, daemon=True).start()
-        threading.Thread(target=video_schleife, daemon=True).start()
-        host =os.environ.get("ONECLICK_HOST", "0.0.0.0")
+        host = os.environ.get("ONECLICK_HOST", "0.0.0.0")
         app.config["SESSION_COOKIE_SECURE"] = lade_config().get("basis_url", "").startswith("https://")
         try:
             from waitress import serve
