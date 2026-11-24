@@ -29,6 +29,3 @@ Uploads nach 24 Stunden.
 - Zugriff für Claude: Schlüssel aus Admin → Video → „Zugang für Claude“, als Netzwerk-Secret der Claude-Umgebung
   (`Authorization: Bearer …`, nie in den Chat). Werkzeug: `werkzeuge/video.py` (`liste`, `holen <id> <ordner>`,
   `abgeben <id|neu> <datei>`). Clips und Zwischenstände nur im Scratchpad, nie ins Repository.
-- **Qualität (ausdrücklicher Wunsch der Inhaberin):** Fertige Videos in der vollen Auflösung des Originals und in hoher
-  Qualität abgeben (z. B. x264 CRF 17, Ton AAC 320k). Nie nachträglich komprimieren oder kleiner rechnen, auch nicht,
-  um Speicher oder Upload-Zeit zu sparen. Uploads von 4 GB und mehr sind normal.
