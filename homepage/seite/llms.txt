@@ -1,6 +1,6 @@
 # GH-MAPPING
 
-> GH-MAPPING ist ein Chiptuning-Fileservice von Luisa Neuer in Dierdorf (Deutschland). Steuergerätedateien werden in einer lizenzierten WinOLS-5-Umgebung bearbeitet. Bestellt wird über das eigene Programm OneClick Solutions für Windows und Mac (https://oneclicksoulution.gh-mapping.de/): Original-File laden, verfügbare Lösungen wählen, über Stripe bezahlen und das fertige File herunterladen. Files aus dem Archiv gibt es sofort, Anfragen gibt GH-MAPPING vorher frei. Kunden sind Werkstätten und Privatpersonen.
+> GH-MAPPING ist ein Chiptuning-Fileservice von Luisa Neuer in Dierdorf (Deutschland). Steuergerätedateien werden in einer lizenzierten WinOLS-5-Umgebung bearbeitet. Bestellt wird über OneClick Solutions direkt im Browser – am PC, Mac oder iPhone, auf dem iPhone auch als App vom Home-Bildschirm (https://oneclicksoulution.gh-mapping.de/): Original-File laden, verfügbare Lösungen wählen, über Stripe bezahlen und das fertige File herunterladen. Files aus dem Archiv gibt es sofort, Anfragen gibt GH-MAPPING vorher frei. Kunden sind Werkstätten und Privatpersonen.
 
 ## Leistungen
 - Stage 1: Software-Optimierung für Fahrzeuge mit Serienhardware.
@@ -9,17 +9,17 @@
 - Start/Stopp aus und Launch Control, auch kombiniert mit Stage 1.
 - Rückrüsten: getuntes File hochladen, passendes Original zurückbekommen.
 - Individuelle Anpassungen auf Basis von Prüfstandsdaten und Logs.
-- VAG-Sonderfunktionen auf Anfrage per Ticket im Programm: 2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 sowie Mapswitch (nur Motorsport).
+- VAG-Sonderfunktionen auf Anfrage per Ticket in OneClick Solutions: 2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 sowie Mapswitch (nur Motorsport).
 
 ## So funktioniert eine Bestellung
 1. Steuergerät auslesen (OBD, Bench oder Boot).
-2. Einmal im Programm OneClick Solutions mit E-Mail-Adresse und Passwort registrieren (Aufträge und Tickets sind danach auf jedem PC/Mac sichtbar).
+2. OneClick Solutions im Browser öffnen (nichts zu installieren) und einmal mit E-Mail-Adresse und Passwort registrieren (Aufträge und Tickets sind danach auf jedem Gerät sichtbar).
 3. Original-File in OneClick Solutions laden; Steuergerät und Software werden automatisch erkannt.
 4. Eine oder mehrere Lösungen wählen und über Stripe bezahlen. Die aktuelle Preisliste steht im Reiter „Preise“.
-5. Fertiges File im Programm herunterladen und mit dem eigenen Tool aufspielen (Checksumme korrigiert das Flash-Tool). Bei Anfragen kommt eine E-Mail, sobald das File fertig ist.
-6. Bei Problemen ein Support-Ticket im Programm öffnen; Antworten werden zusätzlich per E-Mail gemeldet.
+5. Fertiges File in OneClick herunterladen und mit dem eigenen Tool aufspielen (Checksumme korrigiert das Flash-Tool). Bei Anfragen kommt eine E-Mail, sobald das File fertig ist.
+6. Bei Problemen ein Support-Ticket in OneClick öffnen; Antworten werden zusätzlich per E-Mail gemeldet.
 
-Das Programm ist auf Deutsch und Englisch verfügbar. Passwort vergessen: Code per E-Mail im Anmeldefenster anfordern.
+OneClick Solutions ist auf Deutsch und Englisch verfügbar. Passwort vergessen: Code per E-Mail im Anmeldefenster anfordern.
 
 ## Wichtige Hinweise
 - GH-MAPPING liefert nur die Datei und führt keine Arbeiten am Fahrzeug aus.
@@ -27,7 +27,7 @@ Das Programm ist auf Deutsch und Englisch verfügbar. Passwort vergessen: Code p
 
 ## Kontakt
 - Website: https://gh-mapping.de/
-- Programm (Windows und Mac): https://oneclicksoulution.gh-mapping.de/
+- OneClick Solutions (im Browser, auf dem iPhone auch als App): https://oneclicksoulution.gh-mapping.de/
 - E-Mail: chiptuning2002@gmail.com
 - WhatsApp: +49 155 68540674
 - Erreichbar: Montag bis Samstag, 10:00 bis 20:00 Uhr
@@ -37,37 +37,37 @@ Das Programm ist auf Deutsch und Englisch verfügbar. Passwort vergessen: Code p
 ## Häufige Fragen
 
 ### Wie bestelle ich?
-Laden Sie unser Programm OneClick Solutions (Windows oder Mac), registrieren Sie sich einmal mit Ihrer E-Mail-Adresse, ziehen Sie Ihr Original-File hinein und wählen Sie die gewünschte Lösung. Liegt Ihr File in unserem Archiv, bezahlen Sie sofort und laden es direkt herunter. Gibt es noch nichts Passendes, stellen Sie dort eine Anfrage mit Ihren Fahrzeugdaten.
+Öffnen Sie OneClick Solutions im Browser (oneclicksoulution.gh-mapping.de – am PC, Mac oder iPhone, nichts zu installieren), registrieren Sie sich einmal mit Ihrer E-Mail-Adresse, laden Sie Ihr Original-File hoch und wählen Sie die gewünschte Lösung. Liegt Ihr File in unserem Archiv, bezahlen Sie sofort und laden es direkt herunter. Gibt es noch nichts Passendes, stellen Sie dort eine Anfrage mit Ihren Fahrzeugdaten.
 
 ### Wie läuft die Bezahlung?
-Online über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und weiteren Verfahren. Files aus dem Archiv bezahlen Sie sofort, Anfragen nachdem wir Ihr File freigegeben haben. Die Rechnung kommt per E-Mail.
+Online über Stripe direkt in OneClick – mit Karte, Apple Pay, PayPal und weiteren Verfahren. Files aus dem Archiv bezahlen Sie sofort, Anfragen nachdem wir Ihr File freigegeben haben. Die Rechnung kommt per E-Mail.
 
 ### Wo bekomme ich mein fertiges File?
-Im Programm unter „Meine Aufträge“. Nach der Zahlung laden Sie es dort herunter. Bei Anfragen meldet sich das Programm, sobald Ihr File fertig ist, und Sie bekommen eine E-Mail. Ihre Aufträge hängen an Ihrem Konto – Sie sehen sie auf jedem PC oder Mac, auf dem Sie sich anmelden.
+In OneClick unter „Meine Aufträge“. Nach der Zahlung laden Sie es dort herunter. Bei Anfragen bekommen Sie Bescheid und eine E-Mail, sobald Ihr File fertig ist. Ihre Aufträge hängen an Ihrem Konto – Sie sehen sie auf jedem Gerät, auf dem Sie sich anmelden.
 
 ### Was kostet ein Chiptuning-File?
-Die Preise hängen von der Lösung ab und werden im Programm direkt nach dem Laden Ihres Originals angezeigt – bevor Sie etwas bezahlen. Die komplette, immer aktuelle Preisliste finden Sie im Programm im Reiter „Preise“. Es gibt kein Abo und keine Credits: Sie zahlen nur das File, das Sie bestellen. Als Kleinunternehmer berechnen wir keine Umsatzsteuer.
+Die Preise hängen von der Lösung ab und werden in OneClick direkt nach dem Laden Ihres Originals angezeigt – bevor Sie etwas bezahlen. Die komplette, immer aktuelle Preisliste finden Sie in OneClick im Reiter „Preise“. Es gibt kein Abo und keine Credits: Sie zahlen nur das File, das Sie bestellen. Als Kleinunternehmer berechnen wir keine Umsatzsteuer.
 
 ### Wie lange dauert es, bis ich mein File bekomme?
-Liegt Ihr File bereits in unserem Archiv, laden Sie es direkt nach der Zahlung herunter – rund um die Uhr. Bei einer Anfrage erstellen wir das File individuell; das Programm meldet sich, sobald es fertig ist.
+Liegt Ihr File bereits in unserem Archiv, laden Sie es direkt nach der Zahlung herunter – rund um die Uhr. Bei einer Anfrage erstellen wir das File individuell; Sie bekommen Bescheid, sobald es fertig ist.
 
 ### Welches Werkzeug brauche ich zum Auslesen und Aufspielen?
 Ein Flash-Tool, mit dem Sie das Steuergerät per OBD, Bench oder Boot auslesen und beschreiben können. Laden Sie immer das unveränderte Original hoch und sichern Sie es vor dem Aufspielen.
 
 ### Für welche Fahrzeuge und Steuergeräte gibt es Files?
-Für alle Fahrzeuge, deren Original-File Sie auslesen können. Ob es für Ihr Steuergerät und Ihre Software bereits eine fertige Lösung gibt, zeigt OneClick sofort nach dem Laden. Ist noch nichts im Archiv, stellen Sie im Programm eine Anfrage mit Ihren Fahrzeugdaten.
+Für alle Fahrzeuge, deren Original-File Sie auslesen können. Ob es für Ihr Steuergerät und Ihre Software bereits eine fertige Lösung gibt, zeigt OneClick sofort nach dem Laden. Ist noch nichts im Archiv, stellen Sie in OneClick eine Anfrage mit Ihren Fahrzeugdaten.
 
 ### Ich habe ein Problem mit meinem File – was tun?
-Öffnen Sie im Programm unter „Support“ ein Ticket oder klicken Sie am Auftrag auf „Problem?“. Hängen Sie gern Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken Ihnen ein angepasstes File direkt in den Chat.
+Öffnen Sie in OneClick unter „Support“ ein Ticket oder klicken Sie am Auftrag auf „Problem?“. Hängen Sie gern Fehlercodes, Logs oder Screenshots an – wir antworten dort und schicken Ihnen ein angepasstes File direkt in den Chat.
 
-### Gibt es das Programm auch für den Mac?
-Ja. OneClick Solutions läuft unter Windows 10/11 und macOS 11 oder neuer – auf Intel-Macs und Macs mit Apple-Chip. Das Programm ist kostenlos, Sie zahlen nur die Files – und es lässt sich mit einem Klick auf Deutsch oder Englisch umstellen.
+### Muss ich etwas installieren? Geht es auch auf dem iPhone?
+Nein. OneClick Solutions läuft direkt im Browser – auf Windows-PCs, Macs, iPhone, iPad und Android. Auf dem iPhone können Sie OneClick in Safari über „Teilen → Zum Home-Bildschirm“ als App ablegen. Die Nutzung ist kostenlos, Sie zahlen nur die Files – und OneClick lässt sich mit einem Klick auf Deutsch oder Englisch umstellen.
 
 ### Was ist ein Chiptuning-File?
 Eine bearbeitete Steuergerätedatei. Dabei werden Kennfelder, zum Beispiel für Ladedruck, Einspritzmenge und Zündwinkel, auf Leistung und Drehmoment abgestimmt. Das fertige File wird anschließend auf das Steuergerät des Fahrzeugs gespielt.
 
 ### Bietet ihr Launch Control, Antilag oder Mapswitch an?
-Ja, für VAG-Fahrzeuge: 2-Step / Launch Control, Antilag und No-Lift-Shift für Steuergeräte Bosch ME7 sowie Mapswitch für VAG. Öffnen Sie dazu im Programm OneClick Solutions unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, nennen Sie Fahrzeug und gewünschte Funktion und hängen Sie Ihr Original-File an. Wir melden uns mit Preis und Umsetzung. Die Funktionen sind für den Motorsport gedacht, nicht für den öffentlichen Straßenverkehr.
+Ja, für VAG-Fahrzeuge: 2-Step / Launch Control, Antilag und No-Lift-Shift für Steuergeräte Bosch ME7 sowie Mapswitch für VAG. Öffnen Sie dazu in OneClick Solutions unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, nennen Sie Fahrzeug und gewünschte Funktion und hängen Sie Ihr Original-File an. Wir melden uns mit Preis und Umsetzung. Die Funktionen sind für den Motorsport gedacht, nicht für den öffentlichen Straßenverkehr.
 
 ### Arbeitet ihr wirklich in WinOLS?
 Ja. Jedes File wird in einer lizenzierten WinOLS-5-Umgebung des Herstellers EVC bearbeitet. Unsere Lizenz können Sie selbst prüfen: über den Link „WinOLS-Lizenzcheck“ unten auf der Seite.
@@ -85,4 +85,4 @@ Eine Leistungssteigerung verändert die Betriebserlaubnis des Fahrzeugs. Für de
 Nein. GH-MAPPING liefert das bearbeitete File und führt keine Arbeiten am Fahrzeug aus. Auslesen und Aufspielen übernehmen Sie oder Ihre Werkstatt.
 
 ### Wann seid ihr erreichbar?
-Montag bis Samstag, 10 bis 20 Uhr – per WhatsApp, E-Mail oder Support-Ticket im Programm.
+Montag bis Samstag, 10 bis 20 Uhr – per WhatsApp, E-Mail oder Support-Ticket in OneClick.

@@ -2,9 +2,25 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#040919">
 <title>OneClick Solutions</title>
+<link rel="manifest" href="/app.webmanifest">
+<link rel="apple-touch-icon" href="/icons/app-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OneClick">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+/* Im Browser (PC, Mac, iPhone, Android) statt im alten Windows/Mac-Programm: html.web (auf dem Handy mit Menue unten) */
+(function () {
+  var ua = navigator.userAgent, h = document.documentElement;
+  if (/OneClickProgramm\//.test(ua)) return;
+  h.classList.add("web");
+  if (window.matchMedia && matchMedia("(hover:none) and (pointer:coarse)").matches) h.classList.add("touch");
+  if (navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches)) h.classList.add("standalone");
+  if (/iPhone|iPad|iPod|Macintosh/.test(ua)) h.classList.add("ios");
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
 <style>
 :root{
@@ -1538,6 +1554,141 @@ main{gap:20px;padding:18px 20px 10px}
 @keyframes p-auf{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.zone::before,.p-ring i,#senden::after,.marke .glanz,.nx-pille>i,.kd-marke::after,.a-weg span.jetzt::before,
   .nx-seite.aktiv>*,.nx-karten>.nx-kz,.scan-box::before,.p-welle{animation:none!important}}
+
+/* ===================== HANDY & TABLET (Web-App, z. B. auf dem iPhone) =====================
+   html.web = ohne das Windows/Mac-Programm geoeffnet. Das Programm selbst sieht nichts davon. */
+.handy-leiste,.handy-blatt,.handy-hinweis,.tk-zurueck,.nur-touch,.zone .nur-touch{display:none}
+html.web .handy-hinweis:not([hidden]){display:flex}
+.handy-hinweis{align-items:center;gap:12px;padding:12px;border-radius:16px;flex:none;
+  background:linear-gradient(135deg,rgba(61,123,255,.24),rgba(139,107,255,.14));border:1px solid rgba(122,166,255,.35);box-shadow:0 14px 30px -18px rgba(61,123,255,.9)}
+.handy-hinweis img{width:44px;height:44px;flex:none;border-radius:11px;box-shadow:0 6px 16px -6px rgba(61,123,255,.9)}
+.handy-hinweis>div{flex:1;min-width:0;font-size:13px;line-height:1.45;color:#c9d6f5}
+.handy-hinweis b{display:block;color:#fff;font-size:14px;margin-bottom:2px}
+.hh-teilen{width:17px;height:17px;vertical-align:-3px;fill:none;stroke:#8fb6ff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.handy-hinweis .hh-andere,html:not(.ios) .handy-hinweis .hh-ios{display:none}
+html:not(.ios) .handy-hinweis .hh-andere{display:inline}
+#handy-hinweis [hidden]{display:none!important}
+.hh-zu{flex:none;width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:#c9d6f5;font-size:14px;cursor:pointer}
+@media (hover:none) and (pointer:coarse){
+  html.web .zone .kein-touch{display:none!important}
+  html.web .zone b.nur-touch{display:block}
+  html.web .zone span.nur-touch{display:inline}
+}
+html.ios input:not([type=checkbox]):not([type=radio]):not([type=file]),html.ios textarea,html.ios select{font-size:16px!important}   /* sonst zoomt das iPhone beim Tippen */
+html.web button,html.web a,html.web .zone{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+/* Blaetter von unten (Mehr, File bereit) */
+.handy-blatt:not([hidden]){display:flex;position:fixed;inset:0;z-index:70;align-items:flex-end;justify-content:center;background:rgba(2,4,10,.55);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:hb-ein .25s ease both}
+.hb-karte{width:min(560px,100%);max-height:86vh;overflow:auto;padding:10px 18px calc(18px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;
+  background:linear-gradient(180deg,rgba(22,32,62,.98),rgba(8,13,28,.99));border:1px solid rgba(140,175,255,.2);border-bottom:0;
+  box-shadow:0 -24px 60px -20px rgba(0,0,0,.9);animation:hb-hoch .34s var(--p-feder) both}
+@keyframes hb-ein{from{opacity:0}}
+@keyframes hb-hoch{from{transform:translateY(60px);opacity:.3}}
+.hb-griff{display:block;width:40px;height:5px;margin:0 auto 14px;border-radius:3px;background:rgba(255,255,255,.22)}
+.hb-konto{display:flex;align-items:center;gap:12px;padding:2px 2px 14px;margin-bottom:4px;border-bottom:1px solid rgba(140,175,255,.12)}
+.hb-konto>div{min-width:0}
+.hb-konto small{display:block;color:var(--p-leise);font-size:11.5px}
+.hb-konto b{display:block;color:#fff;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-karte>button:not(.btn){display:flex;align-items:center;gap:14px;width:100%;padding:14px 4px;background:none;border:0;border-bottom:1px solid rgba(140,175,255,.08);
+  color:#e6edff;font:inherit;font-size:15.5px;font-weight:600;text-align:left;cursor:pointer}
+.hb-karte>button[hidden]{display:none}
+.hb-karte>button:not(.btn) svg{width:22px;height:22px;flex:none;fill:none;stroke:#8fb6ff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hb-karte>button.an{color:#8fb6ff}
+.hb-karte>button.hb-rot{color:#ff8a80;border-bottom:0}.hb-karte>button.hb-rot svg{stroke:#ff8a80}
+.hb-links{margin:16px 0 4px;text-align:center;font-size:12.5px;line-height:1.9;color:var(--p-leise)}.hb-links a{color:#a9c0f5}
+.hb-fuss{margin:0;text-align:center;font-size:11.5px;color:#5f6f95}
+.tb-kopf{display:flex;align-items:center;gap:14px;margin:2px 0 12px}
+.tb-kopf>div{min-width:0}
+.tb-kopf b{display:block;color:#fff;font-size:18px}
+.tb-kopf .leise{display:block;font-size:12.5px;font-family:"JetBrains Mono",ui-monospace,monospace;overflow-wrap:anywhere}
+.tb-haken{width:46px;height:46px;flex:none;border-radius:50%;display:grid;place-items:center;background:rgba(47,226,138,.14);border:1px solid rgba(47,226,138,.45);
+  box-shadow:0 0 26px -6px rgba(47,226,138,.85)}
+.tb-haken svg{width:24px;height:24px;fill:none;stroke:#2fe28a;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+#teilen-blatt p{font-size:13.5px;line-height:1.5;margin:0 0 6px}
+#teilen-blatt .btn{width:100%;margin-top:10px}
+.kd-recht{margin:14px 0 0;text-align:center;font-size:12px;line-height:1.8;color:var(--p-leise)}
+.kd-recht a{color:#a9c0f5;text-decoration:none}.kd-recht a:hover{text-decoration:underline}
+.tk-zurueck{align-items:center;gap:6px;margin:0 0 12px;padding:8px 14px 8px 9px;border-radius:11px;border:1px solid rgba(140,175,255,.25);
+  background:rgba(255,255,255,.04);color:#cfe0ff;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
+.tk-zurueck svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+
+/* Handy und Tablet hochkant: Kopf oben fest, Menue unten, immer nur eine Seite */
+@media (max-width:980px){
+  html.web{--hl:62px;--kopf:64px}
+  html.web body{padding-bottom:calc(var(--hl) + env(safe-area-inset-bottom))}
+  html.web .nx-top{position:fixed;top:0;left:0;right:0;z-index:30;flex-wrap:nowrap;gap:10px;min-height:0;
+    padding:calc(8px + env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) 8px max(14px,env(safe-area-inset-left));
+    background:rgba(4,9,25,.8);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);border-bottom:1px solid rgba(140,175,255,.12)}
+  html.web .nx-top .nx-pille:not(.verbindung),html.web .nx-top #verbindung-text,html.web .nx-top .nx-glocke{display:none!important}
+  html.web .nx-top .verbindung{padding:9px!important;min-width:0}
+  html.web .nx-top .kopf-rechts{gap:8px;margin-left:auto;flex-wrap:nowrap}
+  html.web main{padding:calc(var(--kopf) + env(safe-area-inset-top) + 12px) max(12px,env(safe-area-inset-right)) 18px max(12px,env(safe-area-inset-left))}
+  html.web .seite,html.web .fuss{display:none!important}
+  html.web .nx-seite{display:none!important}
+  html.web .nx-seite.aktiv{display:flex!important;flex-direction:column;gap:14px}
+  html.web .handy-leiste{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:35;height:calc(var(--hl) + env(safe-area-inset-bottom));
+    padding:0 max(4px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px,env(safe-area-inset-left));
+    background:rgba(5,9,22,.88);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
+    border-top:1px solid rgba(140,175,255,.14);box-shadow:0 -14px 30px -18px rgba(0,0,0,.9)}
+  html.web.tastatur .handy-leiste{display:none}
+  html.web.tastatur body{padding-bottom:0}
+  html.web #toasts{top:auto;bottom:calc(var(--hl) + env(safe-area-inset-bottom) + 10px);left:12px;right:12px;width:auto}
+  html.web #statistik-frage{left:12px;right:12px;bottom:calc(var(--hl) + env(safe-area-inset-bottom) + 12px);max-width:none}
+  /* File laden */
+  html.web .rahmen-kopf h1{font-size:19px}
+  html.web #v-upload{min-height:0}
+  html.web .zone{min-height:clamp(320px,56vh,480px)}
+  html.web .zone>div{padding:18px 12px}
+  html.web .p-ecu .ecu{height:clamp(110px,19vh,170px)}
+  html.web .p-vorteile{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:16px}
+  html.web .p-vorteile>span{min-width:0;padding:8px 10px 8px 8px}
+  html.web .p-vorteile strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Scan-Cockpit untereinander */
+  html.web .analyse>div.scan{width:100%;padding:14px 12px 12px}
+  html.web .scan-flaeche{grid-template-columns:minmax(0,1fr);gap:10px}
+  html.web .scan-box{height:clamp(150px,24vh,220px)}
+  html.web .scan-kopf{gap:12px;margin-bottom:10px}
+  html.web .scan-kopf .ringe{width:46px!important;height:46px!important}
+  html.web .scan-kopf .ringe i:nth-child(2){inset:6px!important}html.web .scan-kopf .ringe i:nth-child(3){inset:12px!important}html.web .scan-kopf .ringe b{inset:17px!important}
+  html.web .scan-kopf .datei-chip{display:none}
+  html.web .scan-text .verarbeitung{font-size:16px}
+  html.web .scan-schritte{flex-wrap:wrap;gap:6px;margin:10px 0}
+  html.web .scan-schritte span{flex:1 1 calc(33.3% - 6px);padding:6px 8px;font-size:11px;gap:6px}
+  html.web .scan-schritte span::before{width:13px;height:13px}
+  /* Loesungen: von oben nach unten - File, Loesungen, dann Kaufen; Steuergeraet und Software ganz lesbar */
+  html.web #v-auswahl>*{order:5}
+  html.web #v-auswahl>.nx-felder{order:1}html.web #v-auswahl>#aw-titel{order:2}html.web #v-auswahl>.nx-loesungsfeld{order:3}html.web #v-auswahl>.nx-leiste{order:4}
+  html.web .nx-leiste{display:flex;flex-wrap:wrap;gap:8px}
+  html.web .nx-leiste .feld{flex:1 1 100%;order:0}
+  html.web .nx-leiste #senden{flex:1 1 100%;order:1;min-height:50px;font-size:15.5px}
+  html.web .nx-leiste #abbrechen,html.web .nx-leiste #andere-anfrage{flex:1 1 calc(50% - 4px);order:2;justify-content:center;min-width:0;padding-left:8px;padding-right:8px}
+  html.web .loesungen,html.web #v-auswahl .loesungen{display:grid;grid-template-columns:minmax(0,1fr)}
+  html.web .loesungen>.loesung{width:auto;max-width:none}
+  html.web #aw-chips{grid-template-columns:minmax(0,1fr)}
+  html.web #aw-chips .chip{max-width:none;white-space:normal;padding-top:8px;padding-bottom:8px}
+  html.web #aw-chips .chip b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word;min-width:0}
+  /* Fenster (Anmelden, Bezahlen, Beta) auf kleinen Handys scrollbar */
+  html.web #konto-dialog,html.web #zahl-dialog,html.web #beta-dialog{overflow-y:auto;align-items:start;
+    padding:calc(14px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom))}
+  html.web #konto-dialog>.karte,html.web #zahl-dialog>.karte,html.web #beta-dialog>.karte{margin:auto 0}
+  /* Seitenkoepfe, Aufträge, Support */
+  html.web .nx-kopfzeile{flex-wrap:wrap;gap:10px}
+  html.web #seite-support .nx-zwei,html.web #seite-auftraege .nx-zwei{grid-template-columns:minmax(0,1fr)}
+  html.web #seite-support.tk-offen #tk-liste-karte{display:none}
+  html.web #seite-support.tk-offen .tk-zurueck{display:inline-flex}
+}
+.handy-leiste button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;
+  background:none;border:0;padding:6px 0 4px;color:#7d8bb0;font:inherit;font-size:10.5px;font-weight:700;cursor:pointer;transition:color .2s}
+.handy-leiste svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;transition:transform .25s var(--p-feder),filter .25s}
+.handy-leiste button.an{color:#fff}
+.handy-leiste button.an svg{color:#8fb6ff;filter:drop-shadow(0 0 8px rgba(91,141,255,.95));transform:translateY(-1px)}
+.handy-leiste button.an::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:3px;border-radius:0 0 4px 4px;background:var(--p-verlauf);
+  box-shadow:0 0 12px rgba(61,123,255,.9)}
+.handy-leiste button:active svg{transform:scale(.88)}
+.hl-badge{position:absolute;top:4px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff453a;color:#fff;
+  font-size:10.5px;font-weight:800;line-height:18px;text-align:center;box-shadow:0 0 0 2px #050916}
+.hl-badge.null,.hl-badge:empty{display:none}
+@media (prefers-reduced-motion:reduce){.handy-blatt,.hb-karte{animation:none!important}}
 </style>
 </head>
 <body>
@@ -1564,7 +1715,7 @@ main{gap:20px;padding:18px 20px 10px}
   <div class="sprachwahl kd-sprache" data-kein-ueb role="group" aria-label="Sprache / Language"><button type="button" data-sprache="de">DE</button><button type="button" data-sprache="en">EN</button></div>
   <div class="kd-marke" id="kd-marke"></div>
   <h2 id="kd-titel">Willkommen bei OneClick Solutions</h2>
-  <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.</p>
+  <p class="leise kd-unter" id="kd-unter">Melde dich einmal an – wir merken uns die Anmeldung auf diesem Gerät. Deine Aufträge und Tickets hängen an deinem Konto.</p>
   <div class="kd-reiter" role="tablist"><button type="button" data-kd="anmelden" class="an" role="tab">Anmelden</button><button type="button" data-kd="registrieren" role="tab">Registrieren</button></div>
   <form id="kd-form" autocomplete="on">
     <p class="kd-info" id="kd-info" hidden></p>
@@ -1584,13 +1735,15 @@ main{gap:20px;padding:18px 20px 10px}
   <p class="kd-links"><button type="button" class="kd-link" id="kd-vergessen">Passwort vergessen?</button>
     <button type="button" class="kd-link" id="kd-zurueck" hidden>← Zurück zur Anmeldung</button>
     <button type="button" class="kd-link" id="kd-code-da" hidden>Ich habe schon einen Code</button></p>
+  <p class="kd-recht"><a href="/info" target="_blank">Was ist OneClick Solutions?</a> · <a href="/impressum" target="_blank">Impressum</a> ·
+    <a href="/datenschutz" target="_blank">Datenschutz</a> · <a href="/agb" target="_blank">AGB</a></p>
 </div></div>
 <div id="beta-dialog" role="dialog" aria-modal="true" aria-labelledby="beta-titel"><div class="karte">
   <span class="beta-marke">Beta</span>
   <h2 id="beta-titel">Willkommen – schön, dass du dabei bist</h2>
   <p>Vielen Dank für deine Registrierung. OneClick Solutions befindet sich derzeit in der Beta-Phase.</p>
   <p>Unser Archiv wird laufend erweitert. Daher kann es vorkommen, dass für dein Steuergerät oder deinen Softwarestand noch kein fertiges File hinterlegt ist – einzelne Datenstände laden wir erst nach deiner Anfrage hoch.</p>
-  <p>Stelle in diesem Fall einfach eine Anfrage direkt im Programm. Wir ergänzen den passenden Datenstand und benachrichtigen dich im Programm und per E-Mail, sobald er bereitsteht.</p>
+  <p>Stelle in diesem Fall einfach direkt hier eine Anfrage. Wir ergänzen den passenden Datenstand und benachrichtigen dich hier und per E-Mail, sobald er bereitsteht.</p>
   <p class="leise">Feedback und Verbesserungsvorschläge nehmen wir jederzeit gern über den Support entgegen.</p>
   <button class="btn" type="button" id="beta-ok">Verstanden</button>
 </div></div>
@@ -1654,6 +1807,14 @@ main{gap:20px;padding:18px 20px 10px}
     </aside>
     <div class="nx-inhalt">
     <section class="nx-seite aktiv" id="seite-ecu">
+    <div class="handy-hinweis" id="handy-hinweis" hidden>
+      <img src="/icons/app-180.png" alt="" width="44" height="44">
+      <div><b>OneClick als App aufs iPhone</b>
+        <span class="hh-ios">In Safari unten auf <svg class="hh-teilen" viewBox="0 0 24 24" aria-label="Teilen"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> tippen und dann „Zum Home-Bildschirm“ wählen.</span>
+        <span class="hh-andere">Mit einem Tipp auf deinen Startbildschirm – wie eine richtige App.</span></div>
+      <button type="button" class="btn klein" id="hh-installieren" hidden>Installieren</button>
+      <button type="button" class="hh-zu" id="hh-zu" aria-label="Schließen">✕</button>
+    </div>
     <div class="links">
     <!-- Links: Ablauf -->
     <section class="karte spot rahmen-haupt">
@@ -1695,8 +1856,9 @@ main{gap:20px;padding:18px 20px 10px}
                   <path d="M190 112 V88 M180 97 l10 -10 10 10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
                 </g>
               </svg></div>
-              <b>Datei hierher ziehen</b><b class="los">Jetzt loslassen</b>
-              <span class="leise">oder klicken zum Auswählen · .bin / .ori · max. 16 MB</span>
+              <b class="kein-touch">Datei hierher ziehen</b><b class="los">Jetzt loslassen</b><b class="nur-touch">File auswählen</b>
+              <span class="leise kein-touch">oder klicken zum Auswählen · .bin / .ori · max. 16 MB</span>
+              <span class="leise nur-touch">Tippen und das Original aus „Dateien“, iCloud oder einer Mail wählen · max. 16 MB</span>
               <div class="p-vorteile" aria-hidden="true">
                 <span><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span><strong>Sofort-Check</strong><small>Steuergerät und Software in Sekunden</small></span></span>
                 <span><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg><span><strong>Geprüfte Files</strong><small>in WinOLS 5 erstellt</small></span></span>
@@ -1843,11 +2005,12 @@ main{gap:20px;padding:18px 20px 10px}
     </section>
     <section class="nx-seite" id="seite-support">
       <div class="nx-kopfzeile"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></span><div><h2 class="nx-h">Support</h2>
-        <span class="leise">Problem mit einem File oder eine Frage? Schreib uns – die Antwort kommt hier ins Programm.</span></div>
+        <span class="leise">Problem mit einem File oder eine Frage? Schreib uns – die Antwort kommt direkt hierher.</span></div>
         <button type="button" class="btn" id="tk-neu-knopf">+ Neues Ticket</button></div>
       <div class="nx-zwei">
         <section class="karte" id="tk-liste-karte"><h2>Meine Tickets</h2><div class="liste" id="tk-liste"></div></section>
         <section class="karte" id="tk-rechts">
+          <button type="button" class="tk-zurueck" id="tk-zurueck"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Alle Tickets</button>
           <div id="tk-leer" class="tk-leer"><span class="nx-quadrat gross"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></span><b>Wie können wir helfen?</b>
             <span class="leise">Wähle links ein Ticket oder öffne ein neues. Bei Problemen mit einem File am besten den Auftrag auswählen und Fehlercodes mitschicken.</span>
             <button type="button" class="btn" id="tk-neu-knopf2">Neues Ticket öffnen</button>
@@ -1891,10 +2054,46 @@ main{gap:20px;padding:18px 20px 10px}
   </footer>
 </div>
 
+<!-- Handy/Tablet (Web-App): Menue unten wie bei einer iPhone-App -->
+<nav class="handy-leiste" id="handy-leiste" aria-label="Menü">
+  <button type="button" data-ziel="sn-neu" class="an"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/><path d="M12.5 8.5 10 12.5h4l-2.5 3.5"/></svg><span>File</span></button>
+  <button type="button" data-ziel="sn-auftraege"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>Aufträge</span><b class="hl-badge null" id="hl-auftraege"></b></button>
+  <button type="button" data-ziel="sn-preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span>Preise</span></button>
+  <button type="button" data-ziel="sn-support"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg><span>Support</span><b class="hl-badge null" id="hl-support"></b></button>
+  <button type="button" id="hl-mehr"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mehr</span></button>
+</nav>
+<div class="handy-blatt" id="handy-blatt" hidden>
+  <div class="hb-karte" role="dialog" aria-modal="true" aria-label="Mehr">
+    <i class="hb-griff"></i>
+    <div class="hb-konto"><span class="nx-quadrat"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
+      <div><small>Angemeldet als</small><b id="hb-name">–</b></div></div>
+    <button type="button" data-ziel="sn-anfragen"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg>Anfragen</button>
+    <button type="button" data-ziel="sn-original"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>Original wiederherstellen</button>
+    <button type="button" id="hb-app"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Als App auf den Home-Bildschirm</button>
+    <button type="button" id="hb-abmelden" class="hb-rot"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</button>
+    <p class="hb-links"><a href="/impressum" target="_blank">Impressum</a> · <a href="/datenschutz" target="_blank">Datenschutz</a> · <a href="/agb" target="_blank">AGB</a> ·
+      <a href="/widerruf" target="_blank">Widerruf</a> · <a href="/haftung" target="_blank">Haftung</a></p>
+    <p class="hb-fuss" id="hb-fuss">© OneClick Solutions</p>
+  </div>
+</div>
+<!-- Handy: fertiges File ueber "Teilen" sichern (Dateien, AirDrop, Mail ...) -->
+<div class="handy-blatt" id="teilen-blatt" hidden>
+  <div class="hb-karte" role="dialog" aria-modal="true" aria-labelledby="tb-titel">
+    <i class="hb-griff"></i>
+    <div class="tb-kopf"><span class="tb-haken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      <div><b id="tb-titel">File ist bereit</b><span class="leise" id="tb-name"></span></div></div>
+    <p class="leise">Tippe auf „Sichern / Teilen“ und wähle „In Dateien sichern“ – oder schick es per AirDrop oder Mail an deinen Laptop.</p>
+    <button type="button" class="btn" id="tb-teilen">Sichern / Teilen</button>
+    <button type="button" class="btn grau" id="tb-zu">Schließen</button>
+  </div>
+</div>
+
 
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+/* Im Browser (PC, Mac, iPhone ...) statt im alten Programm; TOUCH = Handy/Tablet ohne Maus */
+const WEBAPP = document.documentElement.classList.contains("web"), TOUCH = document.documentElement.classList.contains("touch");
 /* ---------- Verbindung zum Server ----------
    Meine Auftraege merkt sich der Browser (localStorage), Zugriff auf einen Auftrag nur ueber seine geheime Nummer. */
 
@@ -1916,12 +2115,12 @@ const EN = {
     "Thank you for registering. OneClick Solutions is currently in its beta phase.",
   "Unser Archiv wird laufend erweitert. Daher kann es vorkommen, dass für dein Steuergerät oder deinen Softwarestand noch kein fertiges File hinterlegt ist – einzelne Datenstände laden wir erst nach deiner Anfrage hoch.":
     "Our archive is growing continuously. It may therefore happen that no ready-made file is available yet for your ECU or software version – some versions are only uploaded after you send a request.",
-  "Stelle in diesem Fall einfach eine Anfrage direkt im Programm. Wir ergänzen den passenden Datenstand und benachrichtigen dich im Programm und per E-Mail, sobald er bereitsteht.":
-    "In that case, simply send a request right in the program. We will add the matching version and notify you in the program and by email as soon as it is available.",
+  "Stelle in diesem Fall einfach direkt hier eine Anfrage. Wir ergänzen den passenden Datenstand und benachrichtigen dich hier und per E-Mail, sobald er bereitsteht.":
+    "In that case, simply send a request right here. We will add the matching version and notify you here and by email as soon as it is available.",
   "Feedback und Verbesserungsvorschläge nehmen wir jederzeit gern über den Support entgegen.":
     "We always welcome feedback and suggestions via support.",
-  "Melde dich einmal an – das Programm merkt sich die Anmeldung. Deine Aufträge und Tickets hängen an deinem Konto.":
-    "Sign in once – the program remembers you. Your orders and tickets are linked to your account.",
+  "Melde dich einmal an – wir merken uns die Anmeldung auf diesem Gerät. Deine Aufträge und Tickets hängen an deinem Konto.":
+    "Sign in once – we’ll remember you on this device. Your orders and tickets are linked to your account.",
   "Anmelden": "Sign in", "Registrieren": "Register", "E-Mail-Adresse": "Email address", "Code aus der E-Mail": "Code from the email",
   "Passwort": "Password", "Neues Passwort": "New password", "Passwort wiederholen": "Repeat password",
   "Passwort: mindestens 8 Zeichen.": "Password: at least 8 characters.", "Ich habe die": "I have read the", "Datenschutzerklärung": "privacy policy",
@@ -2006,14 +2205,25 @@ const EN = {
   "Bitte mindestens eine gewünschte Lösung auswählen.": "Please choose at least one solution.", "Fahrzeugdaten fehlen": "Vehicle details missing",
   "Anfrage gesendet": "Request sent", "Nachricht an uns (optional), z. B. Umbauten, Wünsche …": "Message to us (optional), e.g. modifications, wishes …",
   "Name / Firma / Telefon (optional, falls wir dich erreichen müssen)": "Name / company / phone (optional, in case we need to reach you)",
-  "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail – du kannst es dann direkt herunterladen. Du kannst das Programm auch schließen und später wiederkommen.":
-    "We’ll make the file for you. As soon as it’s ready, you’ll be notified here and by email and can download it right away. You can also close the program and come back later.",
+  "Wir machen dir das File. Sobald es fertig ist, bekommst du hier Bescheid und eine E-Mail – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.":
+    "We’ll make the file for you. As soon as it’s ready, you’ll be notified here and by email and can download it right away. You can also close this page and come back later.",
   "Das File ist nicht mehr auf dem Server. Bitte nochmal hochladen.": "The file is no longer on the server. Please upload it again.",
   "Zu viele Anfragen in kurzer Zeit. Bitte später nochmal versuchen.": "Too many requests in a short time. Please try again later.",
   "Zu viele Anfragen. Bitte kurz warten.": "Too many requests. Please wait a moment.",
   // Auftraege
   "Status, Bezahlung und Download deiner Files": "Status, payment and download of your files", "+ Neues File": "+ New file", "Gesamt": "Total",
   "Zu bezahlen": "To pay", "Fertig": "Done", "Alle": "All", "Wartend": "Waiting", "Abgelehnt": "Rejected", "So läuft dein Auftrag": "How your order works",
+  "OneClick als App aufs iPhone": "OneClick as an app on your iPhone", "In Safari unten auf": "In Safari, tap",
+  "tippen und dann „Zum Home-Bildschirm“ wählen.": "at the bottom, then choose “Add to Home Screen”.",
+  "Mit einem Tipp auf deinen Startbildschirm – wie eine richtige App.": "One tap on your home screen – just like a real app.",
+  "Installieren": "Install", "File auswählen": "Choose file",
+  "Tippen und das Original aus „Dateien“, iCloud oder einer Mail wählen · max. 16 MB": "Tap to pick the original from Files, iCloud or an email · max. 16 MB",
+  "Als App auf den Home-Bildschirm": "Add to home screen", "File ist bereit": "File is ready", "Sichern / Teilen": "Save / Share",
+  "Tippe auf „Sichern / Teilen“ und wähle „In Dateien sichern“ – oder schick es per AirDrop oder Mail an deinen Laptop.":
+    "Tap “Save / Share” and choose “Save to Files” – or send it to your laptop via AirDrop or email.",
+  "Alle Tickets": "All tickets", "Was ist OneClick Solutions?": "What is OneClick Solutions?", "Als App installieren": "Install as app",
+  "Im Menü des Browsers „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.": "In the browser menu, choose “Install app” or “Add to Home screen”.",
+  "Neu: OneClick Solutions im Browser": "New: OneClick Solutions in your browser",
   "Lese Datei …": "Reading file …", "Suche Kennfelder …": "Searching maps …", "Hex-Dump": "Hex dump", "Kennfeld-Suche": "Map search",
   "Datei lesen": "Read file", "Kennfelder": "Maps", "Kennfeld": "Map", "Archiv": "Archive", "Jetzt loslassen": "Drop it now",
   "Gesendet": "Sent", "Bereit": "Ready", "Sofort-Check": "Instant check", "Steuergerät und Software in Sekunden": "ECU and software in seconds",
@@ -2064,7 +2274,7 @@ const EN = {
   "Gerade sind keine Lösungen hinterlegt.": "No solutions available at the moment.",
   "Start/Stopp aus": "Start/stop off", "Vmax offen": "Vmax off", "Original (Rückrüsten)": "Original (restore)", "Getriebe / TCU": "Gearbox / TCU",
   // Support
-  "Problem mit einem File oder eine Frage? Schreib uns – die Antwort kommt hier ins Programm.": "A problem with a file or a question? Write to us – the answer comes right here in the program.",
+  "Problem mit einem File oder eine Frage? Schreib uns – die Antwort kommt direkt hierher.": "A problem with a file or a question? Write to us – the answer comes right here.",
   "+ Neues Ticket": "+ New ticket", "Meine Tickets": "My tickets", "Wie können wir helfen?": "How can we help?",
   "Wähle links ein Ticket oder öffne ein neues. Bei Problemen mit einem File am besten den Auftrag auswählen und Fehlercodes mitschicken.":
     "Choose a ticket on the left or open a new one. For problems with a file, it’s best to select the order and include fault codes.",
@@ -2084,7 +2294,7 @@ const EN = {
   "Noch keine Tickets": "No tickets yet", "Neue Antwort": "New reply", "Neue Antwort vom Support": "New reply from support", "Jetzt antworten": "Reply now",
   "Antwort lesen": "Read reply", "neue Nachricht": "new message", "Neues File vom Support": "New file from support", "File ansehen": "View file",
   "Bitte kurz antworten, dann geht's weiter.": "Please reply briefly so we can continue.", "Ticket gesendet": "Ticket sent",
-  "Wir melden uns hier im Programm – du bekommst Bescheid, sobald wir antworten.": "We’ll get back to you here in the program – you’ll be notified as soon as we reply.",
+  "Wir melden uns hier – du bekommst Bescheid, sobald wir antworten.": "We’ll get back to you right here – you’ll be notified as soon as we reply.",
   "Bitte höchstens 16 MB anhängen.": "Please attach at most 16 MB.", "Datei ist leer": "File is empty", "Die Datei ist leer.": "The file is empty.",
   "Wird hochgeladen …": "Uploading …", "Offen": "Open", "Beantwortet": "Answered", "Geschlossen": "Closed",
   "Bitte beschreibe kurz dein Anliegen.": "Please briefly describe your issue.", "Bitte ein Thema wählen.": "Please choose a topic.",
@@ -2119,6 +2329,10 @@ const EN_MUSTER = [
   [/^„(.+)“ wartet jetzt auf unsere Freigabe\. Du bekommst hier Bescheid\.$/, m => "“" + T(m[1]) + "” is now waiting for our approval. You’ll be notified here."],
   [/^Grund: ([\s\S]+)$/, "Reason: $1"],
   [/^Jetzt bezahlen · (.+)$/, "Pay now · $1"],
+  [/^Alles läuft jetzt direkt im Browser unter (\S+) – auf dem PC, Mac und iPhone\. Mit deinem Konto findest du dort alle Aufträge\. Das Programm kannst du weiter nutzen oder deinstallieren\.$/,
+    "Everything now runs right in your browser at $1 – on PC, Mac and iPhone. Sign in with your account to find all your orders. You can keep using the program or uninstall it."],
+  [/^Teilen nicht möglich: ([\s\S]+)$/, "Sharing not possible: $1"],
+  [/^Weitergegeben: (.+?)\.( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => "Shared: " + m[1] + "." + (m[2] ? " Have the checksum corrected when writing." : "")],
   [/^Gespeichert: (.+?)( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => "Saved: " + m[1] + (m[2] ? " Have the checksum corrected when writing." : "")],
   [/^(.+) liegt in deinem Download-Ordner\.( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => m[1] + " is in your Downloads folder." + (m[2] ? " Have the checksum corrected when writing." : "")],
   [/^Ticket #(\w+) · (.+)$/, m => "Ticket #" + m[1] + " · " + T(m[2])],
@@ -2238,6 +2452,7 @@ async function server(pfad, optionen = {}) {
     const f = new Error("Bitte melde dich an."); f.status = 401; f.daten = {anmelden: true}; kontoNoetig(); throw f;
   }
   if (k) optionen = {...optionen, headers: {...(optionen.headers || {}), "X-Konto": k.schluessel}};
+  if (WEBAPP) optionen = {...optionen, headers: {...(optionen.headers || {}), "X-OneClick-App": "web"}};   // Kundenseite im Browser
   let r;
   try { r = await fetch(pfad, {cache: "no-store", ...optionen}); }
   catch (e) { throw new Error("Keine Verbindung zum Server. Bitte Internetverbindung prüfen."); }
@@ -2343,7 +2558,12 @@ const WEB = {
       const kopf = r.headers.get("Content-Disposition") || "";
       const m = kopf.match(/filename\*=UTF-8''([^;]+)/i) || kopf.match(/filename="?([^";]+)"?/i);
       const name = m ? decodeURIComponent(m[1]) : "file.bin";
-      const url = URL.createObjectURL(await r.blob()), link = document.createElement("a");
+      const blob = await r.blob();
+      if (TOUCH && navigator.canShare) {   // Handy/Tablet: ueber "Teilen" in "Dateien" sichern, per AirDrop oder Mail weitergeben
+        const datei = new File([blob], name, {type: "application/octet-stream"});
+        if (navigator.canShare({files: [datei]})) return dateiTeilen(datei);
+      }
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
       link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       return {pfad: name};
@@ -3144,7 +3364,7 @@ async function herunterladen(a, b) {
   finally { b.disabled = false; b.classList.remove("laedt"); text.textContent = "Herunterladen"; }
   if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
   else if (erg.abgebrochen) return;
-  else if (erg.pfad) toast("ok", "Heruntergeladen", (erg.app ? "Gespeichert: " + erg.pfad : erg.pfad + " liegt in deinem Download-Ordner.") + " Checksumme beim Schreiben korrigieren lassen.", 12000,
+  else if (erg.pfad) toast("ok", "Heruntergeladen", (erg.app ? "Gespeichert: " + erg.pfad : erg.geteilt ? "Weitergegeben: " + erg.pfad + "." : erg.pfad + " liegt in deinem Download-Ordner.") + " Checksumme beim Schreiben korrigieren lassen.", 12000,
                            {text: "Probleme am Auto? Support-Ticket öffnen", klick: () => neuesTicket(a.id, "auto")});
 }
 let aktualisiertGerade = false;
@@ -3300,7 +3520,7 @@ async function anfrageSenden() {
   zustand.auftraege = erg.auftraege;
   listeMalen(erg.auftrag.id);
   $("#erfolg-titel").textContent = "Anfrage gesendet";
-  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail – du kannst es dann direkt herunterladen. Du kannst das Programm auch schließen und später wiederkommen.";
+  $("#erfolg-text").textContent = "Wir machen dir das File. Sobald es fertig ist, bekommst du hier Bescheid und eine E-Mail – du kannst es dann direkt herunterladen. Du kannst die Seite auch schließen und später wiederkommen.";
   zeige("v-erfolg");
   ton(true);
 }
@@ -3387,7 +3607,11 @@ let tickets = [], tkAktiv = null, tkErsterLauf = true;
 const ungelesen = t => t.nachrichten.length > (t.gesehen || 0) && t.nachrichten[t.nachrichten.length - 1].von === "admin";
 function tkStatusKlasse(st) { return {OFFEN: "WARTET", BEANTWORTET: "FREIGEGEBEN", GESCHLOSSEN: "ABGELEHNT"}[st] || ""; }
 function zeitKurz(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"}) + " · " + d.toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"}); }
-function tkBereich(welcher) { ["#tk-leer", "#tk-form", "#tk-detail"].forEach(x => $(x).hidden = x !== welcher); }
+function tkBereich(welcher) {
+  ["#tk-leer", "#tk-form", "#tk-detail"].forEach(x => $(x).hidden = x !== welcher);
+  const s = $("#seite-support"), offen = welcher !== "#tk-leer";   // am Handy: Liste ODER Ticket
+  if (s.classList.contains("tk-offen") !== offen) { s.classList.toggle("tk-offen", offen); if (WEBAPP && innerWidth <= 980) window.scrollTo(0, 0); }
+}
 let tkListeStand = "", tkListeIds = new Set(), tkChatStand = null;
 function tkListeMalen() {
   const l = $("#tk-liste");
@@ -3452,7 +3676,7 @@ async function tkAnhangLaden(tid, d, k) {
   finally { k.disabled = false; k.classList.remove("laedt"); }
   if (erg.fehler) toast("fehler", "Download fehlgeschlagen", erg.fehler, 9000);
   else if (erg.abgebrochen) return;
-  else if (erg.pfad) toast("ok", "Heruntergeladen", erg.app ? "Gespeichert: " + erg.pfad : erg.pfad + " liegt in deinem Download-Ordner.", 10000);
+  else if (erg.pfad) toast("ok", "Heruntergeladen", erg.app ? "Gespeichert: " + erg.pfad : erg.geteilt ? "Weitergegeben: " + erg.pfad + "." : erg.pfad + " liegt in deinem Download-Ordner.", 10000);
 }
 function neuesTicket(aid = "", thema = "file") {
   seite("support"); $("#sn-support").classList.add("an");
@@ -3569,7 +3793,7 @@ $("#tk-form").addEventListener("submit", async e => {
   b.disabled = false; b.textContent = "Ticket senden";
   if (erg.fehler) return toast("fehler", "Nicht gesendet", erg.fehler, 7000);
   tkNeuAnhang.setzen(null);
-  toast("ok", "Ticket gesendet", "Wir melden uns hier im Programm – du bekommst Bescheid, sobald wir antworten.", 7000);
+  toast("ok", "Ticket gesendet", "Wir melden uns hier – du bekommst Bescheid, sobald wir antworten.", 7000);
   tickets.unshift({...erg.ticket, gesehen: erg.ticket.nachrichten.length}); zeigeTicket(erg.ticket.id);
 });
 $("#tk-antwort-senden").addEventListener("click", async () => {
@@ -3599,6 +3823,7 @@ window.addEventListener("pywebviewready", appModus); appModus();
 
 /* Installation zaehlen - nur mit Einwilligung (einmal gefragt): zufaellige Kennung, Windows/Mac, Version, keine Kundendaten */
 function installationMelden() {
+  if (WEBAPP) return;   // nur das alte Windows/Mac-Programm zaehlt Installationen - im Browser gibt es nichts zu installieren
   let wahl = null, id = null;
   try { wahl = localStorage.getItem("oneclick-statistik"); id = localStorage.getItem("oneclick-installation"); } catch (e) { return; }
   if (wahl === null) return statistikFragen();
@@ -3826,9 +4051,11 @@ function starten(d, mitIntro) {
 }
 async function init() {
   const beginn = Date.now();
+  let kurzStart = false;   // im Browser: Startbildschirm nur beim ersten Oeffnen lang (nicht nach jedem Neuladen oder der Bezahlung)
+  if (WEBAPP) try { kurzStart = sessionStorage.getItem("oneclick-start") === "1"; sessionStorage.setItem("oneclick-start", "1"); } catch (e) {}
   const d = await rufe("start");
   if (d.fehler) d.verbindung = d.fehler;
-  if (!d.verbindung) setTimeout(() => { if (konto.lesen()) installationMelden(); }, 4500);   // nach dem Startbildschirm (erst angemeldet)
+  if (!d.verbindung && !WEBAPP) setTimeout(() => { if (konto.lesen()) installationMelden(); }, 4500);   // nur das alte Programm: Installation zaehlen
   if (d.firma) intro(d.firma);
   starten(d, true);
   if (konto.lesen()) kontoAnzeigen(); else kontoNoetig();
@@ -3836,12 +4063,12 @@ async function init() {
   setTimeout(() => {
     st.classList.add(d.verbindung ? "fehler" : "ok");
     st.querySelector("span").textContent = d.verbindung ? "Keine Verbindung" : "Verbunden";
-  }, Math.max(0, 1500 - (Date.now() - beginn)));
+  }, Math.max(0, (kurzStart ? 200 : 1500) - (Date.now() - beginn)));
   setTimeout(() => {
     $("#intro").classList.add("weg");
     if (kontoNachIntro) { kontoNachIntro(); kontoNachIntro = null; }
     if (d.verbindung) toast("fehler", "Keine Verbindung zum Server", d.verbindung, 8000);
-  }, Math.max(300, 2700 - (Date.now() - beginn)));
+  }, Math.max(300, (kurzStart ? 450 : 2700) - (Date.now() - beginn)));
   setInterval(aktualisieren, 8000);
   setTimeout(aktualisieren, 2500);
   zurueckVonStripe();
@@ -3964,6 +4191,107 @@ init();
   (function tick() { x += (zx - x) * .06; y += (zy - y) * .06;
     document.documentElement.style.setProperty("--px", x.toFixed(4)); document.documentElement.style.setProperty("--py", y.toFixed(4));
     requestAnimationFrame(tick); })();
+})();
+
+/* ===================== Im Browser: Handy-Menue, Teilen, App auf dem Home-Bildschirm ===================== */
+/* Fertiges File ueber "Teilen" weitergeben (iPhone: "In Dateien sichern", AirDrop, Mail ...) */
+async function dateiTeilen(datei) {
+  try { await navigator.share({files: [datei]}); return {pfad: datei.name, geteilt: true}; }
+  catch (e) {
+    if (e && e.name === "AbortError") return {abgebrochen: true};
+    return teilenBlatt(datei);   // der Tipp liegt zu lange zurueck (Download hat gedauert): ein Tipp mehr
+  }
+}
+function teilenBlatt(datei) {
+  return new Promise(fertig => {
+    const b = $("#teilen-blatt"), los = $("#tb-teilen");
+    $("#tb-name").textContent = datei.name; b.hidden = false;
+    const ende = erg => { b.hidden = true; los.onclick = $("#tb-zu").onclick = b.onclick = null; fertig(erg); };
+    los.onclick = async () => {
+      try { await navigator.share({files: [datei]}); ende({pfad: datei.name, geteilt: true}); }
+      catch (e) { if (!(e && e.name === "AbortError")) ende({fehler: "Teilen nicht möglich: " + ((e && e.message) || e)}); }   // abgebrochen: Blatt bleibt offen
+    };
+    $("#tb-zu").onclick = () => ende({abgebrochen: true});
+    b.onclick = e => { if (e.target === b) ende({abgebrochen: true}); };
+  });
+}
+(function imBrowser() {
+  const h = document.documentElement;
+  if (!WEBAPP) {   // altes Windows/Mac-Programm: einmal sagen, dass es jetzt im Browser laeuft
+    setTimeout(() => {
+      try { if (localStorage.getItem("oneclick-browser-hinweis") || !konto.lesen()) return; localStorage.setItem("oneclick-browser-hinweis", "1"); } catch (e) { return; }
+      toast("ok", "Neu: OneClick Solutions im Browser", "Alles läuft jetzt direkt im Browser unter " + location.host +
+        " – auf dem PC, Mac und iPhone. Mit deinem Konto findest du dort alle Aufträge. Das Programm kannst du weiter nutzen oder deinstallieren.", 20000);
+    }, 6000);
+    return;
+  }
+  if (h.classList.contains("ios")) $("#datei").removeAttribute("accept");   // iPhone: sonst sind .bin/.ori-Files in "Dateien" ausgegraut
+  // Menue unten (Handy) bedient die Knoepfe des normalen Menues
+  const leiste = $("#handy-leiste"), blatt = $("#handy-blatt");
+  const gehe = ziel => { const b = document.getElementById(ziel); if (b) b.click(); window.scrollTo(0, 0); };
+  leiste.querySelectorAll("[data-ziel]").forEach(b => b.addEventListener("click", () => gehe(b.dataset.ziel)));
+  function aktivSetzen() {
+    const an = document.querySelector(".seite-nav button.an"), id = an ? an.id : "sn-neu";
+    let unten = false;
+    leiste.querySelectorAll("[data-ziel]").forEach(b => { const ja = b.dataset.ziel === id; b.classList.toggle("an", ja); unten = unten || ja; });
+    $("#hl-mehr").classList.toggle("an", !unten);
+    blatt.querySelectorAll("[data-ziel]").forEach(b => b.classList.toggle("an", b.dataset.ziel === id));
+  }
+  new MutationObserver(aktivSetzen).observe($(".seite-nav"), {subtree: true, attributes: true, attributeFilter: ["class"]});
+  aktivSetzen();
+  function zaehler(quelle, ziel) {   // offene Auftraege (wie die Glocke) und ungelesene Tickets
+    const q = $(quelle), z = $(ziel);
+    const setzen = () => { const n = parseInt(q.textContent, 10) || 0; z.textContent = n ? String(n) : ""; z.classList.toggle("null", !n); };
+    new MutationObserver(setzen).observe(q, {childList: true, characterData: true, subtree: true}); setzen();
+  }
+  zaehler("#kp-offen", "#hl-auftraege"); zaehler("#sn-support-badge", "#hl-support");
+  // "Mehr": Anfragen, Original, App, Abmelden, Rechtliches
+  const zu = () => { blatt.hidden = true; };
+  $("#hl-mehr").addEventListener("click", () => {
+    $("#hb-name").textContent = $("#nx-konto-name").textContent || "–";
+    $("#hb-fuss").textContent = $("#fuss-firma").textContent;
+    blatt.hidden = false;
+  });
+  blatt.addEventListener("click", e => { if (e.target === blatt) zu(); });
+  blatt.querySelectorAll("[data-ziel]").forEach(b => b.addEventListener("click", () => { zu(); gehe(b.dataset.ziel); }));
+  $("#hb-abmelden").addEventListener("click", () => { zu(); $("#nx-abmelden").click(); });
+  $("#tk-zurueck").addEventListener("click", () => { tkAktiv = null; tkBereich("#tk-leer"); tkListeMalen(); });
+  // Tastatur offen: Menue unten ausblenden (sonst schwebt es ueber der Tastatur)
+  const tippFeld = el => el && el.matches && el.matches("input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea,select");
+  document.addEventListener("focusin", e => { if (tippFeld(e.target)) h.classList.add("tastatur"); });
+  const tastaturPruefen = () => setTimeout(() => { if (!tippFeld(document.activeElement)) h.classList.remove("tastatur"); }, 60);
+  document.addEventListener("focusout", tastaturPruefen);
+  document.addEventListener("pointerdown", tastaturPruefen, true);   // Feld verschwunden (z. B. Anmeldefenster zu): kein focusout
+  if (window.visualViewport) visualViewport.addEventListener("resize", tastaturPruefen);
+  new MutationObserver(tastaturPruefen).observe($("#konto-dialog"), {attributes: true, attributeFilter: ["class"]});
+  // Als App auf den Home-Bildschirm (nur Handy/Tablet, nicht schon als App geoeffnet)
+  let installieren = null;
+  const alsApp = h.classList.contains("standalone");
+  $("#hb-app").hidden = alsApp || !TOUCH;
+  addEventListener("beforeinstallprompt", e => { e.preventDefault(); installieren = e; hinweis(false); });   // Android/Chrome
+  function hinweis(zwingen) {
+    if (alsApp || !TOUCH) return;
+    try { if (!zwingen && localStorage.getItem("oneclick-app-hinweis") === "weg") return; } catch (e) {}
+    if (!h.classList.contains("ios") && !installieren) {
+      if (zwingen) toast("ok", "Als App installieren", "Im Menü des Browsers „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.", 9000);
+      return;
+    }
+    $("#hh-installieren").hidden = !installieren;
+    $("#handy-hinweis").hidden = false;
+  }
+  $("#hh-zu").addEventListener("click", () => { $("#handy-hinweis").hidden = true; try { localStorage.setItem("oneclick-app-hinweis", "weg"); } catch (e) {} });
+  $("#hh-installieren").addEventListener("click", async () => {
+    if (!installieren) return;
+    installieren.prompt(); try { await installieren.userChoice; } catch (e) {}
+    installieren = null; $("#handy-hinweis").hidden = true;
+  });
+  $("#hb-app").addEventListener("click", () => { zu(); gehe("sn-neu"); hinweis(true); });
+  setTimeout(() => { if (konto.lesen()) hinweis(false); }, 3500);   // nach dem Startbildschirm und der Anmeldung
+  // Neue Version der Seite: beim Zurueckkommen in die App neu laden (nur auf der Startansicht, nie mitten im Ablauf)
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden || aktuelle !== "v-upload" || !zustand.ui) return;
+    try { const ui = (await server("/api/info")).daten.ui; if (ui && ui !== zustand.ui && aktuelle === "v-upload") location.reload(); } catch (e) {}
+  });
 })();
 </script>
 </body>

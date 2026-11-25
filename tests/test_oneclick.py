@@ -532,28 +532,51 @@ class WebTests(Basis):
         self.assertEqual(self.kunde.post("/admin/archiv/alles", data={"csrf": self.kunde.csrf, "aktion": "loeschen",
                                                                       "bestaetigung": "ALLES"}).status_code, 302)
 
-    def test_browser_nur_werbeseite_programm_das_portal(self):
+    def test_kundenseite_im_browser_und_als_iphone_app(self):
         pc = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36 Edg/130"}
         handy = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148"}
         a = self.admin()
-        for c, ua in ((self.kunde, pc), (self.kunde, handy), (a, pc)):        # auch der Admin bekommt im Browser nur Werbung
+        for c, ua in ((self.kunde, pc), (self.kunde, handy), (a, pc)):        # Anmeldung + alles aus dem Programm, in jedem Browser
             r = c.get("/", headers=ua)
             self.assertEqual(r.status_code, 200)
-            self.assertIn("OneClick Solutions", r.text)
-            self.assertIn("/download/windows", r.text)   # Download laeuft ueber den Zaehler
-            self.assertNotIn('id="zone"', r.text)                            # kein Hochladen im Browser
-        self.assertIn('id="zone"', self.kunde.get("/").text)                 # das Programm bekommt das Portal
-        # Schnittstelle: Browser abgewiesen, Programm und Admin erlaubt
+            self.assertIn('id="zone"', r.text)
+            self.assertIn('id="konto-dialog"', r.text)
+            self.assertIn('<link rel="manifest" href="/app.webmanifest">', r.text)
+            self.assertIn('<a href="/impressum" target="_blank">Impressum</a>', r.text)   # Rechtliches direkt von der Startseite
+            self.assertNotIn("/download/", r.text)
+        self.assertIn('id="zone"', self.kunde.get("/").text)                 # alte Programme bekommen dieselbe Seite
+        self.assertEqual(self.kunde.get("/?bezahlt=abc", headers=handy).status_code, 200)   # zurueck von Stripe
+        self.assertTrue(self.kunde.get("/app", headers=handy).headers["Location"].endswith("/"))
+        info = self.kunde.get("/info", headers=pc)                           # Infoseite ohne Download
+        self.assertEqual(info.status_code, 200)
+        self.assertNotIn("/download/", info.text)
+        self.assertIn('<a class="btn" href="/">', info.text)
+        r = self.kunde.get("/programm", headers=pc)
+        self.assertEqual(r.status_code, 301)
+        self.assertTrue(r.headers["Location"].endswith("/info"))
+        # Schnittstelle: Kundenseite (mit Kennung), Programm und Admin erlaubt; fremde Abfragen nicht
+        web = {**pc, "X-OneClick-App": "web"}
         self.assertEqual(self.kunde.get("/api/info", headers=pc).status_code, 403)
         self.assertEqual(self.kunde.post("/api/pruefen", headers=pc).status_code, 403)
+        self.assertEqual(self.kunde.get("/api/info", headers=web).json["firma"], "OneClick Solutions")
         self.assertEqual(self.kunde.get("/api/info").json["firma"], "OneClick Solutions")
+        # App fuer den Home-Bildschirm (iPhone): Manifeste und Symbole fuer Kunde und Admin
+        m = self.kunde.get("/app.webmanifest")
+        self.assertEqual((m.mimetype, m.json["start_url"], m.json["display"]), ("application/manifest+json", "/", "standalone"))
+        self.assertEqual(self.kunde.get("/admin.webmanifest").json["start_url"], "/admin")
+        self.assertEqual(self.kunde.get("/nix.webmanifest").status_code, 404)
+        for name in ("app-180.png", "app-192.png", "app-512.png", "admin-180.png", "admin-192.png", "admin-512.png"):
+            r = self.kunde.get("/icons/" + name)
+            self.assertEqual((r.status_code, r.mimetype), (200, "image/png"))
+        self.assertEqual(self.kunde.get("/icons/app-999.png").status_code, 404)
+        self.assertEqual(self.kunde.get("/apple-touch-icon.png").mimetype, "image/png")
         self.assertEqual(a.get("/api/info", headers=pc).status_code, 200)
         self.assertEqual(a.get("/admin", headers=pc).status_code, 200)        # Admin-Bereich im Browser
         self.assertEqual(self.kunde.get("/bilder/programm-auswahl.webp", headers=pc).status_code, 200)
         self.assertEqual(self.kunde.get("/bilder/../app.py").status_code, 404)
         self.assertEqual(self.kunde.get("/impressum", headers=pc).status_code, 200)
         self.assertNotIn("nur_programm", a.get("/admin/einstellungen").text)  # kein Schalter mehr
-        self.assertIn('rel="icon"', self.kunde.get("/", headers=pc).text)        # Werbeseite mit blauem Logo
+        self.assertIn('rel="icon"', self.kunde.get("/info", headers=pc).text)    # Infoseite mit blauem Logo
         r = self.kunde.get("/favicon.ico", headers=pc)
         self.assertEqual((r.status_code, r.mimetype), (200, "image/x-icon"))
 
@@ -708,20 +731,17 @@ class WebTests(Basis):
         self.assertNotIn("1.2.3.4", A.INSTALLATIONEN.read_text())   # keine IP gespeichert
         self.assertEqual(set(alt["a" * 32]), {"erst", "zuletzt", "plattform", "version"})
 
-    def test_downloads_zaehlen(self):
+    def test_alte_download_links_fuehren_zur_anmeldung(self):
         browser = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130"}
-        r = self.kunde.get("/download/windows", headers=browser)
-        self.assertEqual((r.status_code, r.headers["Location"]), (302, A.PROGRAMM_DOWNLOAD))
-        self.assertEqual(self.kunde.get("/download/mac", headers=browser).headers["Location"], A.PROGRAMM_DOWNLOAD_MAC)
-        self.kunde.get("/download/mac", headers=browser)
-        self.kunde.get("/download/windows", headers={"User-Agent": "WhatsApp/2.23 (Link-Vorschau)"})   # Vorschau zaehlt nicht
+        for plattform in ("windows", "mac"):                     # kein Programm-Download mehr: alles im Browser
+            r = self.kunde.get(f"/download/{plattform}", headers=browser)
+            self.assertEqual(r.status_code, 302)
+            self.assertTrue(r.headers["Location"].endswith("/"))
         self.assertEqual(self.kunde.get("/download/linux", headers=browser).status_code, 404)
         st = A.download_statistik()
-        self.assertEqual((st["windows"], st["mac"], st["monat"]), (1, 2, 3))
-        seite = self.kunde.get("/", headers=browser).text   # Werbeseite verlinkt den Zaehler
-        self.assertIn('href="/download/windows"', seite)
-        self.assertIn("/download/mac", seite)
-        self.assertIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)
+        self.assertEqual((st["windows"], st["mac"]), (0, 0))     # nichts mehr gezaehlt
+        self.assertNotIn("/download/", self.kunde.get("/info", headers=browser).text)
+        self.assertIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)   # alte Zahlen bleiben sichtbar
 
     def test_rueckfrage_vom_admin_zum_auftrag(self):
         A.speichere_config({"telegram_chat_id": "1"})
@@ -1152,6 +1172,40 @@ class WebTests(Basis):
         a.post("/admin/einstellungen", data={"csrf": a.csrf, "aktion": "passwort", "alt": "Geheim123", "neu": "Geheim456", "neu2": "Geheim456"})
         self.assertEqual(neu_gestartet(c).get("/admin").status_code, 302)
 
+    def test_iphone_admin_bleibt_auf_wunsch_angemeldet(self):
+        iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
+        def client(cookie=None):
+            c = A.app.test_client(); c.environ_base.update(HTTP_USER_AGENT=iphone)
+            if cookie:
+                c.set_cookie(A.GERAET_COOKIE, cookie)
+            c.get("/login")
+            with c.session_transaction() as s:
+                c.csrf = s.setdefault("csrf", "x")
+            return c
+        c = client()
+        seite = c.get("/login").text
+        self.assertIn('name="merken" value="1"', seite)                      # Haken "angemeldet bleiben"
+        self.assertIn('<link rel="apple-touch-icon" href="/icons/admin-180.png">', seite)
+        c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
+        self.assertIsNone(c.get_cookie(A.GERAET_COOKIE))                      # ohne Haken: nichts gemerkt
+        c = client()
+        c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf, "merken": "1"})
+        k = c.get_cookie(A.GERAET_COOKIE)
+        self.assertIsNotNone(k)
+        self.assertEqual(client(k.value).get("/admin").status_code, 200)       # App wieder geoeffnet: angemeldet
+        self.assertFalse(A.lade_benutzer()["chef"]["geraete"][-1]["app"])
+        # mit Zwei-Faktor: der Wunsch gilt bis nach dem Code
+        geheim = base64.b32encode(bytes(range(10))).decode()
+        alles = A.lade_benutzer(); alles["chef"]["totp"] = geheim; alles["chef"].pop("geraete", None); A.json_speichern(A.BENUTZER_DATEI, alles)
+        c = client()
+        self.assertIn("/login/code", c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf, "merken": "1"}).headers["Location"])
+        self.assertIsNone(c.get_cookie(A.GERAET_COOKIE))                      # vor dem Code noch nichts
+        with c.session_transaction() as s:
+            k = s["csrf"]
+        c.post("/login/code", data={"csrf": k, "code": A.totp_code(geheim, int(time.time() // 30))})
+        self.assertIsNotNone(c.get_cookie(A.GERAET_COOKIE))
+        self.assertEqual(client(c.get_cookie(A.GERAET_COOKIE).value).get("/admin").status_code, 200)
+
     def test_totp_rfc_testwerte(self):
         g = base64.b32encode(b"12345678901234567890").decode().rstrip("=")
         self.assertEqual(A.totp_code(g, 59 // 30), "287082")
@@ -1167,11 +1221,14 @@ class WebTests(Basis):
         a = self.admin()
         seite = a.get("/admin", headers=app_ua).text
         self.assertIn('class="aa-leiste"', seite)
-        self.assertIn('<body class="aa admin-app">', seite)
+        self.assertIn('<body class="aa admin-app mit-tabs">', seite)
         # Browser: dasselbe Design mit Seitenleiste (am Handy per CSS das Menue oben)
         browser = a.get("/admin", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text
-        self.assertIn('<body class="aa aa-browser">', browser)
+        self.assertIn('<body class="aa aa-browser mit-tabs">', browser)
         self.assertIn('class="aa-leiste"', browser)
+        self.assertIn('<nav class="aa-tabs"', browser)                       # am Handy: Menue unten
+        self.assertIn('<link rel="manifest" href="/admin.webmanifest">', browser)
+        self.assertNotIn('rel="manifest"', c.get("/impressum", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
         self.assertIn('<body class="aa aa-browser ohne-leiste">', c.get("/impressum", headers={"User-Agent": "Mozilla/5.0 Chrome"}).text)
         self.assertEqual(c.get("/favicon.svg").mimetype, "image/svg+xml")
         # Anmeldung bleibt gleich streng: ohne Login kein Admin, auch nicht mit App-Kennung
@@ -1180,12 +1237,12 @@ class WebTests(Basis):
     def test_werbeseite_seo(self):
         b = A.app.test_client()
         browser = {"User-Agent": "Mozilla/5.0 Chrome/130"}
-        seite = b.get("/", headers=browser).text
-        self.assertIn('<link rel="canonical"', seite)
+        seite = b.get("/info", headers=browser).text
+        self.assertIn('<link rel="canonical" href="http://localhost/info">', seite)
         self.assertIn('property="og:image"', seite)
         ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', seite, re.S).group(1))
         typen = [g["@type"] for g in ld["@graph"]]
-        for t in ("SoftwareApplication", "FAQPage", "HowTo", "Organization"):
+        for t in ("WebApplication", "FAQPage", "HowTo", "Organization"):
             self.assertIn(t, typen)
         faq = next(g for g in ld["@graph"] if g["@type"] == "FAQPage")["mainEntity"]
         self.assertEqual(len(faq), len(A.WERBE_FAQ))
@@ -1196,6 +1253,8 @@ class WebTests(Basis):
         self.assertIn("Sitemap:", r)
         self.assertIn("GPTBot", r)
         self.assertIn("/impressum</loc>", b.get("/sitemap.xml").text)
+        self.assertIn("/info</loc>", b.get("/sitemap.xml").text)
+        self.assertNotIn("download", b.get("/llms.txt").text)
         self.assertIn("## Häufige Fragen", b.get("/llms.txt").text)
         self.assertEqual(b.get("/bilder/og-oneclick.png").mimetype, "image/png")
         # Admin, Login, Auftraege nicht in Google; Rechtstexte schon (mit eigenem Titel)

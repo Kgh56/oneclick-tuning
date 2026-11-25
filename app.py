@@ -44,7 +44,7 @@ from email.utils import formataddr, formatdate, make_msgid
 from functools import wraps
 from pathlib import Path, PurePosixPath
 
-from flask import (Flask, abort, flash, g, jsonify, redirect, render_template,
+from flask import (Flask, abort, flash, g, has_request_context, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 from jinja2 import DictLoader
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -212,18 +212,18 @@ def entscheidung_mailen(a: dict):
     loesung = option_namen()[a["option"]] if a.get("option") else ""
     if a["status"] == "FREIGEGEBEN":
         offen = zahlung_offen(a)
-        weiter = ("Du kannst es jetzt im Programm bezahlen und herunterladen." if offen
-                  else "Du kannst es jetzt im Programm herunterladen.")
+        weiter = ("Du kannst es jetzt bezahlen und herunterladen." if offen
+                  else "Du kannst es jetzt herunterladen.")
         mail_im_hintergrund(a["konto"], f"Dein File ist fertig: {datei}",
                             f"Hallo,\n\ndein File für „{datei}“{f' ({loesung})' if loesung else ''} ist fertig und freigegeben. {weiter}\n\n"
-                            f"Öffne dazu {PROGRAMM_NAME} → „Meine Aufträge“.",
+                            f"Öffne dazu {kunden_adresse()} → „Meine Aufträge“.",
                             titel="Dein File ist fertig 🎉", box=datei,
                             box_unter=" · ".join(x for x in [loesung, f"{euro(a['preis'])} – jetzt bezahlen" if offen else "bereit zum Download"] if x))
     elif a["status"] == "ABGELEHNT":
         grund = f"\nGrund: {a['grund']}" if a.get("grund") else ""
         mail_im_hintergrund(a["konto"], f"Zu deinem Auftrag: {datei}",
                             f"Hallo,\n\nzu deinem Auftrag „{datei}“{f' ({loesung})' if loesung else ''} können wir dir leider kein File anbieten.{grund}\n\n"
-                            f"Bei Fragen öffne in {PROGRAMM_NAME} unter „Support“ ein Ticket – wir helfen gern.",
+                            f"Bei Fragen öffne auf {kunden_adresse()} unter „Support“ ein Ticket – wir helfen gern.",
                             titel="Zu deinem Auftrag", box=datei, box_unter=f"Grund: {a['grund']}" if a.get("grund") else loesung)
 
 
@@ -238,13 +238,13 @@ def support_mailen(t: dict, rueckfrage: bool = False):
     if rueckfrage:
         mail_im_hintergrund(t["konto"], "Rückfrage zu deinem Auftrag",
                             f"Hallo,\n\nwir haben eine kurze Rückfrage zu deinem Auftrag{zu}.\n\n"
-                            f"Bitte öffne {PROGRAMM_NAME} → „Support“ und antworte uns – danach geht es direkt weiter.",
+                            f"Bitte öffne {kunden_adresse()} → „Support“ und antworte uns – danach geht es direkt weiter.",
                             titel="Kurze Rückfrage zu deinem Auftrag", box=a["datei"] if a else "",
-                            box_unter="Antwort im Programm unter „Support“" if a else "")
+                            box_unter="Antwort unter „Support“" if a else "")
     else:
         mail_im_hintergrund(t["konto"], f"Neue Antwort vom Support (Ticket #{t['id'][:6]})",
                             f"Hallo,\n\nwir haben dir im Support geantwortet.\n\n"
-                            f"Öffne {PROGRAMM_NAME} → „Support“, um die Nachricht zu lesen.",
+                            f"Öffne {kunden_adresse()} → „Support“, um die Nachricht zu lesen.",
                             titel="Neue Antwort vom Support", box=f"Ticket #{t['id'][:6]}",
                             box_unter=f"zu „{a['datei']}“" if a else TICKET_THEMEN.get(t.get("thema"), ""))
 
@@ -252,6 +252,17 @@ def support_mailen(t: dict, rueckfrage: bool = False):
 # ---------------------------------------------------------------------------
 # E-Mails an Kunden (SMTP-Postfach, Zugangsdaten nur in Admin -> Einstellungen)
 # ---------------------------------------------------------------------------
+
+def kunden_adresse() -> str:
+    """Wo Kunden OneClick finden (fuer E-Mails): die eingestellte Adresse der Seite, sonst die Adresse, unter der
+    gerade gearbeitet wird (z. B. Freigabe im Admin), sonst der Name."""
+    b = lade_config().get("basis_url", "").rstrip("/")
+    if b.startswith(("https://", "http://")):
+        return b
+    if has_request_context() and "." in request.host and not request.host.startswith(("127.", "localhost", "[")):
+        return request.host_url.rstrip("/")
+    return PROGRAMM_NAME
+
 
 def mail_aktiv() -> bool:
     cfg = lade_config()
@@ -261,7 +272,7 @@ def mail_aktiv() -> bool:
 MAIL_LOGO = BASE / "web" / "bilder" / "mail-logo.png"
 def mail_hinweis() -> str:
     return (f"Diese E-Mail wurde automatisch verschickt. Bitte nicht darauf antworten – schreib uns bei Fragen "
-            f"im Programm {PROGRAMM_NAME} unter „Support“.")
+            f"auf {kunden_adresse()} unter „Support“.")
 
 
 def mail_html(titel: str, text: str, box: str = "", box_unter: str = "", code: bool = False, firma: str = "") -> str:
@@ -591,9 +602,10 @@ def aktive_geraete(b: dict) -> list:
     return [g for g in b.get("geraete", []) if g.get("bis", 0) > jetzt]
 
 
-def geraet_merken(antwort, name: str):
-    """Nur in der Mac-Admin-App: Schluessel ausstellen, damit die App beim naechsten Start angemeldet ist."""
-    if not ist_admin_app():
+def geraet_merken(antwort, name: str, gewuenscht: bool = False):
+    """Schluessel ausstellen, damit das Geraet beim naechsten Start angemeldet ist: in der Mac-Admin-App immer,
+    sonst nur, wenn beim Anmelden "angemeldet bleiben" angehakt war (z. B. die Admin-App auf dem iPhone)."""
+    if not (ist_admin_app() or gewuenscht):
         return antwort
     benutzer = lade_benutzer()
     b = benutzer.get(name)
@@ -601,7 +613,8 @@ def geraet_merken(antwort, name: str):
         return antwort
     token = secrets.token_urlsafe(32)
     jetzt = time.time()
-    b["geraete"] = aktive_geraete(b)[-9:] + [{"hash": geraet_hash(token), "seit": jetzt, "bis": jetzt + GERAET_TAGE * 86400}]
+    b["geraete"] = aktive_geraete(b)[-9:] + [{"hash": geraet_hash(token), "seit": jetzt, "bis": jetzt + GERAET_TAGE * 86400,
+                                              "app": ist_admin_app()}]   # Schluessel der Mac-App gilt nur in der Mac-App
     json_speichern(BENUTZER_DATEI, benutzer)
     antwort.set_cookie(GERAET_COOKIE, f"{name}:{token}", max_age=GERAET_TAGE * 86400, httponly=True, samesite="Lax",
                        secure=bool(app.config.get("SESSION_COOKIE_SECURE")), path="/")
@@ -714,14 +727,15 @@ def login():
             return render_template("login.html")
         name = request.form.get("name", "").strip()
         b = lade_benutzer().get(name)
+        merken_wunsch = request.form.get("merken") == "1"   # "Auf diesem Geraet angemeldet bleiben"
         if b and b.get("rolle") == "admin" and check_password_hash(b["pw"], request.form.get("pw", "")):
             session.clear()
             session["csrf"] = secrets.token_hex(16)
             if b.get("totp"):   # Zwei-Faktor: erst noch der Code aus der App
-                session["zfa_name"], session["zfa_seit"] = name, time.time()
+                session["zfa_name"], session["zfa_seit"], session["zfa_merken"] = name, time.time(), merken_wunsch
                 return redirect(url_for("login_code"))
             session["benutzer"], session["admin"] = name, True
-            return geraet_merken(redirect(url_for("admin")), name)
+            return geraet_merken(redirect(url_for("admin")), name, merken_wunsch)
         merken("login")
         flash("Benutzername oder Passwort falsch.")
     return render_template("login.html")
@@ -742,12 +756,13 @@ def login_code():
         b = benutzer.get(name)
         if b and b.get("totp") and zweiter_faktor_ok(b, request.form.get("code", "")):
             json_speichern(BENUTZER_DATEI, benutzer)
+            merken_wunsch = bool(session.get("zfa_merken"))
             session.clear()
             session["benutzer"], session["admin"] = name, True
             session["csrf"] = secrets.token_hex(16)
             if not b.get("ersatz"):
                 flash("Hinweis: Du hast keine Ersatzcodes mehr – bitte unter Einstellungen neue erzeugen.")
-            return geraet_merken(redirect(url_for("admin")), name)
+            return geraet_merken(redirect(url_for("admin")), name, merken_wunsch)
         merken("login_code")
         flash("Code falsch oder abgelaufen.")
     return render_template("login_code.html")
@@ -845,18 +860,27 @@ def ist_admin_app() -> bool:
     return ADMIN_APP_UA in request.headers.get("User-Agent", "")
 
 
+WEB_APP_KOPF = "X-OneClick-App"   # die Kundenseite im Browser (PC, Mac, iPhone ...) schickt diesen Kopf bei jeder Anfrage
+
+
+def ist_web_app() -> bool:
+    return request.headers.get(WEB_APP_KOPF) == "web"
+
+
 @app.before_request
 def nur_ueber_programm():
-    """Die Kunden-Schnittstelle (/api/...) beantwortet nur das Programm. Im Browser gibt es nur die
-    Werbeseite und den Admin-Bereich."""
-    if request.path.startswith("/api/") and not ist_programm() and not session.get("admin") and not download_erlaubt():
-        return jsonify(fehler=f"Nur über das Programm {PROGRAMM_NAME}."), 403
+    """Die Kunden-Schnittstelle (/api/...) beantwortet nur die Kundenseite (im Browser oder als App auf dem iPhone)
+    und die frueher installierten Programme (Windows/Mac) - keine fremden Abfragen."""
+    if (request.path.startswith("/api/") and not ist_programm() and not ist_web_app() and not session.get("admin")
+            and not download_erlaubt()):
+        return jsonify(fehler=f"Bitte {PROGRAMM_NAME} im Browser öffnen."), 403
 
 
 @app.before_request
 def geraet_anmelden():
-    """Mac-Admin-App mit gueltigem Geraeteschluessel: ohne erneute Eingabe angemeldet."""
-    if session.get("admin") or not ist_admin_app() or not request.cookies.get(GERAET_COOKIE):
+    """Gemerktes Geraet (Mac-Admin-App oder iPhone mit "angemeldet bleiben"): ohne erneute Eingabe angemeldet.
+    Den Schluessel gibt es nur nach vollstaendiger Anmeldung (Passwort + Code) - in der Mac-App immer, sonst nur auf Wunsch."""
+    if session.get("admin") or not request.cookies.get(GERAET_COOKIE):
         return
     if zu_viele("geraet", 10, 15 * 60):
         return
@@ -864,7 +888,8 @@ def geraet_anmelden():
     b = lade_benutzer().get(name) if name and token else None
     if b and b.get("rolle") == "admin":
         h = geraet_hash(token)
-        if any(hmac.compare_digest(g["hash"], h) for g in aktive_geraete(b)):
+        # aeltere Eintraege ohne "app" stammen alle aus der Mac-App
+        if any(hmac.compare_digest(g["hash"], h) and (ist_admin_app() or not g.get("app", True)) for g in aktive_geraete(b)):
             session.clear()
             session["benutzer"], session["admin"] = name, True
             session["csrf"] = secrets.token_hex(16)
@@ -898,28 +923,29 @@ def bild(name):
 
 # Fragen der Werbeseite: sichtbar als FAQ und gleichzeitig als strukturierte Daten fuer Google und KI-Antwortdienste
 WERBE_FAQ = [
-    ("Was kostet das Programm?", "Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo und ohne Credits. "
-     "Alle Preise siehst du vorher im Programm im Reiter „Preise“, immer aktuell."),
+    ("Was kostet OneClick Solutions?", "Nichts. Du bezahlst nur die Files, die du bestellst – zu festen Preisen, ohne Abo und ohne Credits. "
+     "Alle Preise siehst du vorher im Reiter „Preise“, immer aktuell."),
     ("Wie lange dauert es, bis ich mein File habe?", "Liegt dein File schon in unserem Archiv, lädst du es direkt nach der Zahlung herunter – rund um die Uhr. "
-     "Bei einer Anfrage erstellen wir das File individuell – sobald es fertig ist, meldet sich das Programm und du bekommst eine E-Mail."),
-    ("Wie bezahle ich?", "Sicher über Stripe direkt im Programm – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
-    ("Brauche ich ein Konto?", "Ja, einmal kurz im Programm registrieren – mit E-Mail-Adresse und Passwort. "
-     "Das Programm merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auch auf einem anderen PC wieder. "
+     "Bei einer Anfrage erstellen wir das File individuell – sobald es fertig ist, bekommst du Bescheid und eine E-Mail."),
+    ("Wie bezahle ich?", "Sicher über Stripe direkt bei OneClick – mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail."),
+    ("Brauche ich ein Konto?", "Ja, einmal kurz registrieren – mit E-Mail-Adresse und Passwort. "
+     "Dein Gerät merkt sich die Anmeldung, und deine Aufträge und Tickets findest du auf jedem PC, Mac oder iPhone wieder. "
      "Passwort vergessen? Im Anmeldefenster auf „Passwort vergessen?“ klicken – du bekommst einen Code per E-Mail."),
-    ("Gibt es das Programm auf Englisch?", "Ja. OneClick Solutions gibt es auf Deutsch und Englisch – oben im Programm mit einem Klick "
+    ("Gibt es OneClick Solutions auf Englisch?", "Ja. OneClick Solutions gibt es auf Deutsch und Englisch – oben mit einem Klick "
      "auf DE oder EN umschalten."),
-    ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – das Programm zeigt es dir sofort nach dem Laden. "
+    ("Für welche Steuergeräte gibt es Files?", "Für alles, was in unserem Archiv liegt – OneClick zeigt es dir sofort nach dem Laden. "
      "Ist nichts dabei, stellst du eine Anfrage und wir erstellen dein File."),
     ("Brauche ich ein eigenes Flash-Tool?", "Ja. Du liest das Original selbst aus und spielst das fertige File mit deinem eigenen "
      "Flash-Tool auf. Die Checksumme korrigiert dein Flash-Tool beim Schreiben."),
-    ("Was mache ich, wenn es ein Problem mit dem File gibt?", "Öffne im Programm unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. "
-     "Häng Fehlercodes, Logs oder Screenshots an – wir antworten im Programm und schicken dir ein angepasstes File direkt in den Chat."),
+    ("Was mache ich, wenn es ein Problem mit dem File gibt?", "Öffne unter „Support“ ein Ticket oder klick am Auftrag auf „Problem?“. "
+     "Häng Fehlercodes, Logs oder Screenshots an – wir antworten dort und schicken dir ein angepasstes File direkt in den Chat."),
     ("Bekomme ich Launch Control, Antilag oder Mapswitch?", "Ja, für VAG: 2-Step / Launch Control, Antilag und No-Lift-Shift "
-     "für Bosch ME7 sowie Mapswitch für VAG. Öffne im Programm unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, "
+     "für Bosch ME7 sowie Mapswitch für VAG. Öffne unter „Support“ ein Ticket mit dem Thema „Sonderfunktion“, "
      "nenn Fahrzeug und gewünschte Funktion und häng dein Original-File an – wir melden uns mit Preis und Umsetzung. "
      "Die Funktionen sind für den Motorsport gedacht, nicht für den öffentlichen Straßenverkehr."),
-    ("Gibt es das Programm für Mac oder Handy?", "Für den Mac ja (macOS 11 oder neuer, Intel und Apple-Chip). Fürs Handy gibt es OneClick Solutions nicht – "
-     "du brauchst einen Windows-PC, Laptop oder Mac."),
+    ("Muss ich etwas installieren? Geht es auch auf dem iPhone?", "Nein, du musst nichts installieren: OneClick Solutions läuft direkt im Browser – "
+     "auf Windows-PCs, Macs, iPhone, iPad und Android. Auf dem iPhone kannst du OneClick in Safari über „Teilen → Zum Home-Bildschirm“ "
+     "als App mit eigenem Symbol ablegen."),
     ("Wer steckt hinter OneClick Solutions?", "GH-MAPPING, ein Chiptuning-Fileservice aus Dierdorf (Rheinland-Pfalz). "
      "Alle Files im Archiv werden in einer lizenzierten WinOLS-5-Umgebung erstellt und geprüft."),
 ]
@@ -935,22 +961,22 @@ def werbe_daten() -> str:
                      "addressLocality": "Dierdorf", "addressCountry": "DE"}},
         {"@type": "WebSite", "@id": b + "/#website", "url": b + "/", "name": PROGRAMM_NAME, "inLanguage": "de-DE",
          "publisher": {"@id": "https://gh-mapping.de/#business"}},
-        {"@type": "SoftwareApplication", "@id": b + "/#programm", "name": PROGRAMM_NAME, "url": b + "/",
-         "applicationCategory": "BusinessApplication", "operatingSystem": "Windows 10, Windows 11, macOS 11 oder neuer",
-         "description": "Programm zum Bestellen von Chiptuning-Files: Original laden, Steuergerät und Software werden erkannt, "
-                        "Lösung wählen, sicher über Stripe bezahlen und das File sofort herunterladen. Kein Abo.",
-         "downloadUrl": [b + "/download/windows", b + "/download/mac"],
+        {"@type": "WebApplication", "@id": b + "/#programm", "name": PROGRAMM_NAME, "url": b + "/",
+         "applicationCategory": "BusinessApplication", "operatingSystem": "Webbrowser (Windows, macOS, iOS, Android)",
+         "browserRequirements": "Aktueller Browser (Chrome, Edge, Safari, Firefox)",
+         "description": "Chiptuning-Files im Browser bestellen: Original laden, Steuergerät und Software werden erkannt, "
+                        "Lösung wählen, sicher über Stripe bezahlen und das File sofort herunterladen. Kein Abo, nichts zu installieren.",
          "screenshot": [b + "/bilder/programm-auswahl.webp", b + "/bilder/programm-auftraege.webp", b + "/bilder/programm-support.webp"],
          "featureList": ["Automatische Erkennung von Steuergerät und Software", "Sofort-Kauf von Files aus dem Archiv",
-                         "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Automatische Updates",
-                         "Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem PC", "E-Mail-Benachrichtigung, wenn das File fertig ist",
+                         "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Als App auf dem iPhone-Home-Bildschirm",
+                         "Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem Gerät", "E-Mail-Benachrichtigung, wenn das File fertig ist",
                          "Live-Preisliste", "Deutsch und Englisch"],
          "inLanguage": ["de", "en"],
          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
          "publisher": {"@id": "https://gh-mapping.de/#business"}},
         {"@type": "HowTo", "name": "Chiptuning-File mit OneClick Solutions bestellen", "step": [
-            {"@type": "HowToStep", "position": 1, "name": "Programm laden", "text": "OneClick Solutions für Windows oder Mac herunterladen, starten und einmal mit E-Mail registrieren."},
-            {"@type": "HowToStep", "position": 2, "name": "Original laden", "text": "Das ausgelesene Original-File ins Programm ziehen."},
+            {"@type": "HowToStep", "position": 1, "name": "Seite öffnen", "text": "OneClick Solutions im Browser öffnen und einmal mit E-Mail registrieren."},
+            {"@type": "HowToStep", "position": 2, "name": "Original laden", "text": "Das ausgelesene Original-File hineinziehen oder auswählen."},
             {"@type": "HowToStep", "position": 3, "name": "Lösung wählen", "text": "Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken."},
             {"@type": "HowToStep", "position": 4, "name": "Bezahlen und laden", "text": "Über Stripe bezahlen und das File sofort herunterladen."}]},
         {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}}
@@ -958,13 +984,19 @@ def werbe_daten() -> str:
     return json.dumps(daten, ensure_ascii=False).replace("</", "<\\/")
 
 
-@app.route("/programm")
+@app.route("/info")
 def programm_seite():
-    """Werbeseite fuer das Windows-Programm - das ist alles, was Kunden im Browser sehen."""
+    """Infoseite: was OneClick Solutions ist und wie es geht (fuer Neugierige und Suchmaschinen). Angemeldet wird auf der Startseite."""
     cfg = lade_config()
-    return render_template("werbung.html", download="/download/windows", download_mac="/download/mac", firma=PROGRAMM_NAME, jahr=datetime.now().year,
+    return render_template("werbung.html", firma=PROGRAMM_NAME, jahr=datetime.now().year,
                            whatsapp=re.sub(r"[^0-9]", "", cfg.get("support_whatsapp", STANDARD_WHATSAPP) or ""),
                            faq=WERBE_FAQ, jsonld=werbe_daten(), basis=basis_adresse())
+
+
+@app.route("/programm")
+def programm_alt():
+    """Alte Adresse der Werbeseite."""
+    return redirect(url_for("programm_seite"), code=301)
 
 
 @app.route("/robots.txt")
@@ -1000,7 +1032,7 @@ Sitemap: {basis_adresse()}/sitemap.xml
 @app.route("/sitemap.xml")
 def sitemap_xml():
     b = basis_adresse()
-    seiten = [("/", "1.0")] + [(f"/{n}", "0.3") for n in RECHTLICHES]
+    seiten = [("/", "1.0"), ("/info", "0.8")] + [(f"/{n}", "0.3") for n in RECHTLICHES]
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
            + "".join(f"  <url><loc>{b}{u}</loc><priority>{pr}</priority></url>\n" for u, pr in seiten) + "</urlset>\n")
     return app.response_class(xml, mimetype="application/xml")
@@ -1009,31 +1041,74 @@ def sitemap_xml():
 @app.route("/llms.txt")
 def llms_txt():
     b = basis_adresse()
-    text = (f"# {PROGRAMM_NAME}\n\n> {PROGRAMM_NAME} ist das Programm des Chiptuning-Fileservice GH-MAPPING aus Dierdorf (Deutschland) "
-            "für Windows und Mac. Kunden laden ihr ausgelesenes Original-File, das Programm erkennt Steuergerät und Software und zeigt die "
+    text = (f"# {PROGRAMM_NAME}\n\n> {PROGRAMM_NAME} ist das Online-Portal des Chiptuning-Fileservice GH-MAPPING aus Dierdorf (Deutschland) "
+            "im Browser (PC, Mac, iPhone, Android; auf dem iPhone auch als App vom Home-Bildschirm). Kunden laden ihr ausgelesenes Original-File, "
+            "OneClick erkennt Steuergerät und Software und zeigt die "
             "verfügbaren Lösungen. Files aus dem Archiv werden sofort gekauft (Stripe) und heruntergeladen; gibt es noch nichts, stellt der "
             "Kunde eine Anfrage. Kein Abo, keine Credits. Die Files werden in einer lizenzierten WinOLS-5-Umgebung erstellt.\n\n"
-            "## Funktionen\n- Kundenkonto mit E-Mail und Passwort: Aufträge und Tickets auf jedem PC, Passwort zurücksetzen per E-Mail-Code.\n"
+            "## Funktionen\n- Kundenkonto mit E-Mail und Passwort: Aufträge und Tickets auf jedem Gerät, Passwort zurücksetzen per E-Mail-Code.\n"
             "- E-Mail-Benachrichtigung, wenn ein angefragtes File fertig ist oder der Support antwortet.\n"
-            "- Reiter „Preise“ mit der aktuellen Preisliste (live).\n- Programm auf Deutsch und Englisch.\n"
-            "- Support-Tickets mit Datei-Anhängen, Updates mit einem Klick.\n\n"
-            f"## Links\n- Programm und Download: {b}/\n- Windows: {b}/download/windows\n- Mac: {b}/download/mac\n"
+            "- Reiter „Preise“ mit der aktuellen Preisliste (live).\n- Auf Deutsch und Englisch.\n"
+            "- Support-Tickets mit Datei-Anhängen.\n- Nichts zu installieren; auf dem iPhone als App über „Teilen → Zum Home-Bildschirm“.\n\n"
+            f"## Links\n- Anmeldung und Kundenbereich: {b}/\n- Infos: {b}/info\n"
             "- Fileservice-Website: https://gh-mapping.de/\n- Kontakt: chiptuning2002@gmail.com, WhatsApp +49 155 68540674\n\n"
             "## Häufige Fragen\n" + "".join(f"\n### {q}\n{a}\n" for q, a in WERBE_FAQ))
     return app.response_class(text, mimetype="text/plain")
 
 
-@app.route("/")
-def start():
-    """Kundenseite: Original hochladen, Loesungen waehlen, Anfragen, Herunterladen (alles ueber /api/...)."""
-    if ist_admin_app():
-        return redirect(url_for("admin"))   # Admin-App startet direkt im Admin (bzw. Login)
-    if not ist_programm():
-        return programm_seite()   # Browser: nur die Werbeseite - das Portal gibt es nur im Programm
+def kundenseite():
     seite = KUNDENSEITE.read_text(encoding="utf-8")
     antwort = app.response_class(seite, mimetype="text/html")
     antwort.headers["Cache-Control"] = "no-cache"   # nach einem Update sofort die neue Seite
     return antwort
+
+
+@app.route("/")
+def start():
+    """Kundenseite im Browser (PC, Mac, iPhone, Android): Anmelden, Original hochladen, Loesungen waehlen, Anfragen,
+    Herunterladen (alles ueber /api/...). Dieselbe Seite laden auch die frueher installierten Programme."""
+    if ist_admin_app():
+        return redirect(url_for("admin"))   # Admin-App startet direkt im Admin (bzw. Login)
+    return kundenseite()
+
+
+@app.route("/app")
+def web_app():
+    """Alte bzw. kurze Adresse der App - die Kundenseite liegt direkt auf der Startseite."""
+    return redirect(url_for("start", **request.args))
+
+
+# Apps fuer den Home-Bildschirm (iPhone/Android): Kundenseite und Admin, jeweils mit eigenem Symbol
+WEB_APPS = {"app": {"name": PROGRAMM_NAME, "kurz": "OneClick", "start": "/"},
+            "admin": {"name": "OneClick Admin", "kurz": "OC Admin", "start": "/admin"}}
+
+
+@app.route("/<art>.webmanifest")
+def web_manifest(art):
+    w = WEB_APPS.get(art)
+    if not w:
+        abort(404)
+    symbole = [{"src": f"/icons/{art}-{g}.png", "sizes": f"{g}x{g}", "type": "image/png"} for g in (192, 512)]
+    symbole.append({"src": f"/icons/{art}-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"})
+    daten = {"id": w["start"], "name": w["name"], "short_name": w["kurz"], "start_url": w["start"], "scope": "/",
+             "display": "standalone", "background_color": "#040919", "theme_color": "#040919", "lang": "de", "icons": symbole}
+    antwort = app.response_class(json.dumps(daten, ensure_ascii=False), mimetype="application/manifest+json")
+    antwort.headers["Cache-Control"] = "public, max-age=3600"
+    return antwort
+
+
+@app.route("/icons/<name>")
+def app_symbol(name):
+    if not re.fullmatch(r"(app|admin)-(180|192|512)\.png", name) or not (BASE / "web" / "icons" / name).is_file():
+        abort(404)
+    return send_file(BASE / "web" / "icons" / name, mimetype="image/png", max_age=86400)
+
+
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def apple_symbol():
+    """Fragt das iPhone von selbst ab (Symbol fuer den Home-Bildschirm)."""
+    return app_symbol("app-180.png")
 
 
 class Abgelehnt(Exception):
@@ -1440,7 +1515,7 @@ def konto_noetig(f):
             return f(*args, **kwargs)
         gefunden = konto_aus_anfrage()
         if not gefunden:
-            return jsonify(fehler="Bitte melde dich im Programm an.", anmelden=True), 401
+            return jsonify(fehler="Bitte melde dich an.", anmelden=True), 401
         g.konto = gefunden[0]
         heute = datetime.now().strftime("%Y-%m-%d")
         if gefunden[1].get("zuletzt") != heute:   # hoechstens einmal am Tag schreiben
@@ -1572,7 +1647,7 @@ def api_konto_passwort_vergessen():
     if code:
         mail_im_hintergrund(email, "Dein Code zum Zurücksetzen des Passworts",
                             f"Hallo,\n\njemand – hoffentlich du – möchte das Passwort für dein {PROGRAMM_NAME}-Konto zurücksetzen.\n\n"
-                            f"Dein Code: {code}\n\nGib ihn im Programm ein. Er gilt {RESET_MINUTEN} Minuten.\n\n"
+                            f"Dein Code: {code}\n\nGib ihn auf der Anmeldeseite ein. Er gilt {RESET_MINUTEN} Minuten.\n\n"
                             "Wenn du das nicht warst, ignoriere diese E-Mail einfach – dein Passwort bleibt unverändert.",
                             titel="Dein Code zum Zurücksetzen", box=code, box_unter=f"gültig {RESET_MINUTEN} Minuten", code=True)
     return jsonify(ok=True)
@@ -1783,28 +1858,16 @@ def installations_statistik() -> dict:
             "versionen": sorted(versionen.items(), key=lambda x: [int(t) if t.isdigit() else 0 for t in x[0].split(".")], reverse=True)}
 
 
-DOWNLOADS = BASE / "downloads.json"   # Klicks auf "Herunterladen" auf der Werbeseite (ohne Updates)
-BOT = re.compile(r"bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|curl|wget|python", re.I)
+DOWNLOADS = BASE / "downloads.json"   # frueher: Klicks auf "Herunterladen" auf der Werbeseite (nur noch Anzeige)
 
 
 @app.route("/download/<plattform>")
 def programm_download(plattform):
-    """Download-Knopf der Werbeseite: mitzaehlen (ohne personenbezogene Daten) und zu GitHub weiterleiten."""
+    """Frueher der Programm-Download (Windows/Mac). Das Programm gibt es nicht mehr zum Laden - alles laeuft im Browser:
+    alte Links fuehren direkt zur Anmeldung."""
     if plattform not in ("windows", "mac"):
         abort(404)
-    if not BOT.search(request.headers.get("User-Agent", "")) and not zu_viele("download", 20, 3600):
-        merken("download")
-        monat = datetime.now().strftime("%Y-%m")
-        with installation_sperre:
-            try:
-                d = json.loads(DOWNLOADS.read_text()) if DOWNLOADS.exists() else {}
-            except (OSError, ValueError):
-                d = {}
-            d[plattform] = d.get(plattform, 0) + 1
-            d.setdefault("monate", {}).setdefault(monat, {}).setdefault(plattform, 0)
-            d["monate"][monat][plattform] += 1
-            json_speichern(DOWNLOADS, d)
-    return redirect(PROGRAMM_DOWNLOAD_MAC if plattform == "mac" else PROGRAMM_DOWNLOAD)
+    return redirect(url_for("start"))
 
 
 def download_statistik() -> dict:
@@ -2005,7 +2068,7 @@ def download(aid):
     else:   # Kunde: nur mit Anmeldung und nur eigene Auftraege
         gefunden = konto_aus_anfrage()
         if not gefunden:
-            return jsonify(fehler="Bitte melde dich im Programm an.", anmelden=True), 401
+            return jsonify(fehler="Bitte melde dich an.", anmelden=True), 401
         g.konto = gefunden[0]
         auftrag = eigener_auftrag(aid)
     if auftrag["status"] != "FREIGEGEBEN" and not (admin and auftrag["status"] != "ENTWURF"):
@@ -2447,7 +2510,7 @@ def admin_ticket(tid):
                     t["nachrichten"].append(n)
                     t["status"] = "BEANTWORTET"
                     support_mailen(t)
-                    flash("Antwort gesendet – der Kunde sieht sie im Programm." + (f" Datei „{anhang['name']}“ ist angehängt." if anhang else ""))
+                    flash("Antwort gesendet – der Kunde sieht sie in seinem Konto unter „Support“." + (f" Datei „{anhang['name']}“ ist angehängt." if anhang else ""))
                 else:
                     flash("Bitte eine Antwort eintippen oder eine Datei anhängen.")
             elif aktion == "schliessen":
@@ -2465,7 +2528,7 @@ def admin_ticket(tid):
 @app.route("/admin/auftrag/<aid>/rueckfrage", methods=["POST"])
 @admin_noetig
 def admin_rueckfrage(aid):
-    """Admin schreibt dem Kunden zu einem Auftrag/einer Anfrage - der Chat erscheint im Programm des Kunden."""
+    """Admin schreibt dem Kunden zu einem Auftrag/einer Anfrage - der Chat erscheint im Konto des Kunden."""
     text = request.form.get("text", "").strip()[:5000]
     try:
         gelesen = ticket_datei_lesen(request.files.get("datei"))
@@ -2495,7 +2558,7 @@ def admin_rueckfrage(aid):
         if auftrag.get("ticket") != t["id"]:
             auftrag["ticket"] = t["id"]
             speichere_auftrag(auftrag)
-    flash("Nachricht gesendet – der Kunde sieht sie in wenigen Sekunden im Programm. Seine Antwort kommt hier im Chat an.")
+    flash("Nachricht gesendet – der Kunde sieht sie in wenigen Sekunden in seinem Konto. Seine Antwort kommt hier im Chat an.")
     return redirect(url_for("admin_ticket", tid=t["id"]))
 
 
@@ -3253,7 +3316,7 @@ def loesungen_verwalten():
             flash(f"Nicht gespeichert – {e}")
             return redirect(url_for("admin_archiv") + "#preise")
         speichere_config({"preise": neu})
-        flash("Gespeichert – Kunden sehen die Preise im Programm unter „Preise“ (spätestens nach 15 Sekunden)."
+        flash("Gespeichert – Kunden sehen die Preise unter „Preise“ (spätestens nach 15 Sekunden)."
               + (f" {umbenannt} Name(n) geändert." if umbenannt else ""))
         return redirect(url_for("admin_archiv") + "#preise")
     try:
@@ -3897,9 +3960,14 @@ def einstellungen():
 TEMPLATES = {
 "basis.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% if titel is defined and titel %}{{ titel }} | {{ programm_name }}{% else %}{{ firma }}{% endif %}</title>
 <meta name="theme-color" content="#040919">
+{% if session.admin or (request.endpoint or '') in ('login', 'login_code') %}<link rel="manifest" href="/admin.webmanifest">
+<link rel="apple-touch-icon" href="/icons/admin-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OC Admin">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">{% endif %}
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJsZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFmNWZlMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzVhYTBmZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcng9IjE0IiBmaWxsPSJ1cmwoI2xnKSIvPjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI1NiIgaGVpZ2h0PSI1NiIgcng9IjEyIiBmaWxsPSIjMGQwZjE0Ii8+PGcgZmlsbD0idXJsKCNsZykiPjxyZWN0IHg9IjE5LjAiIHk9IjExIiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTkuMCIgeT0iNDUiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIxMSIgeT0iMTkuMCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIxOS4wIiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iMjUuOSIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIyNS45IiB5PSI0NSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjExIiB5PSIyNS45IiB3aWR0aD0iOCIgaGVpZ2h0PSIzLjIiIHJ4PSIxIi8+PHJlY3QgeD0iNDUiIHk9IjI1LjkiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSIzMi44IiB5PSIxMSIgd2lkdGg9IjMuMiIgaGVpZ2h0PSI4IiByeD0iMSIvPjxyZWN0IHg9IjMyLjgiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjMyLjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48cmVjdCB4PSI0NSIgeT0iMzIuOCIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjM5LjY5OTk5OTk5OTk5OTk5NiIgeT0iMTEiIHdpZHRoPSIzLjIiIGhlaWdodD0iOCIgcng9IjEiLz48cmVjdCB4PSIzOS42OTk5OTk5OTk5OTk5OTYiIHk9IjQ1IiB3aWR0aD0iMy4yIiBoZWlnaHQ9IjgiIHJ4PSIxIi8+PHJlY3QgeD0iMTEiIHk9IjM5LjY5OTk5OTk5OTk5OTk5NiIgd2lkdGg9IjgiIGhlaWdodD0iMy4yIiByeD0iMSIvPjxyZWN0IHg9IjQ1IiB5PSIzOS42OTk5OTk5OTk5OTk5OTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjMuMiIgcng9IjEiLz48L2c+PHJlY3QgeD0iMTYuNCIgeT0iMTYuNCIgd2lkdGg9IjMxLjIiIGhlaWdodD0iMzEuMiIgcng9IjQuNCIgZmlsbD0idXJsKCNsZykiLz48cmVjdCB4PSIxNy45IiB5PSIxNy45IiB3aWR0aD0iMjguMiIgaGVpZ2h0PSIyOC4yIiByeD0iMy4zIiBmaWxsPSIjMTIxODI2Ii8+PHBhdGggZD0iTTM0LjIgMTkuMiAyNC45IDMyLjdIMzAuOUwyOC41IDQzLjEgMzguNSAyOC43SDMyLjVMMzUgMTkuMloiIGZpbGw9IiNlYWYyZmYiLz48L3N2Zz4=">
 <style>
 :root{--bg:#000;--glas:rgba(255,255,255,.045);--glas2:rgba(255,255,255,.075);--rand:rgba(255,255,255,.09);
@@ -4236,7 +4304,44 @@ body.aa.ohne-leiste footer{justify-content:center}
   body.aa.aa-browser main{padding:22px 14px}}
 @media (max-width:720px){body.aa .liste-tab tr{border-color:var(--p-linie);background:rgba(255,255,255,.03)}}
 @media (prefers-reduced-motion:reduce){body.aa main>*{animation:none}}
-</style></head><body class="aa{{ ' admin-app' if admin_app else ' aa-browser' }}{{ '' if session.admin else ' ohne-leiste' }}">
+/* Handy (auch als App auf dem iPhone): Menue unten wie bei einer App, oben Platz fuer die Statusleiste */
+.aa-tabs,.aa-blatt{display:none}
+@media (max-width:760px){
+  body.aa>header{padding-top:calc(10px + env(safe-area-inset-top));padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+  body.aa.mit-tabs>header nav{display:none}
+  body.aa.mit-tabs footer{padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+  body.aa.mit-tabs .aa-tabs{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;height:calc(62px + env(safe-area-inset-bottom));
+    padding:0 max(4px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px,env(safe-area-inset-left));
+    background:rgba(5,9,22,.9);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);
+    border-top:1px solid rgba(140,175,255,.14);box-shadow:0 -14px 30px -18px rgba(0,0,0,.9)}
+  body.aa input:not([type=checkbox]):not([type=radio]):not([type=file]),body.aa textarea,body.aa select{font-size:16px}   /* iPhone zoomt sonst beim Tippen */
+}
+.aa-tabs a,.aa-tabs button{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:6px 0 4px;background:none;border:0;color:#7d8bb0;font:inherit;font-size:10.5px;font-weight:700;text-decoration:none;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.aa-tabs svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.aa-tabs .an{color:#fff}
+.aa-tabs .an svg{color:#8fb6ff;filter:drop-shadow(0 0 8px rgba(91,141,255,.95))}
+.aa-tabs .an::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:3px;border-radius:0 0 4px 4px;background:var(--p-verlauf);box-shadow:0 0 12px rgba(61,123,255,.9)}
+.aa-tabs i,.aa-blatt i.zahl-i{position:absolute;top:4px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;
+  background:#ff453a;color:#fff;font-style:normal;font-size:10.5px;font-weight:800;line-height:18px;text-align:center;box-shadow:0 0 0 2px #050916}
+.aa-blatt:not([hidden]){display:flex;position:fixed;inset:0;z-index:60;align-items:flex-end;justify-content:center;background:rgba(2,4,10,.55);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.aa-blatt-karte{width:min(560px,100%);max-height:86vh;overflow:auto;box-sizing:border-box;padding:10px 18px calc(18px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;
+  background:linear-gradient(180deg,rgba(22,32,62,.98),rgba(8,13,28,.99));border:1px solid rgba(140,175,255,.2);border-bottom:0;box-shadow:0 -24px 60px -20px rgba(0,0,0,.9);
+  animation:aa-hoch .32s var(--p-feder) both}
+@keyframes aa-hoch{from{transform:translateY(60px);opacity:.3}}
+.aa-griff{display:block;width:40px;height:5px;margin:0 auto 10px;border-radius:3px;background:rgba(255,255,255,.22)}
+.aa-blatt-karte a{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid rgba(140,175,255,.08);color:#e6edff;font-size:15.5px;font-weight:600;text-decoration:none}
+.aa-blatt-karte a:last-child{border-bottom:0}
+.aa-blatt-karte a svg{width:22px;height:22px;flex:none;fill:none;stroke:#8fb6ff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.aa-blatt-karte a.rot{color:#ff8a80}.aa-blatt-karte a.rot svg{stroke:#ff8a80}
+.aa-blatt-karte a b{margin-left:auto;min-width:22px;height:22px;padding:0 7px;box-sizing:border-box;border-radius:11px;background:#ff453a;color:#fff;font-size:12px;line-height:22px;text-align:center}
+.merken-wahl{display:flex;align-items:center;gap:10px;margin:2px 0 12px;font-size:14px;color:var(--p-leise,#a1a1a6)}
+.merken-wahl[hidden]{display:none}
+.merken-wahl input{width:20px;height:20px;margin:0;flex:none}
+@media (prefers-reduced-motion:reduce){.aa-blatt-karte{animation:none}}
+</style></head><body class="aa{{ ' admin-app' if admin_app else ' aa-browser' }}{{ '' if session.admin else ' ohne-leiste' }}{{ ' mit-tabs' if session.admin else '' }}">
 {% if im_programm and not session.admin %}<div class="programm-leiste pywebview-drag-region"><a class="btn klein" href="/" id="zurueck-programm">← Zurück zum Programm</a>
 <span class="leise">{{ programm_name }}</span></div>
 <script>document.addEventListener('keydown',function(e){if(e.key==='Escape')location.href='/';});
@@ -4254,7 +4359,26 @@ document.getElementById('zurueck-programm').addEventListener('mousedown',functio
 <a href="{{ url_for('eigenes_file') }}"{{ ' class=an' if ep.startswith('eigenes_file') }}><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>Eigenes File</a>
 <a href="{{ url_for('einstellungen') }}"{{ ' class=an' if ep == 'einstellungen' }}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</a>
 <div class="aa-unten"><a href="{{ url_for('logout') }}"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</a></div>
-</aside>{% endif %}
+</aside>
+<nav class="aa-tabs" aria-label="Menü">
+<a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht','auftrag_suche') }}><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Aufträge</span></a>
+<a href="{{ url_for('admin_tickets') }}"{{ ' class=an' if ep in ('admin_tickets','admin_ticket') }}><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg><span>Tickets</span>{% if tickets_offen %}<i>{{ tickets_offen }}</i>{% endif %}</a>
+<a href="{{ url_for('admin_kunden') }}"{{ ' class=an' if ep == 'admin_kunden' }}><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3c1.8.8 3 2.8 3 5.7"/></svg><span>Kunden</span></a>
+<a href="{{ url_for('admin_umsatz') }}"{{ ' class=an' if ep == 'admin_umsatz' }}><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Umsatz</span></a>
+<button type="button" id="aa-mehr"{{ ' class=an' if ep in ('admin_archiv','sortieren','einstellungen') or ep.startswith('eigenes_file') }}><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mehr</span>{% if zu_sortieren %}<i>{{ zu_sortieren }}</i>{% endif %}</button>
+</nav>
+<div class="aa-blatt" id="aa-blatt" hidden><div class="aa-blatt-karte" role="dialog" aria-modal="true" aria-label="Mehr"><span class="aa-griff"></span>
+<a href="{{ url_for('admin_archiv') }}"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archiv</a>
+<a href="{{ url_for('admin_archiv') }}#preise"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Preise</a>
+{% if zu_sortieren %}<a href="{{ url_for('sortieren') }}"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Sortieren<b>{{ zu_sortieren }}</b></a>{% endif %}
+<a href="{{ url_for('eigenes_file') }}"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>Eigenes File</a>
+<a href="{{ url_for('einstellungen') }}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Einstellungen</a>
+<a href="{{ url_for('start') }}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Kundenseite ansehen</a>
+<a href="{{ url_for('logout') }}" class="rot"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</a>
+</div></div>
+<script>(function(){var k=document.getElementById('aa-mehr'),b=document.getElementById('aa-blatt');
+k.addEventListener('click',function(){b.hidden=false;});
+b.addEventListener('click',function(e){if(e.target===b||e.target.closest('a'))b.hidden=true;});})();</script>{% endif %}
 <header><div class="logo">{% set w = firma.split(' ', 1) %}<span>{{ w[0] }}</span>{% if w|length > 1 %} {{ w[1] }}{% endif %}</div>
 {% set ep = request.endpoint or '' %}<nav>{% if session.admin %}<a href="{{ url_for('start') }}">Startseite</a>
 <a href="{{ url_for('admin') }}"{{ ' class=an' if ep in ('admin','auftrag_ansicht') }}>Aufträge</a>
@@ -4343,9 +4467,19 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
 <div class="karte" style="max-width:380px;margin:40px auto">
 <h1>Admin-Anmeldung</h1>
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}">
-<input type="text" name="name" placeholder="Benutzername" autofocus>
-<input type="password" name="pw" placeholder="Passwort">
+<input type="text" name="name" placeholder="Benutzername" autocomplete="username" autocapitalize="none" autofocus>
+<input type="password" name="pw" placeholder="Passwort" autocomplete="current-password">
+<label class="merken-wahl" id="merken-wahl" hidden><input type="checkbox" name="merken" value="1"> Auf diesem Gerät angemeldet bleiben (30 Tage)</label>
 <button class="btn" style="width:100%">Anmelden</button></form></div>
+<script>
+// Handy/Tablet (z. B. Admin-App auf dem iPhone): "angemeldet bleiben" anbieten - als App vom Home-Bildschirm schon angehakt
+(function(){
+  var touch=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>1;
+  if(!touch||navigator.userAgent.indexOf('OneClickAdmin/')>=0) return;   // Mac-App bleibt ohnehin angemeldet
+  var l=document.getElementById('merken-wahl'); l.hidden=false;
+  if(navigator.standalone||matchMedia('(display-mode: standalone)').matches) l.querySelector('input').checked=true;
+})();
+</script>
 {% endblock %}""",
 
 "login_code.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -4472,7 +4606,7 @@ der Kunde bekommt es sofort automatisch auf der Seite angezeigt.</p>
 <form method="post" action="{{ url_for('index_neu') }}"><input type="hidden" name="csrf" value="{{ session.csrf }}">
 <button class="btn grau klein" style="margin-top:6px">Neu einlesen</button></form></div>
 </div>
-<div class="karte" id="installationen"><h2>Programm-Installationen</h2>
+<div class="karte" id="installationen"><h2>Programm-Installationen <span class="leise" style="font-size:14px;font-weight:600">(früheres Windows/Mac-Programm)</span></h2>
 <div class="raster" style="margin:6px 0 4px">
 <div><div class="leise">Installiert (gesamt)</div><div class="zahl">{{ inst.gesamt }}</div>
 <div class="leise" style="font-size:13px">🪟 Windows {{ inst.windows }} · 🍎 Mac {{ inst.mac }}</div></div>
@@ -4596,19 +4730,19 @@ Ohne Ordner geht auch: <code>Golf7_ORI.bin</code> + <code>Golf7_Stage1.bin</code
 <form method="post" action="{{ url_for('loesungen_verwalten') }}" id="preise" style="margin-top:22px">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="preise">
 <h2 style="margin-top:8px">Name und Preis</h2>
-<p class="leise" style="margin-top:-6px">So heißen die Lösungen im Programm. Namen kannst du jederzeit ändern – Archiv und alte Aufträge bleiben erhalten.
+<p class="leise" style="margin-top:-6px">So heißen die Lösungen für deine Kunden. Namen kannst du jederzeit ändern – Archiv und alte Aufträge bleiben erhalten.
 Leeres Namensfeld = Standardname.</p>
 {% if not zahlung %}<p class="leise" style="margin-top:-6px">Bezahlen ist noch aus. Erst unter Einstellungen → Stripe den Schlüssel eintragen,
 dann gelten diese Preise.</p>{% endif %}
 <div class="dateien">
 {% for key, titel in archiv_optionen.items() %}<label class="datei" style="cursor:default"><span>{{ titel }}</span>
-<small class="leise">Name im Programm</small>
+<small class="leise">Name für Kunden</small>
 <input type="text" name="name_{{ key }}" value="{{ titel }}" maxlength="40" placeholder="{{ standard_namen.get(key, titel) }}" aria-label="Name" style="margin:0">
 <small class="leise">Preis in €</small>
 <input type="text" name="preis_{{ key }}" inputmode="decimal" placeholder="Preis in €" value="{{ '%.2f'|format(preise[key] / 100)|replace('.', ',') if key in preise else '' }}" style="margin:0">
 {% if zahlung and key not in preise %}<span class="status s-ABGELEHNT" style="align-self:flex-start">kein Preis = kostenlos</span>{% endif %}</label>{% endfor %}
 <label class="datei" style="cursor:default"><span>{{ optionen[original] }}</span>
-<small class="leise">Name im Programm</small>
+<small class="leise">Name für Kunden</small>
 <input type="text" name="name_{{ original }}" value="{{ optionen[original] }}" maxlength="40" placeholder="{{ standard_namen[original] }}" aria-label="Name" style="margin:0">
 <small class="leise">Preis in €</small>
 <input type="text" name="preis_{{ original }}" inputmode="decimal" placeholder="Preis in €" value="{{ '%.2f'|format(preise[original] / 100)|replace('.', ',') if original in preise else '' }}" style="margin:0">
@@ -4639,7 +4773,7 @@ Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nich
 {% endfor %}</table></div>{% else %}<p class="leise">Noch leer.</p>{% endif %}
 <datalist id="ecu-namen">{% for n in ecu_namen() %}<option value="{{ n }}">{% endfor %}</datalist></div>
 {% set gemerkt = ecu_gruppen() %}<div class="karte" id="ecu"><h2>Steuergeräte von Hand zugeordnet</h2>
-<p class="leise" style="margin-top:-6px">Erkennt das Programm ein Steuergerät nicht selbst, ordnest du es beim Auftrag oder oben in der Tabelle zu.
+<p class="leise" style="margin-top:-6px">Erkennt OneClick ein Steuergerät nicht selbst, ordnest du es beim Auftrag oder oben in der Tabelle zu.
 Gemerkt wird es über die Software-/Teilenummern im File – jedes weitere File mit diesen Nummern wird dann automatisch so erkannt, auch beim Kunden.</p>
 {% if gemerkt %}<div class="tabelle"><table><tr><th>Steuergerät</th><th>Nummern im File</th><th></th></tr>
 {% for name, nummern in gemerkt.items() %}<tr><td><b>{{ name }}</b></td><td style="overflow-wrap:anywhere">{{ nummern|join(', ') }}</td>
@@ -4726,15 +4860,15 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 {% endblock %}""",
 "werbung.html": """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OneClick Solutions – Chiptuning-Files sofort laden | Windows &amp; Mac</title>
-<meta name="description" content="Kostenloses Programm für Chiptuning-Files: Original laden, Lösung wählen, über Stripe bezahlen und sofort herunterladen. Windows &amp; Mac, ohne Abo.">
-<link rel="canonical" href="{{ basis }}/">
+<title>OneClick Solutions – Chiptuning-Files sofort laden | im Browser &amp; als iPhone-App</title>
+<meta name="description" content="Chiptuning-Files direkt im Browser bestellen: Original laden, Lösung wählen, über Stripe bezahlen und sofort herunterladen. Auf PC, Mac und iPhone – nichts zu installieren, ohne Abo.">
+<link rel="canonical" href="{{ basis }}/info">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta property="og:type" content="website"><meta property="og:site_name" content="{{ firma }}"><meta property="og:locale" content="de_DE">
-<meta property="og:url" content="{{ basis }}/"><meta property="og:title" content="OneClick Solutions – Chiptuning-Files mit einem Klick">
-<meta property="og:description" content="Original laden, Lösung wählen, sofort herunterladen. Kostenlos für Windows &amp; Mac, ohne Abo.">
+<meta property="og:url" content="{{ basis }}/info"><meta property="og:title" content="OneClick Solutions – Chiptuning-Files mit einem Klick">
+<meta property="og:description" content="Original laden, Lösung wählen, sofort herunterladen. Direkt im Browser – auf PC, Mac und iPhone, ohne Abo.">
 <meta property="og:image" content="{{ basis }}/bilder/og-oneclick.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="OneClick Solutions – Programm für Chiptuning-Files">
+<meta property="og:image:alt" content="OneClick Solutions – Chiptuning-Files im Browser">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{{ basis }}/bilder/og-oneclick.png">
 <script type="application/ld+json">{{ jsonld|safe }}</script>
 <meta name="theme-color" content="#0d0f14">
@@ -4894,40 +5028,39 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
  nach(4600,function(){el.classList.add("weg");h.classList.add("oc-rein");h.classList.remove("oc-intro");
    setTimeout(function(){el.remove();h.classList.remove("oc-rein")},2400)});
 })()</script>
-<nav><div class="breit"><a class="marke" href="/programm"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#eaf2ff"/></svg><span>{{ firma }}</span></a>
+<nav><div class="breit"><a class="marke" href="/info"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b78ff"/><stop offset="1" stop-color="#8fb4ff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/><rect x="4" y="4" width="56" height="56" rx="12" fill="#050a16"/><g fill="url(#lg)"><rect x="19.0" y="11" width="3.2" height="8" rx="1"/><rect x="19.0" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="19.0" width="8" height="3.2" rx="1"/><rect x="45" y="19.0" width="8" height="3.2" rx="1"/><rect x="25.9" y="11" width="3.2" height="8" rx="1"/><rect x="25.9" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="25.9" width="8" height="3.2" rx="1"/><rect x="45" y="25.9" width="8" height="3.2" rx="1"/><rect x="32.8" y="11" width="3.2" height="8" rx="1"/><rect x="32.8" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="32.8" width="8" height="3.2" rx="1"/><rect x="45" y="32.8" width="8" height="3.2" rx="1"/><rect x="39.699999999999996" y="11" width="3.2" height="8" rx="1"/><rect x="39.699999999999996" y="45" width="3.2" height="8" rx="1"/><rect x="11" y="39.699999999999996" width="8" height="3.2" rx="1"/><rect x="45" y="39.699999999999996" width="8" height="3.2" rx="1"/></g><rect x="16.4" y="16.4" width="31.2" height="31.2" rx="4.4" fill="url(#lg)"/><rect x="17.9" y="17.9" width="28.2" height="28.2" rx="3.3" fill="#071226"/><path d="M34.2 19.2 24.9 32.7H30.9L28.5 43.1 38.5 28.7H32.5L35 19.2Z" fill="#eaf2ff"/></svg><span>{{ firma }}</span></a>
 <div class="links"><a href="#funktionen">Funktionen</a><a href="#ablauf">So geht's</a><a href="#faq">FAQ</a></div>
-<a class="btn klein pc" href="{{ download }}" data-dl>Download</a></div></nav>
+<a class="btn klein" href="/">Anmelden</a></div></nav>
 <header class="breit held">
  <div>
-  <span class="kicker"><i></i>WINDOWS-PROGRAMM · KOSTENLOS</span>
+  <span class="kicker"><i></i>IM BROWSER · KOSTENLOS · AUCH ALS IPHONE-APP</span>
   <h1>Dein Chiptuning-File <span>mit einem Klick.</span></h1>
-  <p>Original laden, Lösung wählen, sofort bezahlen und herunterladen – alles in einem Programm.
+  <p>Original laden, Lösung wählen, sofort bezahlen und herunterladen – alles direkt im Browser, nichts zu installieren.
   <b>Kein Abo:</b> du zahlst nur für das File, das du wirklich brauchst.</p>
-  <div class="knoepfe pc"><a class="btn" href="{{ download }}" data-dl><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> <span data-dl-text>Programm herunterladen</span></a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
-  <div class="handy-hinweis">Das Programm läuft auf Windows-PCs, Laptops und Macs. Öffne diese Seite einfach am Computer, um es herunterzuladen.</div>
-  <div class="klein-info pc">Für Windows 10/11 und Mac (macOS 11 oder neuer) · Updates installiert das Programm selbst ·
-  <a href="{{ download }}" data-dl-win>Windows</a> · <a href="{{ download_mac }}" data-dl-mac>Mac</a></div>
+  <div class="knoepfe"><a class="btn" href="/"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg> <span>Jetzt starten</span></a><a class="btn grau" href="#ablauf">So funktioniert's</a></div>
+  <div class="handy-hinweis">Auf dem iPhone: oben auf „Jetzt starten“ tippen, anmelden und in Safari über <b>Teilen → „Zum Home-Bildschirm“</b> als App ablegen.</div>
+  <div class="klein-info">Läuft in jedem aktuellen Browser – Windows, Mac, iPhone, iPad und Android · nichts zu installieren, immer die neueste Version</div>
  </div>
- <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Solutions Programm: Lösungen für ein ECU-File wählen"></div>
+ <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Solutions: Lösungen für ein ECU-File wählen"></div>
 </header>
 <section id="funktionen"><div class="breit">
- <h2>Alles, was du für dein File brauchst</h2><p class="unter">Ein Programm, ein klarer Ablauf – vom Original bis zum fertigen File.</p>
+ <h2>Alles, was du für dein File brauchst</h2><p class="unter">Eine Seite, ein klarer Ablauf – vom Original bis zum fertigen File.</p>
  <div class="raster">
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg></div><b>Sofort-Check</b><span>Original laden – das Programm erkennt Steuergerät und Software und zeigt sofort, welche Lösungen es gibt.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg></div><b>Sofort-Check</b><span>Original laden – OneClick erkennt Steuergerät und Software und zeigt sofort, welche Lösungen es gibt.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg></div><b>Einzeln kaufen, kein Abo</b><span>Keine Monatsgebühr, keine Credits. Du bezahlst nur das File, das du bestellst.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><b>Geprüfte Files, sofort</b><span>Alles im Archiv haben wir selbst erstellt und geprüft – darum kaufst und lädst du es ohne Wartezeit.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg></div><b>Sicher bezahlen</b><span>Bezahlung über Stripe mit Karte, Apple Pay, PayPal und mehr. Die Rechnung kommt per E-Mail.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></div><b>Anfrage, wenn nichts passt</b><span>Fahrzeugdaten eintragen, Anfrage senden – wir erstellen dein File und melden uns im Programm.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 9v4M10 11h4"/></svg></div><b>Anfrage, wenn nichts passt</b><span>Fahrzeugdaten eintragen, Anfrage senden – wir erstellen dein File und du bekommst Bescheid.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></div><b>Original wiederherstellen</b><span>Getuntes File laden – liegt das Original bei uns, bekommst du es zum Rückrüsten angeboten.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></div><b>Support im Programm</b><span>Problem mit einem File? Ticket öffnen, Logs oder Screenshots anhängen – wir antworten im Programm und schicken dir das angepasste File direkt in den Chat.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div><b>Updates mit einem Klick</b><span>Neue Funktionen kommen über den Update-Knopf im Programm – kein neuer Download nötig.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><b>Dein Konto – auf jedem PC</b><span>Einmal mit E-Mail registrieren. Aufträge und Tickets hängen an deinem Konto – auch am Zweit-PC oder Mac. Passwort vergessen? Code per E-Mail.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg></div><b>Support per Ticket</b><span>Problem mit einem File? Ticket öffnen, Logs oder Screenshots anhängen – wir antworten direkt dort und schicken dir das angepasste File in den Chat.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg></div><b>Auch als iPhone-App</b><span>In Safari über „Teilen → Zum Home-Bildschirm“ ablegen – mit eigenem Symbol und Menü unten, wie eine richtige App.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><b>Dein Konto – auf jedem Gerät</b><span>Einmal mit E-Mail registrieren. Aufträge und Tickets hängen an deinem Konto – am PC, Mac und iPhone. Passwort vergessen? Code per E-Mail.</span></div>
   <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div><b>E-Mail, wenn's fertig ist</b><span>Ist dein angefragtes File fertig oder antwortet der Support, bekommst du eine E-Mail – du musst nicht ständig nachschauen.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></div><b>Preise immer aktuell</b><span>Im Reiter „Preise“ siehst du vorher, was jede Lösung kostet – live, ohne Neustart.</span></div>
-  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><b>Deutsch &amp; English</b><span>Das Programm gibt es auf Deutsch und Englisch – oben rechts mit einem Klick umschalten.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></div><b>Preise immer aktuell</b><span>Im Reiter „Preise“ siehst du vorher, was jede Lösung kostet – immer aktuell.</span></div>
+  <div class="f"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><b>Deutsch &amp; English</b><span>OneClick gibt es auf Deutsch und Englisch – oben rechts mit einem Klick umschalten.</span></div>
  </div>
  <div class="sonder"><div><span class="marke">Neu · Auf Anfrage</span><b>VAG Sonderfunktionen</b>
-  <span>2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 – und Mapswitch für VAG. Anfrage einfach per Ticket im Programm: Thema „Sonderfunktion“, Original-File anhängen, fertig.</span></div>
+  <span>2-Step / Launch Control, Antilag und No-Lift-Shift für Bosch ME7 – und Mapswitch für VAG. Anfrage einfach per Ticket unter „Support“: Thema „Sonderfunktion“, Original-File anhängen, fertig.</span></div>
   <ul><li>2-Step / Launch</li><li>Antilag</li><li>No-Lift-Shift</li><li>Mapswitch</li></ul>
   <small>Für den Motorsport – nicht für den öffentlichen Straßenverkehr.</small></div>
 </div></section>
@@ -4942,19 +5075,15 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
   <figure><img src="/bilder/programm-start.webp" width="1440" height="900" loading="lazy" alt="Startbildschirm"><figcaption>Startbildschirm – Verbindung wird geprüft</figcaption></figure>
  </div></div></section>
 <section id="ablauf"><div class="breit">
- <h2>In vier Schritten zum File</h2><p class="unter">Einmal mit E-Mail registrieren, dann bleibst du angemeldet – auf jedem PC.</p>
+ <h2>In vier Schritten zum File</h2><p class="unter">Einmal mit E-Mail registrieren, dann bleibst du angemeldet – auf jedem Gerät.</p>
  <div class="schritte">
-  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Programm laden</b><span>Herunterladen, starten und einmal mit E-Mail registrieren – keine Installation nötig.</span></div>
-  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File ins Programm ziehen.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Seite öffnen</b><span>OneClick im Browser öffnen und einmal mit E-Mail registrieren – nichts zu installieren.</span></div>
+  <div class="schritt"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><b>Original laden</b><span>Dein gelesenes Original-File hineinziehen oder auswählen.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><b>Lösung wählen</b><span>Eine oder mehrere Lösungen anschalten und auf „Jetzt kaufen“ klicken.</span></div>
   <div class="schritt"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><b>Bezahlen &amp; laden</b><span>Sofort bezahlen und das File herunterladen. Anfragen nach unserer Freigabe.</span></div>
  </div>
- <div class="hinweis nur-win"><b>Beim ersten Start</b> zeigt Windows eventuell „Der Computer wurde durch Windows geschützt“.
- Dann auf <b>„Weitere Informationen“</b> und <b>„Trotzdem ausführen“</b> klicken – das passiert nur beim ersten Mal.</div>
- <div class="hinweis nur-mac"><b>Auf dem Mac:</b> ZIP öffnen und <b>„OneClick Solutions“ in den Ordner „Programme“ ziehen</b> (sonst klappen Updates nicht).
- Beim ersten Start meldet macOS, dass das Programm nicht geprüft werden konnte. Dann unter <b>Systemeinstellungen → Datenschutz &amp; Sicherheit</b>
- ganz unten auf <b>„Dennoch öffnen“</b> klicken (ältere macOS-Versionen: Programm mit <b>Rechtsklick → Öffnen</b> starten) –
- das passiert nur beim ersten Mal.</div>
+ <div class="hinweis"><b>Auf dem iPhone:</b> OneClick in Safari öffnen, anmelden und unten auf <b>Teilen → „Zum Home-Bildschirm“</b> tippen –
+ dann hast du OneClick als App mit eigenem Symbol. Fertige Files sicherst du dort über „Teilen“ in „Dateien“ oder schickst sie per AirDrop an deinen Laptop.</div>
 </div></section>
 <section id="faq" class="faq"><div class="breit">
  <h2>Häufige Fragen</h2><p class="unter">Noch etwas offen? Schreib uns einfach.</p>
@@ -4962,9 +5091,8 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
  {% endfor %}
 </div></section>
 <section><div class="breit"><div class="cta">
- <h2>Bereit für dein nächstes File?</h2><p>Programm laden, Original rein, fertig.</p>
- <a class="btn pc" href="{{ download }}" data-dl><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg> <span data-dl-text>Jetzt herunterladen – kostenlos</span></a>
- <div class="handy-hinweis" style="max-width:520px;margin:0 auto">Bitte öffne diese Seite am Windows-PC, Laptop oder Mac.</div>
+ <h2>Bereit für dein nächstes File?</h2><p>Anmelden, Original rein, fertig.</p>
+ <a class="btn" href="/"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg> <span>Jetzt starten – kostenlos</span></a>
  {% if whatsapp %}<p style="margin:18px 0 0"><a class="btn grau" href="https://wa.me/{{ whatsapp }}" target="_blank" rel="noopener">Fragen? Per WhatsApp schreiben</a></p>{% endif %}
 </div></div></section>
 <footer><div class="breit"><span>© {{ jahr }} {{ firma }} · ein Service von <a href="https://gh-mapping.de/">GH-MAPPING</a>, Dierdorf</span>
@@ -4972,12 +5100,6 @@ html.oc-rein body>:not(#oc-intro){animation:o-seite 1.9s .4s cubic-bezier(.2,.6,
 <script>
 if(/iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent)){document.querySelectorAll('.pc').forEach(function(e){e.style.display='none'});
  document.querySelectorAll('.handy-hinweis').forEach(function(e){e.style.display='block'});}
-// Mac oder Windows: passenden Download vorschlagen (der andere bleibt unten als Link erreichbar)
-(function(){var mac=/Macintosh/.test(navigator.userAgent)&&!(navigator.maxTouchPoints>1);
- document.querySelectorAll(mac?'.nur-win':'.nur-mac').forEach(function(e){e.style.display='none'});
- if(!mac) return;
- document.querySelectorAll('[data-dl]').forEach(function(a){a.href='{{ download_mac }}'});
- document.querySelectorAll('[data-dl-text]').forEach(function(t){t.textContent=t.textContent.replace('herunterladen','für Mac herunterladen')});})();
 </script>
 </body></html>""",
 "umsatz.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -5053,7 +5175,7 @@ details.u-tabelle{margin-top:14px}details.u-tabelle summary{cursor:pointer;color
 
 "kunden.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Kunden</h1>
-<p class="leise" style="margin-top:-8px">Konten aus dem Programm. Kunden registrieren sich selbst mit E-Mail-Adresse und Passwort;
+<p class="leise" style="margin-top:-8px">Kundenkonten der Kundenseite. Kunden registrieren sich selbst mit E-Mail-Adresse und Passwort;
 Aufträge, Anfragen und Tickets hängen am Konto. Passwörter siehst du nie – du kannst sie nur neu vergeben.</p>
 {% if neues_passwort %}<div class="hinweis" style="border-color:#2fd35a"><b>Neues Passwort für „{{ neues_passwort.name }}“:</b>
 <code style="font-size:18px;user-select:all;margin-left:6px">{{ neues_passwort.pw }}</code><br>
@@ -5072,13 +5194,13 @@ Gib es dem Kunden (z. B. per WhatsApp). Es wird nur jetzt angezeigt. Er ist auf 
 <button class="btn klein grau" name="aktion" value="loeschen" onclick="return confirm('Konto „{{ k.name }}“ endgültig löschen? Aufträge und Tickets bleiben im Admin erhalten.')">Löschen</button></form></td></tr>{% endfor %}</table></div>
 <script>(function(){var s=document.getElementById('kunden-suche');s.addEventListener('input',function(){var q=s.value.trim().toLowerCase();
 document.querySelectorAll('#kunden-tabelle tr[data-name]').forEach(function(r){r.style.display=!q||r.dataset.name.indexOf(q)>=0?'':'none';});});})();</script>
-{% else %}<p class="leise">Noch keine Kunden registriert. Sobald sich jemand im Programm registriert, erscheint er hier (und du bekommst eine Telegram-Meldung).</p>{% endif %}
+{% else %}<p class="leise">Noch keine Kunden registriert. Sobald sich jemand registriert, erscheint er hier (und du bekommst eine Telegram-Meldung).</p>{% endif %}
 </div>
 {% endblock %}""",
 
 "tickets.html": """{% extends "basis.html" %}{% block inhalt %}
 <div class="karte"><h1>Support-Tickets</h1>
-<p class="leise" style="margin-top:-8px">Kunden schreiben aus dem Programm. Deine Antwort sehen sie dort, das Programm meldet sich bei ihnen.</p>
+<p class="leise" style="margin-top:-8px">Kunden schreiben über ihr Konto auf der Kundenseite. Deine Antwort sehen sie dort, und sie bekommen Bescheid.</p>
 {% if tickets %}<div class="tabelle"><table><tr><th>Nr.</th><th>Kunde</th><th>Thema</th><th>Letzte Nachricht</th><th>Auftrag</th><th>Status</th><th></th></tr>
 {% for t in tickets %}{% set n = t.nachrichten[-1] %}<tr><td><code>#{{ t.kurz }}</code></td><td>{{ konto_name(t.konto) if t.konto else '–' }}</td><td>{{ t.thema_text }}</td>
 <td><span class="leise">{{ 'Kunde' if n.von == 'kunde' else 'Du' }}, {{ n.zeit[8:10] }}.{{ n.zeit[5:7] }}. {{ n.zeit[11:16] }}:</span> {{ n.text[:80] }}{{ '…' if n.text|length > 80 }}</td>
@@ -5281,13 +5403,13 @@ document.querySelectorAll('form[action*="/admin/sortieren/"]').forEach(function(
 <form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="speichern">
 <label class="feld">Firmenname (oben links im Admin-Bereich und im Browser-Tab)</label>
 <input type="text" name="firmenname" value="{{ cfg.firmenname or '' }}" placeholder="OneClick Solutions">
-<label class="feld">Adresse der Seite (hierhin schickt Stripe die Kunden nach dem Bezahlen zurück ins Programm)</label>
+<label class="feld">Adresse der Seite (hierhin schickt Stripe die Kunden nach dem Bezahlen zurück; steht auch in den E-Mails an Kunden)</label>
 <input type="text" name="basis_url" value="{{ cfg.basis_url or '' }}" placeholder="https://files.deine-firma.de">
 <label class="feld">Telegram-Bot-Token (von @BotFather)</label>
 <input type="password" name="telegram_token" value="{{ cfg.telegram_token or '' }}" placeholder="123456789:ABC…" autocomplete="off">
 <label class="feld">Telegram-Chat-ID</label>
 <input type="text" name="telegram_chat_id" value="{{ cfg.telegram_chat_id or '' }}" placeholder="wird unten automatisch gefunden">
-<label class="feld">WhatsApp-Nummer für den Knopf „Fragen? Per WhatsApp schreiben“ auf der Werbeseite (mit Ländervorwahl, z. B. 4915568540674; leer = Knopf aus). Im Programm läuft der Support über Tickets.</label>
+<label class="feld">WhatsApp-Nummer für den Knopf „Fragen? Per WhatsApp schreiben“ auf der Infoseite (mit Ländervorwahl, z. B. 4915568540674; leer = Knopf aus). Auf der Kundenseite läuft der Support über Tickets.</label>
 <input type="text" name="support_whatsapp" inputmode="numeric" value="{{ cfg.get('support_whatsapp', standard_whatsapp) }}" placeholder="4915568540674">
 <label class="feld">Erledigte Kundenaufträge automatisch löschen nach … Tagen (0 = nie). Das Archiv bleibt immer erhalten.</label>
 <input type="number" name="aufbewahrung_tage" min="0" value="{{ cfg.get('aufbewahrung_tage', 90) }}">
@@ -5390,9 +5512,10 @@ das steht dann automatisch so in der Datenschutzerklärung.<br>Das Passwort wird
 {% else %}<p class="leise">Updates per Knopf gibt es nur auf dem Server (Installation über das Installations-Skript).</p>{% endif %}
 </div>
 
-<div class="karte" id="geraete"><h2>Mac-App: angemeldet bleiben</h2>
+<div class="karte" id="geraete"><h2>Angemeldet bleiben (Mac-App und iPhone)</h2>
 <p>Die Mac-App „OneClick Admin“ bleibt nach dem Anmelden <b>30 Tage</b> angemeldet – kein Passwort und Code bei jedem Start.
-„Abmelden“ in der App beendet das sofort für diesen Mac.</p>
+Auf dem iPhone geht das auch: beim Anmelden „Auf diesem Gerät angemeldet bleiben“ anhaken.
+„Abmelden“ beendet das sofort für dieses Gerät.</p>
 <p class="leise">Gemerkte Geräte: <b>{{ geraete }}</b>. Passwort ändern oder Zwei-Faktor ausschalten meldet ebenfalls alle ab.</p>
 <form method="post" class="inline"><input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="aktion" value="geraete_aus">
 <button class="btn grau" onclick="return confirm('Alle gemerkten Geräte abmelden?')"{% if not geraete %} disabled{% endif %}>Alle Geräte abmelden</button></form></div>
