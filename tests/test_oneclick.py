@@ -50,6 +50,13 @@ def zufall(n: int, seed: int) -> bytearray:
     return bytearray(random.Random(seed).randbytes(n))
 
 
+def neubau_abwarten(sekunden: float = 20):
+    """Bis ein Index-Neubau im Hintergrund fertig ist (der schreibt sonst in den naechsten Testordner)."""
+    ende = time.time() + sekunden
+    while oneclick.index_neubau_laeuft() and time.time() < ende:
+        time.sleep(0.02)
+
+
 class Basis(unittest.TestCase):
     """Legt fuer jeden Test ein frisches Archiv in einem temporaeren Ordner an."""
 
@@ -103,6 +110,7 @@ class Basis(unittest.TestCase):
         oneclick.baue_index()
 
     def tearDown(self):
+        neubau_abwarten()   # sonst schreibt ein Hintergrund-Neubau noch in den Testordner, waehrend er geloescht wird
         self.tmp.cleanup()
 
     def ablegen(self, name, dateien):
@@ -1306,6 +1314,8 @@ class WebTests(Basis):
         del alt["version"]
         oneclick.INDEX_DATEI.write_text(json.dumps(alt))
         self.assertIn("original", oneclick.finde_loesungen(bytes(self.stage1))[1])
+        neubau_abwarten()
+        self.assertEqual(json.loads(oneclick.INDEX_DATEI.read_text())["version"], oneclick.INDEX_VERSION)   # im Hintergrund neu eingelesen
 
     def bestellen(self, aid, *optionen, kontakt=""):
         """Gibt die Antwort als Text zurueck (Fehlermeldung oder Auftrag)."""

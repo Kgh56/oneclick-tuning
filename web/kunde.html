@@ -1606,6 +1606,23 @@ html.web button,html.web a,html.web .zone{-webkit-tap-highlight-color:transparen
 .tb-haken svg{width:24px;height:24px;fill:none;stroke:#2fe28a;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
 #teilen-blatt p{font-size:13.5px;line-height:1.5;margin:0 0 6px}
 #teilen-blatt .btn{width:100%;margin-top:10px}
+#programm-ende{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s;
+  background:radial-gradient(60% 55% at 50% 40%,rgba(61,123,255,.22),transparent 70%),rgba(2,5,12,.84);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+#programm-ende.offen{opacity:1;visibility:visible}
+#programm-ende .karte{box-sizing:border-box;width:min(540px,100%);max-height:calc(100vh - 32px);overflow-y:auto;padding:28px 30px;animation:none;text-align:left;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 40px 90px -30px rgba(0,0,0,.95),0 0 90px -30px rgba(61,123,255,.7)}
+#programm-ende h2{font-size:21px;margin:14px 0 10px;text-transform:none;letter-spacing:0;color:#fff}
+#programm-ende p{margin:0 0 12px;line-height:1.55;font-size:14.5px;color:#c9d6f5}
+.pe-symbol{display:grid;place-items:center;width:52px;height:52px;border-radius:15px;background:var(--p-verlauf);box-shadow:0 12px 30px -10px rgba(61,123,255,.95)}
+.pe-symbol svg{width:28px;height:28px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.pe-adresse{display:block;margin:4px 0 14px;padding:12px 14px;border-radius:12px;background:rgba(61,123,255,.14);border:1px solid rgba(122,166,255,.45);
+  color:#fff;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:15px;font-weight:600;text-decoration:none;text-align:center;overflow-wrap:anywhere}
+.pe-adresse:hover{background:rgba(61,123,255,.24)}
+.pe-loeschen{margin:4px 0 16px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid var(--p-linie)}
+.pe-loeschen b{display:block;margin-bottom:6px;color:#fff;font-size:14px}
+.pe-loeschen p{margin:0!important;font-size:13.5px!important}
+#programm-ende .pe-mac,#programm-ende.mac .pe-win{display:none}#programm-ende.mac .pe-mac{display:block}
+#programm-ende .knoepfe{display:flex;gap:10px;flex-wrap:wrap}#programm-ende .knoepfe .btn{flex:1 1 180px;justify-content:center;text-align:center}
 .kd-recht{margin:14px 0 0;text-align:center;font-size:12px;line-height:1.8;color:var(--p-leise)}
 .kd-recht a{color:#a9c0f5;text-decoration:none}.kd-recht a:hover{text-decoration:underline}
 .tk-zurueck{align-items:center;gap:6px;margin:0 0 12px;padding:8px 14px 8px 9px;border-radius:11px;border:1px solid rgba(140,175,255,.25);
@@ -1746,6 +1763,20 @@ html.web button,html.web a,html.web .zone{-webkit-tap-highlight-color:transparen
   <p>Stelle in diesem Fall einfach direkt hier eine Anfrage. Wir ergänzen den passenden Datenstand und benachrichtigen dich hier und per E-Mail, sobald er bereitsteht.</p>
   <p class="leise">Feedback und Verbesserungsvorschläge nehmen wir jederzeit gern über den Support entgegen.</p>
   <button class="btn" type="button" id="beta-ok">Verstanden</button>
+</div></div>
+<div id="programm-ende" role="dialog" aria-modal="true" aria-labelledby="pe-titel"><div class="karte">
+  <span class="pe-symbol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+  <h2 id="pe-titel">OneClick Solutions gibt es jetzt im Browser</h2>
+  <p>Dieses Programm brauchst du nicht mehr. Alles – Anmeldung, Aufträge, Bezahlen, Downloads und Support – findest du jetzt direkt im Browser, am PC, Mac und iPhone:</p>
+  <a class="pe-adresse" id="pe-adresse" href="/" target="_blank" rel="noopener" data-kein-ueb>oneclicksoulution.gh-mapping.de</a>
+  <p>Melde dich dort mit deiner E-Mail-Adresse und deinem Passwort an – alle Aufträge und Tickets sind schon da. Danach kannst du dieses Programm löschen.</p>
+  <div class="pe-loeschen">
+    <b>So löschst du das Programm</b>
+    <p class="pe-win">Programm schließen und die Datei „OneClick-Solutions.exe“ löschen – sie liegt meist im Ordner „Downloads“ oder auf dem Desktop. Eine Verknüpfung auf dem Desktop kannst du gleich mit löschen.</p>
+    <p class="pe-mac">Programm beenden und „OneClick Solutions“ aus dem Ordner „Programme“ in den Papierkorb ziehen.</p>
+  </div>
+  <div class="knoepfe"><a class="btn" id="pe-oeffnen" href="/" target="_blank" rel="noopener">Im Browser öffnen</a>
+    <button class="btn grau" type="button" id="pe-weiter">Hier weitermachen</button></div>
 </div></div>
 <div id="zahl-dialog"><div class="karte">
   <h2>Jetzt bezahlen</h2>
@@ -2223,7 +2254,16 @@ const EN = {
     "Tap “Save / Share” and choose “Save to Files” – or send it to your laptop via AirDrop or email.",
   "Alle Tickets": "All tickets", "Was ist OneClick Solutions?": "What is OneClick Solutions?", "Als App installieren": "Install as app",
   "Im Menü des Browsers „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.": "In the browser menu, choose “Install app” or “Add to Home screen”.",
-  "Neu: OneClick Solutions im Browser": "New: OneClick Solutions in your browser",
+  "OneClick Solutions gibt es jetzt im Browser": "OneClick Solutions now runs in your browser",
+  "Dieses Programm brauchst du nicht mehr. Alles – Anmeldung, Aufträge, Bezahlen, Downloads und Support – findest du jetzt direkt im Browser, am PC, Mac und iPhone:":
+    "You no longer need this program. Everything – sign-in, orders, payment, downloads and support – is now right in your browser, on PC, Mac and iPhone:",
+  "Melde dich dort mit deiner E-Mail-Adresse und deinem Passwort an – alle Aufträge und Tickets sind schon da. Danach kannst du dieses Programm löschen.":
+    "Sign in there with your email address and password – all your orders and tickets are already there. After that you can delete this program.",
+  "So löschst du das Programm": "How to delete the program",
+  "Programm schließen und die Datei „OneClick-Solutions.exe“ löschen – sie liegt meist im Ordner „Downloads“ oder auf dem Desktop. Eine Verknüpfung auf dem Desktop kannst du gleich mit löschen.":
+    "Close the program and delete the file “OneClick-Solutions.exe” – it is usually in your Downloads folder or on the desktop. You can delete a desktop shortcut as well.",
+  "Programm beenden und „OneClick Solutions“ aus dem Ordner „Programme“ in den Papierkorb ziehen.": "Quit the program and drag “OneClick Solutions” from the Applications folder to the Trash.",
+  "Im Browser öffnen": "Open in browser", "Hier weitermachen": "Continue here",
   "Lese Datei …": "Reading file …", "Suche Kennfelder …": "Searching maps …", "Hex-Dump": "Hex dump", "Kennfeld-Suche": "Map search",
   "Datei lesen": "Read file", "Kennfelder": "Maps", "Kennfeld": "Map", "Archiv": "Archive", "Jetzt loslassen": "Drop it now",
   "Gesendet": "Sent", "Bereit": "Ready", "Sofort-Check": "Instant check", "Steuergerät und Software in Sekunden": "ECU and software in seconds",
@@ -2329,8 +2369,6 @@ const EN_MUSTER = [
   [/^„(.+)“ wartet jetzt auf unsere Freigabe\. Du bekommst hier Bescheid\.$/, m => "“" + T(m[1]) + "” is now waiting for our approval. You’ll be notified here."],
   [/^Grund: ([\s\S]+)$/, "Reason: $1"],
   [/^Jetzt bezahlen · (.+)$/, "Pay now · $1"],
-  [/^Alles läuft jetzt direkt im Browser unter (\S+) – auf dem PC, Mac und iPhone\. Mit deinem Konto findest du dort alle Aufträge\. Das Programm kannst du weiter nutzen oder deinstallieren\.$/,
-    "Everything now runs right in your browser at $1 – on PC, Mac and iPhone. Sign in with your account to find all your orders. You can keep using the program or uninstall it."],
   [/^Teilen nicht möglich: ([\s\S]+)$/, "Sharing not possible: $1"],
   [/^Weitergegeben: (.+?)\.( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => "Shared: " + m[1] + "." + (m[2] ? " Have the checksum corrected when writing." : "")],
   [/^Gespeichert: (.+?)( Checksumme beim Schreiben korrigieren lassen\.)?$/, m => "Saved: " + m[1] + (m[2] ? " Have the checksum corrected when writing." : "")],
@@ -4217,12 +4255,15 @@ function teilenBlatt(datei) {
 }
 (function imBrowser() {
   const h = document.documentElement;
-  if (!WEBAPP) {   // altes Windows/Mac-Programm: einmal sagen, dass es jetzt im Browser laeuft
-    setTimeout(() => {
-      try { if (localStorage.getItem("oneclick-browser-hinweis") || !konto.lesen()) return; localStorage.setItem("oneclick-browser-hinweis", "1"); } catch (e) { return; }
-      toast("ok", "Neu: OneClick Solutions im Browser", "Alles läuft jetzt direkt im Browser unter " + location.host +
-        " – auf dem PC, Mac und iPhone. Mit deinem Konto findest du dort alle Aufträge. Das Programm kannst du weiter nutzen oder deinstallieren.", 20000);
-    }, 6000);
+  if (!WEBAPP) {   // altes Windows/Mac-Programm: bei jedem Start sagen, dass alles im Browser laeuft und es geloescht werden kann
+    const d = $("#programm-ende"), adresse = location.origin + "/";
+    $("#pe-adresse").href = $("#pe-oeffnen").href = adresse; $("#pe-adresse").textContent = location.host;
+    d.classList.toggle("mac", /Macintosh/.test(navigator.userAgent));
+    const zeigen = () => { d.classList.add("offen"); setTimeout(() => $("#pe-oeffnen").focus(), 60); };
+    if ($("#intro").classList.contains("weg")) zeigen();
+    else new MutationObserver((m, o) => { if ($("#intro").classList.contains("weg")) { o.disconnect(); zeigen(); } })
+      .observe($("#intro"), {attributes: true, attributeFilter: ["class"]});
+    $("#pe-weiter").addEventListener("click", () => d.classList.remove("offen"));
     return;
   }
   if (h.classList.contains("ios")) $("#datei").removeAttribute("accept");   // iPhone: sonst sind .bin/.ori-Files in "Dateien" ausgegraut
@@ -4286,7 +4327,10 @@ function teilenBlatt(datei) {
     installieren = null; $("#handy-hinweis").hidden = true;
   });
   $("#hb-app").addEventListener("click", () => { zu(); gehe("sn-neu"); hinweis(true); });
-  setTimeout(() => { if (konto.lesen()) hinweis(false); }, 3500);   // nach dem Startbildschirm und der Anmeldung
+  setTimeout(() => { if (konto.lesen()) hinweis(false); }, 3500);   // schon angemeldet: nach dem Startbildschirm
+  new MutationObserver(() => {   // gerade registriert oder angemeldet: kurz danach
+    if (!$("#konto-dialog").classList.contains("offen") && konto.lesen()) setTimeout(() => hinweis(false), 1500);
+  }).observe($("#konto-dialog"), {attributes: true, attributeFilter: ["class"]});
   // Neue Version der Seite: beim Zurueckkommen in die App neu laden (nur auf der Startansicht, nie mitten im Ablauf)
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden || aktuelle !== "v-upload" || !zustand.ui) return;
