@@ -484,6 +484,16 @@ class WebTests(Basis):
         self.assertEqual(eintrag()["ecu"], ["Ford SID208"])
         aid = self.hochladen(ford, "kunde_ford.bin")                     # Kunde mit genau diesem Original
         self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["ecu"], "Ford SID208")
+        aehnlich = bytearray(ford)                                        # anderes File, aber an allen Tuning-Stellen gleich
+        aehnlich[0x100] ^= 0xFF
+        aid2 = self.hochladen(aehnlich, "kunde_ford2.bin")
+        self.assertEqual(list(self.angebot(aid2)), ["stage1"])
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid2}").json["ecu"], "Ford SID208")   # Name vom Archiv-Fahrzeug
+        self.assertTrue(self.auftrag(aid2)["ecu_gemerkt"])                 # im Admin aenderbar
+        fremd = zufall(GROESSE, 78)                                       # passt zu nichts -> bleibt unbekannt
+        aid3 = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(fremd)), "fremd.bin")},
+                               content_type="multipart/form-data").json["id"]
+        self.assertEqual(self.auftrag(aid3)["ecu"], "?")
         self.assertEqual({p.name: p.read_bytes() for p in (oneclick.ARCHIV / "winols-ford").iterdir()}, vorher)   # Archiv unveraendert
 
     def test_archiv_original_pruefen(self):

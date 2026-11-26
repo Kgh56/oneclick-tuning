@@ -1137,7 +1137,14 @@ def entwurf_anlegen(daten: bytes, dateiname: str, konto: str = "") -> dict:
                         "Solche Files bearbeiten wir nicht. Bitte das unveränderte Original laden.")
 
     info, loesungen = oneclick.finde_loesungen(daten, bool(lade_config().get("nur_identisch")))
-    ecu = ", ".join(info["ecu"]) or "?"
+    ecu_liste, vom_archiv = info["ecu"], False
+    if not ecu_liste and loesungen:
+        # Selbst nicht erkannt, aber ein Archiv-Fahrzeug passt (identisch oder an allen Tuning-Stellen Byte fuer Byte):
+        # dann ist es dasselbe Steuergeraet -> den Namen aus dem Archiv uebernehmen (auch von Hand eingetragene)
+        index = {e["name"]: e for e in oneclick.lade_index()["eintraege"]}
+        ecu_liste = next((index[l["quelle"]]["ecu"] for l in loesungen.values() if (index.get(l["quelle"]) or {}).get("ecu")), [])
+        vom_archiv = bool(ecu_liste)
+    ecu = ", ".join(ecu_liste) or "?"
     software = ", ".join(oneclick.software_nummern(info)) or "?"
     aid = uuid.uuid4().hex
     ordner = AUFTRAEGE / aid
@@ -1158,8 +1165,8 @@ def entwurf_anlegen(daten: bytes, dateiname: str, konto: str = "") -> dict:
         "software": software,
         "zeit": datetime.now().isoformat(timespec="seconds"),
     }
-    if info.get("ecu_gemerkt"):
-        auftrag["ecu_gemerkt"] = True   # von Hand zugeordnet (kann im Admin geaendert werden)
+    if info.get("ecu_gemerkt") or vom_archiv:
+        auftrag["ecu_gemerkt"] = True   # von Hand zugeordnet bzw. vom Archiv uebernommen (kann im Admin geaendert werden)
     speichere_auftrag(auftrag)
     if not loesungen:
         raise KeineLoesung(f"Für dieses File haben wir leider noch keine Lösung (ECU: {ecu}, Software: {software}). "
