@@ -66,7 +66,9 @@ ld={"@context":"https://schema.org","@graph":[
  {"@type":"WebApplication","@id":"https://gh-mapping.de/#oneclick","name":"OneClick Solutions","applicationCategory":"BusinessApplication",
   "operatingSystem":"Webbrowser (Windows, macOS, iOS, Android)","url":"https://oneclicksoulution.gh-mapping.de/",
   "description":"Online-Portal von GH-MAPPING zum Bestellen von Chiptuning-Files im Browser: Original laden, Steuergerät wird erkannt, Lösung wählen, bezahlen und herunterladen.",
-  "featureList":["Automatische Erkennung von Steuergerät und Software","Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem Gerät","Als App auf dem iPhone-Home-Bildschirm","E-Mail-Benachrichtigung, wenn das File fertig ist","Live-Preisliste","Support-Tickets mit Datei-Anhängen","Deutsch und Englisch"],
+  "image":"https://gh-mapping.de/oneclick-symbol.png",
+  "screenshot":["https://gh-mapping.de/oneclick-auswahl.webp","https://gh-mapping.de/oneclick-pruefung.webp","https://gh-mapping.de/oneclick-iphone.webp"],
+  "featureList":["Automatische Erkennung von Steuergerät und Software","Sofort-Prüfung mit Hexdump und Kennfeld-Suche","Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem Gerät","Als App auf dem iPhone-Home-Bildschirm","E-Mail-Benachrichtigung, wenn das File fertig ist","Live-Preisliste","Support-Tickets mit Datei-Anhängen","Deutsch und Englisch"],
   "inLanguage":["de","en"],
   "offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://gh-mapping.de/#business"}},
  {"@type":"HowTo","@id":"https://gh-mapping.de/#ablauf","name":"So bestellen Sie ein Chiptuning-File bei GH-MAPPING","step":[

@@ -164,6 +164,11 @@ p{max-width:62ch}
 .geraet img{border-radius:3px 3px 0 0}
 #oneclick{overflow:hidden}
 .geraet-fuss{height:14px;background:#1d1d21;border:1px solid var(--linie);border-top:0;border-radius:0 0 10px 10px;margin:0 -24px}
+.oc-symbol{display:block;width:60px;height:60px;border-radius:14px;margin-bottom:24px}
+.oc-geraete{position:relative}
+.oc-handy{position:absolute;right:-22px;bottom:-34px;width:24%;min-width:112px;padding:5px;background:#000;border:1px solid #3a3a40;border-radius:24px;box-shadow:0 30px 60px rgba(0,0,0,.6);z-index:2}
+.oc-handy img{display:block;width:100%;height:auto;border-radius:18px}
+@media (max-width:700px){.oc-handy{right:-2px;bottom:-24px;width:31%;padding:4px;border-radius:16px}.oc-handy img{border-radius:12px}}
 .galerie{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:clamp(48px,6vw,80px)}
 .galerie figure{margin:0}
 .galerie img{border:1px solid var(--linie);aspect-ratio:16/10;object-fit:cover;object-position:top left;transition:border-color .15s}
@@ -480,6 +485,7 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
     <div class="oc-raster">
       <div class="rein">
         <p class="kapitel mono"><b>04</b><span data-en="Ordering">Bestellen</span></p>
+        <img class="oc-symbol" src="/oneclick-symbol.png" width="180" height="180" alt="App-Symbol von OneClick Solutions" loading="lazy">
         <h2>OneClick<br>Solutions.</h2>
         <p style="margin-top:26px;color:var(--grau);font-size:18px" data-en="Right in your browser – on PC, Mac and iPhone, nothing to install. Load the original, see immediately which solutions exist for exactly your file – and download it right away.">Direkt im Browser – auf PC, Mac und iPhone, nichts zu installieren. Original laden, sofort sehen, welche Lösungen es für genau Ihr File gibt – und direkt herunterladen.</p>
         <ul class="merkmale">
@@ -497,9 +503,10 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
           <span class="mono" data-en="Browser · iPhone · Android">Browser · iPhone · Android</span>
         </div>
       </div>
-      <div class="rein">
+      <div class="rein oc-geraete">
         <div class="geraet"><img src="/oneclick-auswahl.webp" width="1440" height="900" loading="lazy" alt="OneClick Solutions: verfügbare Lösungen wählen und sofort kaufen"></div>
         <div class="geraet-fuss"></div>
+        <div class="oc-handy"><img src="/oneclick-iphone.webp" width="590" height="991" loading="lazy" alt="OneClick Solutions als App auf dem iPhone"></div>
       </div>
     </div>
     <div class="galerie rein">
@@ -532,7 +539,7 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
     <div class="kontakt-wege rein">
       <a href="https://wa.me/4915568540674" target="_blank" rel="noopener"><span>WhatsApp</span><span class="mono">+49 155 68540674</span></a>
       <a href="mailto:chiptuning2002@gmail.com"><span data-en="E-mail">E-Mail</span><span class="mono">chiptuning2002@gmail.com</span></a>
-      <a href="https://oneclicksoulution.gh-mapping.de/"><span data-en="Support ticket in the program">Support-Ticket im Programm</span><span class="mono">OneClick</span></a>
+      <a href="https://oneclicksoulution.gh-mapping.de/"><span data-en="Support ticket in OneClick">Support-Ticket in OneClick</span><span class="mono">OneClick</span></a>
     </div>
   </div>
 </section>
@@ -559,7 +566,7 @@ html.intro-rein main{animation:i-seite 1.9s .4s cubic-bezier(.2,.6,.2,1) both}
       <div>
         <h4 data-en="Links">Links</h4>
         <ul>
-          <li><a href="https://oneclicksoulution.gh-mapping.de/" data-en="OneClick program">OneClick-Programm</a></li>
+          <li><a href="https://oneclicksoulution.gh-mapping.de/" data-en="Open OneClick">OneClick öffnen</a></li>
           <li><a href="https://www.evc.de/de/check_evc_license.asp?k=oPfQHArwj4zH5UjuwnBw0Q%3d%3d" target="_blank" rel="noopener" data-en="WinOLS license check">WinOLS-Lizenzcheck</a></li>
           <li><a href="https://wa.me/4915568540674" target="_blank" rel="noopener">WhatsApp</a></li>
         </ul>
