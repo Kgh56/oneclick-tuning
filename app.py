@@ -540,7 +540,8 @@ def benachrichtigen(auftrag: dict):
 # Download-Links im Admin tragen ein signiertes, zeitlich begrenztes Zeichen (?dl=...). Grund: Die Mac-Admin-App
 # (pywebview/WebKit) laedt Downloads ein zweites Mal ueber macOS herunter - OHNE das Anmelde-Cookie. Ohne Zeichen
 # landete dann die Anmeldeseite statt des Files auf dem Mac. Das Zeichen gilt nur fuer genau diesen Pfad und nur GET.
-DOWNLOAD_ENDPUNKTE = {"original", "download", "admin_ticket_datei", "sortieren_datei", "archiv_backup", "eigenes_file_ergebnis"}
+DOWNLOAD_ENDPUNKTE = {"original", "download", "admin_ticket_datei", "sortieren_datei", "archiv_backup", "eigenes_file_ergebnis",
+                      "archiv_original"}
 DOWNLOAD_GUELTIG = 6 * 3600
 
 
@@ -3556,6 +3557,64 @@ def stapel_verwerfen(sid):
     return redirect(url_for("sortieren"))
 
 
+def archiv_eintrag(name: str) -> dict:
+    """Index-Eintrag eines Archiv-Fahrzeugs (404, wenn es ihn nicht gibt)."""
+    e = next((x for x in oneclick.lade_index()["eintraege"] if x["name"] == name), None)
+    if e is None or name != sicherer_name(name):
+        abort(404)
+    pfad = oneclick.archiv_datei(e)
+    if pfad.parent.resolve() != (oneclick.ARCHIV / name).resolve() or not pfad.is_file():
+        abort(404)
+    return e
+
+
+@app.route("/admin/archiv/<name>/original")
+@admin_noetig
+def archiv_original(name):
+    """Original zum Pruefen herunterladen (z. B. in WinOLS oeffnen). Die Datei im Archiv bleibt unveraendert."""
+    pfad = oneclick.archiv_datei(archiv_eintrag(name))
+    return send_file(pfad, as_attachment=True, download_name=f"{name}_ORI{pfad.suffix or '.bin'}", max_age=0)
+
+
+KENNUNG_TEXT = re.compile(rb"[\x20-\x7e]{6,80}")
+KENNUNG_WICHTIG = re.compile(r"EDC|MED|MEV|ME7|ME9|MG1|MD1|SIMOS|SID\d|PCR|DCM|DCU|EMS\d|IAW|MJD|DELCO|E98|E8[0-9]|BOSCH|SIEMENS|CONTI|"
+                             r"DELPHI|DENSO|MARELLI|VDO|\b0261\d|\b0281\d|\b1037\d|10SW\d|\b0[0-9][A-Z]9[0-9]{2}", re.I)
+
+
+@app.route("/admin/archiv/<name>/kennungen")
+@admin_noetig
+def archiv_kennungen(name):
+    """Lesbare Kennungen aus dem Original (Steuergeraet, Hardware-, Softwarenummer) - zum Pruefen ohne WinOLS."""
+    e = archiv_eintrag(name)
+    daten = oneclick.archiv_datei(e).read_bytes()
+    gesehen, wichtig, weitere = set(), [], []
+    for m in KENNUNG_TEXT.finditer(daten):
+        t = m.group().decode("ascii").strip()
+        if t in gesehen or not kennung_lesbar(t):
+            continue
+        gesehen.add(t)
+        (wichtig if KENNUNG_WICHTIG.search(t) else weitere).append((m.start(), t))
+        if len(wichtig) + len(weitere) >= 500:
+            break
+    return render_template("kennungen.html", titel=f"Kennungen: {name}", e=e, wichtig=wichtig, weitere=weitere, groesse=len(daten))
+
+
+def kennung_lesbar(t: str) -> bool:
+    """Sieht der Text wie eine Kennung aus (Steuergeraet, Teile-/Softwarenummer, Datum ...) und nicht wie Zeichensalat
+    aus Programmcode? Mindestens 7 Zeichen, mindestens 2 Ziffern, fast nur Buchstaben/Ziffern/Trennzeichen,
+    und nicht wild gemischt gross/klein ohne Leerzeichen (typisch fuer zufaellige Bytes)."""
+    if len(t) < 7 or len(set(t)) < 4 or sum(c.isdigit() for c in t) < 2:
+        return False
+    gut = sum(c.isalnum() or c in " ._-/+:" for c in t)
+    if gut < len(t) - (len(t) // 12):
+        return False
+    if re.search(r"[a-z]", t) and re.search(r"[A-Z]", t) and not re.search(r"[A-Za-z]{4}", t):
+        return False   # gross/klein wild gemischt ohne ein echtes Wort
+    if " " not in t and re.search(r"[a-z]", t) and re.search(r"[A-Z]", t):
+        return False
+    return True
+
+
 @app.route("/admin/archiv/<name>/loeschen", methods=["POST"])
 @admin_noetig
 def archiv_loeschen(name):
@@ -3975,9 +4034,11 @@ TEMPLATES = {
 --ok:#30d158;--warn:#ffd60a;--blau:#0a84ff;--verlauf:linear-gradient(135deg,var(--akzent),var(--akzent2));--breite:1100px}
 @media (min-width:1500px){:root{--breite:1280px}}
 @media (min-width:1900px){:root{--breite:1480px}}
-@media (min-width:2200px){html{zoom:1.3}}
-@media (min-width:2500px){html{zoom:1.45}}
-@media (min-width:3000px){html{zoom:1.6}}
+/* Groesse passt sich dem Monitor an: bis 2900 Bildpunkte Breite (z. B. 27"/2560) normale Groesse und mehr Platz,
+   erst bei sehr hoher Aufloesung ohne Skalierung (4K auf 100 %) leicht vergroessern */
+@media (min-width:2900px){html{zoom:1.12}}
+@media (min-width:3400px){html{zoom:1.25}}
+@media (min-width:3800px){html{zoom:1.35}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark;overflow-x:hidden;overscroll-behavior-x:none}
 body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100vw}
 input[type=file]{font-family:inherit;font-size:12.5px;color:var(--leise)}
@@ -4019,6 +4080,8 @@ input[type=text],input[type=password],input[type=number],input[type=email],input
 border:1px solid var(--rand);background:rgba(255,255,255,.06);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .2s,box-shadow .2s}
 input:focus,textarea:focus{outline:none;border-color:var(--blau);box-shadow:0 0 0 4px rgba(10,132,255,.25)}
 input::placeholder,textarea::placeholder{color:#6e6e73}
+.ecu-pruefen{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ecu-pruefen .btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;font-size:12.5px}
+.ecu-pruefen svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ecu-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.ecu-form input[type=text]{width:auto;flex:1;min-width:150px;max-width:260px;margin:0;padding:8px 12px;font-size:14px}
 input[type=checkbox]{accent-color:var(--akzent);width:18px;height:18px}
 .drop{position:relative;display:block;border-radius:20px;padding:48px 24px;text-align:center;color:var(--leise);cursor:pointer;margin-bottom:20px;
@@ -4311,6 +4374,9 @@ body.aa footer,body.aa footer a{color:var(--m-grau2)}body.aa footer a:hover{colo
 @media (max-width:999px){body.aa.aa-browser{display:block}body.aa.aa-browser .aa-leiste{display:none}body.aa.aa-browser>header{display:flex}
   body.aa.aa-browser main{padding:22px 14px}}
 @media (max-width:720px){body.aa .liste-tab tr{border-color:var(--m-linie);background:var(--m-f1);border-radius:4px}}
+/* grosse Monitore: mehr Platz fuer Tabellen statt alles groesser */
+@media (min-width:1900px){body.aa main,body.aa footer{max-width:1560px}}
+@media (min-width:2400px){body.aa main,body.aa footer{max-width:1840px}}
 @media (prefers-reduced-motion:reduce){body.aa main>*{animation:none}}
 /* Handy (auch als App auf dem iPhone): Menue unten wie bei einer App, oben Platz fuer die Statusleiste */
 .aa-tabs,.aa-blatt{display:none}
@@ -4461,6 +4527,36 @@ setTimeout(function warte(){fetch('{{ url_for('login') }}',{cache:'no-store'})
   .then(r=>{if(r.ok)location.href='{{ url_for('einstellungen') }}';else setTimeout(warte,1500)})
   .catch(()=>setTimeout(warte,1500))},4000);
 </script>
+{% endblock %}""",
+
+"kennungen.html": """{% extends "basis.html" %}{% block inhalt %}
+<div class="karte"><h1 style="overflow-wrap:anywhere">{{ e.name }}</h1>
+<p class="leise" style="margin-top:-6px">Original im Archiv · {{ (groesse / 1024)|round|int }} KB · erkannt: Steuergerät <b>{{ e.ecu|join(', ') or '?' }}</b>
+· Software <b>{{ (e.bosch_sw + e.vag_teilenr + (e.conti_nr or []))|join(', ') or '?' }}</b></p>
+<div class="ecu-pruefen" style="margin:14px 0 18px"><a class="btn klein" href="{{ download_url('archiv_original', name=e.name) }}"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Original herunterladen</a>
+<a class="btn grau klein" href="{{ url_for('admin_archiv') }}">← Zurück zum Archiv</a></div>
+<h2>Steuergerät zuordnen</h2>
+<form method="post" action="{{ url_for('ecu_zuordnen') }}" class="ecu-form" style="margin-bottom:22px">
+<input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="archiv" value="{{ e.name }}">
+<input type="text" name="ecu" value="{{ e.ecu|join(', ') if e.ecu_gemerkt else '' }}" placeholder="z. B. Delco E98" maxlength="40" list="ecu-namen" aria-label="Steuergerät zuordnen">
+<button class="btn grau klein">Speichern</button></form>
+<datalist id="ecu-namen">{% for n in ecu_namen() %}<option value="{{ n }}">{% endfor %}</datalist>
+<h2>Kennungen im File</h2>
+<p class="leise" style="margin-top:-6px;font-size:13.5px">Lesbare Texte aus dem Original, in denen Buchstaben und Ziffern vorkommen – hier stehen meist Steuergerät,
+Hardware- und Softwarenummer. Oben stehen typische Steuergeräte-Kennungen. Die Datei im Archiv wird dabei nicht verändert.</p>
+<input type="search" id="k-suche" placeholder="Suchen, z. B. EDC, MED, E98, 0281 …" style="max-width:380px">
+<h3 style="margin:18px 0 8px">Typische Steuergeräte-Kennungen</h3>
+{% if wichtig %}<div class="tabelle"><table class="kennungen"><tr><th>Adresse</th><th>Text</th></tr>
+{% for o, t in wichtig %}<tr class=wichtig><td><code>0x{{ '%06X'|format(o) }}</code></td><td>{{ t }}</td></tr>{% endfor %}</table></div>
+{% else %}<p class="leise">Keine typische Kennung gefunden (z. B. EDC, MED, SIMOS, 0281…, 1037…) – schau in die weiteren Texte unten oder öffne das Original in WinOLS.</p>{% endif %}
+<h3 style="margin:22px 0 8px">Weitere Texte mit Ziffern <span class="leise" style="font-weight:400;font-size:13px">({{ weitere|length }})</span></h3>
+{% if weitere %}<div class="tabelle"><table class="kennungen"><tr><th>Adresse</th><th>Text</th></tr>
+{% for o, t in weitere %}<tr><td><code>0x{{ '%06X'|format(o) }}</code></td><td>{{ t }}</td></tr>{% endfor %}</table></div>
+{% else %}<p class="leise">Keine weiteren lesbaren Texte.</p>{% endif %}</div>
+<style>.kennungen td{white-space:normal;overflow-wrap:anywhere;font-family:var(--m-mono,monospace);font-size:12.5px;color:var(--m-grau,#9a9893)}
+.kennungen td:first-child{width:110px;white-space:nowrap}.kennungen tr.wichtig td{color:#fff}.kennungen tr.wichtig td:last-child{box-shadow:inset 2px 0 0 var(--m-rot,#e3231b)}</style>
+<script>(function(){var s=document.getElementById('k-suche');if(!s)return;s.addEventListener('input',function(){var q=s.value.trim().toLowerCase();
+document.querySelectorAll('.kennungen tr').forEach(function(r,i){if(i)r.hidden=q&&r.textContent.toLowerCase().indexOf(q)<0;});});})();</script>
 {% endblock %}""",
 
 "text.html": """{% extends "basis.html" %}{% block inhalt %}
@@ -4755,7 +4851,9 @@ Abschaltungen der Abgasreinigung (DPF, AGR, AdBlue/SCR, Kat, Lambda) werden nich
 {% if not e.ecu or e.ecu_gemerkt %}<form method="post" action="{{ url_for('ecu_zuordnen') }}" class="ecu-form">
 <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="archiv" value="{{ e.name }}">
 <input type="text" name="ecu" value="{{ e.ecu|join(', ') if e.ecu_gemerkt else '' }}" placeholder="z. B. Delco E98" maxlength="40" list="ecu-namen" aria-label="Steuergerät zuordnen" style="min-width:110px">
-<button class="btn grau klein" title="Steuergerät zuordnen und für Files mit dieser Software merken">✓</button></form>{% endif %}</td>
+<button class="btn grau klein" title="Steuergerät zuordnen und für Files mit dieser Software merken">✓</button></form>{% endif %}
+<div class="ecu-pruefen"><a class="btn grau klein" href="{{ download_url('archiv_original', name=e.name) }}" title="Original herunterladen, z. B. zum Prüfen in WinOLS" aria-label="Original herunterladen"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Original</a>
+<a class="btn grau klein" href="{{ url_for('archiv_kennungen', name=e.name) }}" title="Kennungen im File ansehen (Steuergerät, Hardware-, Softwarenummer)" aria-label="Kennungen ansehen"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Prüfen</a></div></td>
 <td>{{ (e.bosch_sw + e.vag_teilenr + (e.conti_nr or []))|join(', ') or '?' }}</td>
 <td>{% for o in e.optionen %}{{ optionen[o] }}{{ ', ' if not loop.last }}{% else %}<span class="leise">nur Original</span>{% endfor %}</td>
 <td>{{ (e.groesse / 1024)|round|int }} KB</td>

@@ -459,6 +459,42 @@ class WebTests(Basis):
         # nur mit Admin-Anmeldung
         self.assertEqual(A.app.test_client().post("/admin/ecu", data={"auftrag": aid, "ecu": "x"}).status_code, 400)
 
+    def test_archiv_original_pruefen(self):
+        """Im Archiv neben dem Steuergeraet: Original herunterladen und Kennungen ansehen - nur lesen, nichts aendern."""
+        e98 = zufall(GROESSE, 98)
+        e98[0x10A7:0x10C0] = b"\x00A2C118827000005 FOIX\x00\x00\x00\x00"
+        e98[0x1FFF:0x2010] = b"\x00DELCO E98 1234\x00\x00"
+        st1 = bytearray(e98)
+        st1[0x8000:0x8040] = bytes(64)
+        self.ablegen("E98_Kunde1", {"ori.bin": e98, "stage1.bin": st1})   # "Golf7" liegt schon im Test-Archiv
+        oneclick.baue_index()
+        vorher = {p.name: p.read_bytes() for p in (oneclick.ARCHIV / "E98_Kunde1").iterdir()}
+        a = self.admin()
+        archiv = a.get("/admin/archiv").text
+        link = re.search(r'href="(/admin/archiv/E98_Kunde1/original\?dl=[0-9a-f.]+)"', archiv).group(1)
+        self.assertIn('href="/admin/archiv/E98_Kunde1/kennungen"', archiv)
+        r = a.get(link)
+        self.assertEqual((r.status_code, r.data), (200, bytes(e98)))
+        self.assertIn("E98_Kunde1_ORI.bin", r.headers["Content-Disposition"])
+        r.close()
+        r = A.app.test_client().get(link)
+        self.assertEqual(r.status_code, 200)    # Mac-App: zweiter Abruf ohne Cookie
+        r.close()
+        seite = html.unescape(a.get("/admin/archiv/E98_Kunde1/kennungen").text)
+        self.assertIn("A2C118827000005 FOIX", seite)
+        self.assertIn("0x0010A8", seite)
+        self.assertIn('class=wichtig><td><code>0x002000</code></td><td>DELCO E98 1234<', seite)   # typische Kennung oben
+        self.assertNotRegex(seite.split("Weitere Texte")[1], r"<td>[^<]*[a-z][^<]*[A-Z][^< ]*</td>")   # kein Zeichensalat (gross/klein gemischt)
+        golf = html.unescape(a.get("/admin/archiv/Golf7/kennungen").text).split("Weitere Texte")[0]
+        for kennung in ["EDC17C46", "1037541778", "03L906018JL"]:   # die echten Nummern stehen bei den typischen Kennungen
+            self.assertIn(kennung, golf)
+        # unbekannt, Pfad-Tricks, ohne Anmeldung
+        for name in ["Gibtsnicht", "..", "E98_Kunde1%2F..%2F.."]:
+            self.assertEqual(a.get(f"/admin/archiv/{name}/original").status_code, 404)
+        self.assertEqual(A.app.test_client().get("/admin/archiv/E98_Kunde1/original").status_code, 302)
+        self.assertEqual(A.app.test_client().get("/admin/archiv/E98_Kunde1/kennungen").status_code, 302)
+        self.assertEqual({p.name: p.read_bytes() for p in (oneclick.ARCHIV / "E98_Kunde1").iterdir()}, vorher)   # Archiv unveraendert
+
     def test_download_name_mit_firma(self):
         """Kunden bekommen: GH-MAPPING_<ihr Dateiname>_<Loesung>.bin - nie den Namen aus dem Archiv."""
         aid = self.hochladen(self.golf, "Golf7_ORI.bin")
