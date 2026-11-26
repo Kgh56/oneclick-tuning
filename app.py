@@ -967,7 +967,7 @@ def werbe_daten() -> str:
          "browserRequirements": "Aktueller Browser (Chrome, Edge, Safari, Firefox)",
          "description": "Chiptuning-Files im Browser bestellen: Original laden, Steuergerät und Software werden erkannt, "
                         "Lösung wählen, sicher über Stripe bezahlen und das File sofort herunterladen. Kein Abo, nichts zu installieren.",
-         "screenshot": [b + "/bilder/programm-auswahl.webp", b + "/bilder/programm-auftraege.webp", b + "/bilder/programm-support.webp"],
+         "screenshot": [b + "/bilder/programm-auswahl.webp?v=3", b + "/bilder/programm-auftraege.webp?v=3", b + "/bilder/programm-support.webp?v=3"],
          "featureList": ["Automatische Erkennung von Steuergerät und Software", "Sofort-Kauf von Files aus dem Archiv",
                          "Anfrage, wenn noch kein File vorhanden ist", "Support-Tickets mit Datei-Anhängen", "Als App auf dem iPhone-Home-Bildschirm",
                          "Kundenkonto mit E-Mail – Aufträge und Tickets auf jedem Gerät", "E-Mail-Benachrichtigung, wenn das File fertig ist",
@@ -1089,8 +1089,8 @@ def web_manifest(art):
     w = WEB_APPS.get(art)
     if not w:
         abort(404)
-    symbole = [{"src": f"/icons/{art}-{g}.png", "sizes": f"{g}x{g}", "type": "image/png"} for g in (192, 512)]
-    symbole.append({"src": f"/icons/{art}-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"})
+    symbole = [{"src": f"/icons/{art}-{g}.png?v=3", "sizes": f"{g}x{g}", "type": "image/png"} for g in (192, 512)]
+    symbole.append({"src": f"/icons/{art}-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable"})
     daten = {"id": w["start"], "name": w["name"], "short_name": w["kurz"], "start_url": w["start"], "scope": "/",
              "display": "standalone", "background_color": "#0e0e0f", "theme_color": "#0e0e0f", "lang": "de", "icons": symbole}
     antwort = app.response_class(json.dumps(daten, ensure_ascii=False), mimetype="application/manifest+json")
@@ -3964,7 +3964,7 @@ TEMPLATES = {
 <title>{% if titel is defined and titel %}{{ titel }} | {{ programm_name }}{% else %}{{ firma }}{% endif %}</title>
 <meta name="theme-color" content="#0e0e0f">
 {% if session.admin or (request.endpoint or '') in ('login', 'login_code') %}<link rel="manifest" href="/admin.webmanifest">
-<link rel="apple-touch-icon" href="/icons/admin-180.png">
+<link rel="apple-touch-icon" href="/icons/admin-180.png?v=3">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OC Admin">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">{% endif %}
@@ -4858,9 +4858,9 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 <meta property="og:type" content="website"><meta property="og:site_name" content="{{ firma }}"><meta property="og:locale" content="de_DE">
 <meta property="og:url" content="{{ basis }}/info"><meta property="og:title" content="OneClick Solutions – Chiptuning-Files mit einem Klick">
 <meta property="og:description" content="Original laden, Lösung wählen, sofort herunterladen. Direkt im Browser – auf PC, Mac und iPhone, ohne Abo.">
-<meta property="og:image" content="{{ basis }}/bilder/og-oneclick.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image" content="{{ basis }}/bilder/og-oneclick.png?v=3"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="OneClick Solutions – Chiptuning-Files im Browser">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{{ basis }}/bilder/og-oneclick.png">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{{ basis }}/bilder/og-oneclick.png?v=3">
 <script type="application/ld+json">{{ jsonld|safe }}</script>
 <meta name="theme-color" content="#0e0e0f">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNlMzIzMWIiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMy40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjE4IiB5PSIxOCIgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiByeD0iMy41Ii8+PHBhdGggZD0iTTI1LjUgMTh2LTYuNU0zMiAxOHYtNi41TTM4LjUgMTh2LTYuNU0yNS41IDQ2djYuNU0zMiA0NnY2LjVNMzguNSA0NnY2LjVNMTggMjUuNWgtNi41TTE4IDMyaC02LjVNMTggMzguNWgtNi41TTQ2IDI1LjVoNi41TTQ2IDMyaDYuNU00NiAzOC41aDYuNSIvPjwvZz48cGF0aCBkPSJNMzQuNiAyMi41IDI2LjQgMzMuNmg1LjZsLTEuOSA3LjkgOC4zLTExLjNoLTUuN3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=">
@@ -4990,7 +4990,7 @@ footer{border-top:1px solid var(--rand)}
   <div class="handy-hinweis">Auf dem iPhone: oben auf „Jetzt starten“ tippen, anmelden und in Safari über <b>Teilen → „Zum Home-Bildschirm“</b> als App ablegen.</div>
   <div class="klein-info">Läuft in jedem aktuellen Browser – Windows, Mac, iPhone, iPad und Android · nichts zu installieren, immer die neueste Version</div>
  </div>
- <div class="fenster"><img src="/bilder/programm-auswahl.webp" width="1440" height="900" alt="OneClick Solutions: Lösungen für ein ECU-File wählen"></div>
+ <div class="fenster"><img src="/bilder/programm-auswahl.webp?v=3" width="1440" height="900" alt="OneClick Solutions: Lösungen für ein ECU-File wählen"></div>
 </header>
 <section id="funktionen"><div class="breit">
  <h2>Alles, was du für dein File brauchst</h2><p class="unter">Eine Seite, ein klarer Ablauf – vom Original bis zum fertigen File.</p>
@@ -5016,12 +5016,12 @@ footer{border-top:1px solid var(--rand)}
 <section><div class="breit">
  <h2>So sieht's aus</h2><p class="unter">Dunkel, klar, schnell – gemacht für die Arbeit in der Werkstatt.</p>
  <div class="bilder">
-  <figure><img src="/bilder/programm-laden.webp" width="1440" height="900" loading="lazy" alt="File laden"><figcaption>File laden – einfach hineinziehen</figcaption></figure>
-  <figure><img src="/bilder/programm-bezahlen.webp" width="1440" height="900" loading="lazy" alt="Bezahlen"><figcaption>Sofort bezahlen – sicher über Stripe</figcaption></figure>
-  <figure><img src="/bilder/programm-auftraege.webp" width="1440" height="900" loading="lazy" alt="Meine Aufträge"><figcaption>Meine Aufträge – Status, Bezahlung, Download</figcaption></figure>
-  <figure><img src="/bilder/programm-support.webp" width="1440" height="900" loading="lazy" alt="Support-Ticket"><figcaption>Support – Tickets mit Files direkt im Chat</figcaption></figure>
-  <figure><img src="/bilder/programm-anfrage.webp" width="1440" height="900" loading="lazy" alt="Anfrage stellen"><figcaption>Anfrage – wenn noch nichts im Archiv liegt</figcaption></figure>
-  <figure><img src="/bilder/programm-pruefung.webp" width="1440" height="900" loading="lazy" alt="Sofort-Prüfung mit Hexdump und Kennfeld-Suche"><figcaption>Sofort-Prüfung – Steuergerät, Software und Kennfelder in Sekunden</figcaption></figure>
+  <figure><img src="/bilder/programm-laden.webp?v=3" width="1440" height="900" loading="lazy" alt="File laden"><figcaption>File laden – einfach hineinziehen</figcaption></figure>
+  <figure><img src="/bilder/programm-bezahlen.webp?v=3" width="1440" height="900" loading="lazy" alt="Bezahlen"><figcaption>Sofort bezahlen – sicher über Stripe</figcaption></figure>
+  <figure><img src="/bilder/programm-auftraege.webp?v=3" width="1440" height="900" loading="lazy" alt="Meine Aufträge"><figcaption>Meine Aufträge – Status, Bezahlung, Download</figcaption></figure>
+  <figure><img src="/bilder/programm-support.webp?v=3" width="1440" height="900" loading="lazy" alt="Support-Ticket"><figcaption>Support – Tickets mit Files direkt im Chat</figcaption></figure>
+  <figure><img src="/bilder/programm-anfrage.webp?v=3" width="1440" height="900" loading="lazy" alt="Anfrage stellen"><figcaption>Anfrage – wenn noch nichts im Archiv liegt</figcaption></figure>
+  <figure><img src="/bilder/programm-pruefung.webp?v=3" width="1440" height="900" loading="lazy" alt="Sofort-Prüfung mit Hexdump und Kennfeld-Suche"><figcaption>Sofort-Prüfung – Steuergerät, Software und Kennfelder in Sekunden</figcaption></figure>
  </div></div></section>
 <section id="ablauf"><div class="breit">
  <h2>In vier Schritten zum File</h2><p class="unter">Einmal mit E-Mail registrieren, dann bleibst du angemeldet – auf jedem Gerät.</p>

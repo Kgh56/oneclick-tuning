@@ -1192,7 +1192,7 @@ class WebTests(Basis):
         c = client()
         seite = c.get("/login").text
         self.assertIn('name="merken" value="1"', seite)                      # Haken "angemeldet bleiben"
-        self.assertIn('<link rel="apple-touch-icon" href="/icons/admin-180.png">', seite)
+        self.assertIn('<link rel="apple-touch-icon" href="/icons/admin-180.png?v=', seite)   # mit Bildversion (neues Symbol statt Zwischenspeicher)
         c.post("/login", data={"name": "chef", "pw": "Geheim123", "csrf": c.csrf})
         self.assertIsNone(c.get_cookie(A.GERAET_COOKIE))                      # ohne Haken: nichts gemerkt
         c = client()
