@@ -4027,6 +4027,7 @@ TEMPLATES = {
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OC Admin">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">{% endif %}
+<link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48 64x64 256x256" type="image/x-icon">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNlMzIzMWIiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMy40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjE4IiB5PSIxOCIgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiByeD0iMy41Ii8+PHBhdGggZD0iTTI1LjUgMTh2LTYuNU0zMiAxOHYtNi41TTM4LjUgMTh2LTYuNU0yNS41IDQ2djYuNU0zMiA0NnY2LjVNMzguNSA0NnY2LjVNMTggMjUuNWgtNi41TTE4IDMyaC02LjVNMTggMzguNWgtNi41TTQ2IDI1LjVoNi41TTQ2IDMyaDYuNU00NiAzOC41aDYuNSIvPjwvZz48cGF0aCBkPSJNMzQuNiAyMi41IDI2LjQgMzMuNmg1LjZsLTEuOSA3LjkgOC4zLTExLjNoLTUuN3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=">
 <style>
 :root{--bg:#000;--glas:rgba(255,255,255,.045);--glas2:rgba(255,255,255,.075);--rand:rgba(255,255,255,.09);
@@ -4962,7 +4963,7 @@ Es wird kein Auftrag angelegt, nichts bezahlt und keine Nachricht verschickt.</p
 <script type="application/ld+json">{{ jsonld|safe }}</script>
 <meta name="theme-color" content="#0e0e0f">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNlMzIzMWIiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMy40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjE4IiB5PSIxOCIgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiByeD0iMy41Ii8+PHBhdGggZD0iTTI1LjUgMTh2LTYuNU0zMiAxOHYtNi41TTM4LjUgMTh2LTYuNU0yNS41IDQ2djYuNU0zMiA0NnY2LjVNMzguNSA0NnY2LjVNMTggMjUuNWgtNi41TTE4IDMyaC02LjVNMTggMzguNWgtNi41TTQ2IDI1LjVoNi41TTQ2IDMyaDYuNU00NiAzOC41aDYuNSIvPjwvZz48cGF0aCBkPSJNMzQuNiAyMi41IDI2LjQgMzMuNmg1LjZsLTEuOSA3LjkgOC4zLTExLjNoLTUuN3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=">
-<link rel="alternate icon" href="/favicon.ico">
+<link rel="alternate icon" href="/favicon.ico?v=3">
 <style>
 @font-face{font-family:"Montserrat";font-weight:500;font-display:swap;src:url(/fonts/montserrat-latin-500-normal.woff2) format("woff2")}
 @font-face{font-family:"Montserrat";font-weight:600;font-display:swap;src:url(/fonts/montserrat-latin-600-normal.woff2) format("woff2")}
