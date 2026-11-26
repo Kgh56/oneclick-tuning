@@ -1979,9 +1979,14 @@ def ecu_namen() -> list:
 
 
 def ecu_gruppen() -> dict:
-    """{ECU-Name: [Nummern]} fuer die Liste im Archiv."""
-    gruppen = {}
+    """{ECU-Name: [Nummern]} fuer die Liste im Archiv. Ueber das File gemerkte Zuordnungen (ohne Nummern im File)
+    erscheinen als „File <Archivname>“."""
+    gruppen, dateien = {}, None
     for nummer, name in sorted((lade_config().get("ecu_zuordnung") or {}).items()):
+        if nummer.startswith("sha256:"):
+            if dateien is None:
+                dateien = {e.get("sha256") or e.get("ori_sha256"): e["name"] for e in oneclick.lade_index()["eintraege"]}
+            nummer = f"File „{dateien[nummer[7:]]}“" if nummer[7:] in dateien else f"File {nummer[7:17]}…"
         gruppen.setdefault(name, []).append(nummer)
     return dict(sorted(gruppen.items(), key=lambda t: t[0].lower()))
 
@@ -2013,7 +2018,7 @@ def ecu_zuordnen():
             if e is None:
                 abort(404)
             daten = oneclick.archiv_datei(e).read_bytes()
-        nummern = oneclick.software_nummern(oneclick.erkenne(daten))
+        nummern = oneclick.merk_schluessel(oneclick.erkenne(daten))   # Nummern im File, sonst das File selbst
     for n in nummern:
         if name:
             zuordnung[n] = name
@@ -2038,6 +2043,9 @@ def ecu_zuordnen():
     elif not nummern:
         flash("In diesem File steht keine lesbare Software- oder Teilenummer – das Steuergerät kann nicht gemerkt werden"
               + (" (für diesen Auftrag ist es eingetragen)." if aid and name else "."))
+    elif name and all(n.startswith("sha256:") for n in nummern):
+        flash(f"Gemerkt: Dieses File hat keine lesbare Software- oder Teilenummer – es wird über das File selbst als „{name}“ "
+              "erkannt, auch wenn ein Kunde genau dieses Original hochlädt.")
     elif name:
         flash(f"Gemerkt: Files mit {', '.join(nummern)} werden ab jetzt als „{name}“ erkannt.")
     else:

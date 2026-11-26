@@ -447,8 +447,11 @@ class WebTests(Basis):
         aid3 = self.kunde.post("/api/pruefen", data={"datei": (io.BytesIO(bytes(ohne)), "ohne.bin")},
                                content_type="multipart/form-data").json["id"]   # keine Loesung -> Anfrage, Auftrag gibt es trotzdem
         r = a.post("/admin/ecu", data={"csrf": a.csrf, "auftrag": aid3, "ecu": "Delco E98"}, follow_redirects=True)
-        self.assertIn("keine lesbare Software- oder Teilenummer", r.text)
+        self.assertIn("keine lesbare Software- oder Teilenummer – es wird über das File selbst", r.text)
         self.assertEqual(self.auftrag(aid3)["ecu"], "Delco E98")
+        sha_ohne = oneclick.erkenne(bytes(ohne))["sha256"]
+        self.assertEqual(A.lade_config()["ecu_zuordnung"], {f"sha256:{sha_ohne}": "Delco E98"})   # ueber das File gemerkt
+        a.post("/admin/ecu", data={"csrf": a.csrf, "vergessen": "Delco E98"})
         self.assertEqual(A.lade_config()["ecu_zuordnung"], {})
         # selbst erkanntes Steuergeraet: kein Feld, Zuordnung ueberschreibt es nicht
         aid4 = self.hochladen(self.golf, "golf.bin")
@@ -458,6 +461,30 @@ class WebTests(Basis):
         self.assertEqual(self.auftrag(aid4)["ecu"], "EDC17C46")
         # nur mit Admin-Anmeldung
         self.assertEqual(A.app.test_client().post("/admin/ecu", data={"auftrag": aid, "ecu": "x"}).status_code, 400)
+
+    def test_ecu_im_archiv_ohne_nummern_bleibt_gemerkt(self):
+        """Archiv-Eintrag ohne lesbare Software-/Teilenummer (z. B. winols-ford): von Hand eingetragenes Steuergeraet
+        bleibt gespeichert - ueber das File selbst -, auch nach dem Neu-Einlesen und beim Kunden mit genau diesem File."""
+        ford = zufall(GROESSE, 77)
+        self.assertEqual(oneclick.software_nummern(oneclick.erkenne(bytes(ford))), [])
+        st1 = bytearray(ford)
+        st1[0x8000:0x8040] = bytes(64)
+        self.ablegen("winols-ford", {"ori.bin": ford, "stage1.bin": st1})
+        oneclick.baue_index()
+        vorher = {p.name: p.read_bytes() for p in (oneclick.ARCHIV / "winols-ford").iterdir()}
+        a = self.admin()
+        r = a.post("/admin/ecu", data={"csrf": a.csrf, "archiv": "winols-ford", "ecu": "Ford SID208"}, follow_redirects=True)
+        self.assertIn("über das File selbst als „Ford SID208“", html.unescape(r.text))
+        eintrag = lambda: next(e for e in oneclick.lade_index()["eintraege"] if e["name"] == "winols-ford")   # noqa: E731
+        self.assertEqual((eintrag()["ecu"], eintrag().get("ecu_gemerkt")), (["Ford SID208"], True))
+        archiv = html.unescape(a.get("/admin/archiv").text)
+        self.assertIn('value="Ford SID208"', archiv)                    # steht nach dem Speichern im Feld
+        self.assertIn("File „winols-ford“", archiv)                      # Liste "von Hand zugeordnet"
+        oneclick.baue_index()                                             # Neu einlesen: bleibt
+        self.assertEqual(eintrag()["ecu"], ["Ford SID208"])
+        aid = self.hochladen(ford, "kunde_ford.bin")                     # Kunde mit genau diesem Original
+        self.assertEqual(self.kunde.get(f"/api/auftrag/{aid}").json["ecu"], "Ford SID208")
+        self.assertEqual({p.name: p.read_bytes() for p in (oneclick.ARCHIV / "winols-ford").iterdir()}, vorher)   # Archiv unveraendert
 
     def test_archiv_original_pruefen(self):
         """Im Archiv neben dem Steuergeraet: Original herunterladen und Kennungen ansehen - nur lesen, nichts aendern."""

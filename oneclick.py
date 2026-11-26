@@ -146,7 +146,7 @@ def erkenne(daten: bytes) -> dict:
         "conti_nr": finde(CONTI_NR),
     }
     if not info["ecu"]:   # selbst nicht erkannt -> von Hand zugeordnetes Steuergeraet (ueber die Nummern im File)
-        name = gemerkte_ecu(software_nummern(info))
+        name = gemerkte_ecu(merk_schluessel(info))
         if name:
             info["ecu"], info["ecu_gemerkt"] = [name], True
     return info
@@ -155,6 +155,14 @@ def erkenne(daten: bytes) -> dict:
 def software_nummern(info: dict) -> list:
     """Alle lesbaren Software-/Teilenummern eines Files (fuer Anzeige und Vergleich)."""
     return info.get("bosch_sw", []) + info.get("vag_teilenr", []) + info.get("conti_nr", [])
+
+
+def merk_schluessel(info: dict) -> list:
+    """Woran ein von Hand zugeordnetes Steuergeraet gemerkt wird: die Software-/Teilenummern im File - und wenn
+    keine lesbar sind, das File selbst (Pruefsumme, Schluessel "sha256:..."), damit die Zuordnung nicht verloren geht."""
+    nummern = software_nummern(info)
+    sha = info.get("sha256") or info.get("ori_sha256")
+    return nummern or ([f"sha256:{sha}"] if sha else [])
 
 
 def gemerkte_ecu(nummern: list) -> str:
@@ -176,7 +184,7 @@ def _ecu_im_index_nachtragen() -> int:
     for e in index["eintraege"]:
         if e.get("ecu") and not e.get("ecu_gemerkt"):
             continue   # selbst erkannt -> bleibt
-        name = gemerkte_ecu(software_nummern(e))
+        name = gemerkte_ecu(merk_schluessel(e))
         neu = ([name], True) if name else ([], False)
         if (e.get("ecu") or [], bool(e.get("ecu_gemerkt"))) != neu:
             e["ecu"] = neu[0]
