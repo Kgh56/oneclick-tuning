@@ -14,3 +14,9 @@ Das heißt für jede Arbeit an diesem Projekt:
 - Datendateien und -ordner nie ins Repository aufnehmen (siehe `.gitignore` und `GESCHUETZTE_DATEN` in `app.py`).
   Das Update bricht ab, falls doch einmal eine Datendatei im Repository liegt – diese Sicherung nicht entfernen.
 - Tests nur mit temporären Testordnern, nie mit echten Server-Daten.
+
+## Lösungen mit „fix“ im Namen
+
+Die Lösungen der Inhaberin mit „fix“ im Namen (z. B. DPFfix, EGRfix, ADBLUEfix, LAMBDAfix, NOXfix) sind laut Inhaberin
+**keine Abschaltungen**. Sie werden nicht gesperrt, nicht entfernt, nicht umbenannt und nicht an der Sperre in
+`oneclick.py` (`abgas_abschaltung`) „nachgebessert“.
