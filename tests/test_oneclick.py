@@ -733,9 +733,8 @@ class WebTests(Basis):
         st = A.installations_statistik()
         self.assertEqual((st["gesamt"], st["aktiv_30"], st["neu_30"]), (3, 2, 2))
         seite = html.unescape(self.admin().get("/admin").text)
-        self.assertIn("Programm-Installationen", seite)
-        self.assertIn("Windows 2 · 🍎 Mac 1", seite)
-        self.assertIn("Heruntergeladen (gesamt)", seite)
+        self.assertNotIn("Programm-Installationen", seite)   # Karte im Admin entfernt (alles im Browser)
+        self.assertNotIn("Heruntergeladen (gesamt)", seite)
         self.assertNotIn("1.2.3.4", A.INSTALLATIONEN.read_text())   # keine IP gespeichert
         self.assertEqual(set(alt["a" * 32]), {"erst", "zuletzt", "plattform", "version"})
 
@@ -749,7 +748,7 @@ class WebTests(Basis):
         st = A.download_statistik()
         self.assertEqual((st["windows"], st["mac"]), (0, 0))     # nichts mehr gezaehlt
         self.assertNotIn("/download/", self.kunde.get("/info", headers=browser).text)
-        self.assertIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)   # alte Zahlen bleiben sichtbar
+        self.assertNotIn("Heruntergeladen (gesamt)", self.admin().get("/admin").text)   # Karte entfernt
 
     def test_rueckfrage_vom_admin_zum_auftrag(self):
         A.speichere_config({"telegram_chat_id": "1"})
